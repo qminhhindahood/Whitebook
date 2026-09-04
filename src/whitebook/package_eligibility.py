@@ -54,11 +54,13 @@ def classify_package(questions: list[QuestionDescriptor]) -> PackageEligibility:
         ("Math", 1): 22,
         ("Math", 2): 22,
     }
-    for module, expected_count in expected.items():
-        if module not in counts:
-            add("missing_standard_module")
-        elif counts[module] != expected_count:
-            add("wrong_question_count")
+    if any(module not in counts for module in expected):
+        add("missing_standard_module")
+    if any(
+        module in counts and counts[module] != expected_count
+        for module, expected_count in expected.items()
+    ):
+        add("wrong_question_count")
     return PackageEligibility(
         practice_eligible=structurally_valid,
         simulation_eligible=structurally_valid and not reasons,

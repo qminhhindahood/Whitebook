@@ -7,7 +7,6 @@ import json
 import os
 import secrets
 import socket
-import sqlite3
 import sys
 import uuid
 import webbrowser
@@ -20,6 +19,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 import uvicorn
 
 from whitebook.app import create_app
+from whitebook.storage import initialize_database
 
 LOOPBACK_HOST = "127.0.0.1"
 
@@ -42,20 +42,7 @@ def initialize_storage(data_dir: Path) -> None:
     for child in ("documents", "renders", "runtime"):
         (data_dir / child).mkdir(exist_ok=True)
 
-    database_path = data_dir / "whitebook.sqlite3"
-    with sqlite3.connect(database_path) as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS app_metadata (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-            """
-        )
-        connection.execute(
-            "INSERT OR IGNORE INTO app_metadata (key, value) VALUES ('schema_version', '1')"
-        )
-        connection.commit()
+    initialize_database(data_dir)
 
 
 def reserve_loopback_socket() -> socket.socket:
