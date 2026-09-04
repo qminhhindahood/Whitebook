@@ -37,3 +37,46 @@ def test_wrong_counts_duplicates_and_invalid_descriptors_are_precise() -> None:
     assert {"invalid_section", "invalid_module", "invalid_question_number"} <= set(
         invalid.reasons
     )
+
+
+def test_single_complete_module_is_practice_only() -> None:
+    questions = [
+        QuestionDescriptor("Reading and Writing", 1, question)
+        for question in range(1, 28)
+    ]
+    result = classify_package(questions)
+    assert result.practice_eligible is True
+    assert result.simulation_eligible is False
+    assert set(result.reasons) == {"missing_standard_module"}
+
+
+def test_single_section_packages_are_practice_only() -> None:
+    reading_only = [
+        QuestionDescriptor("Reading and Writing", module, question)
+        for module in (1, 2)
+        for question in range(1, 28)
+    ]
+    math_only = [
+        QuestionDescriptor("Math", module, question)
+        for module in (1, 2)
+        for question in range(1, 23)
+    ]
+    for questions in (reading_only, math_only):
+        result = classify_package(questions)
+        assert result.practice_eligible is True
+        assert result.simulation_eligible is False
+        assert set(result.reasons) == {"missing_standard_module"}
+
+
+def test_invalid_module_rejects_practice_precisely() -> None:
+    result = classify_package([QuestionDescriptor("Math", 3, 5)])
+    assert result.practice_eligible is False
+    assert result.simulation_eligible is False
+    assert set(result.reasons) == {"invalid_module", "missing_standard_module"}
+
+
+def test_empty_packages_are_ineligible() -> None:
+    result = classify_package([])
+    assert result.practice_eligible is False
+    assert result.simulation_eligible is False
+    assert set(result.reasons) == {"empty_package", "missing_standard_module"}

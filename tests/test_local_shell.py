@@ -258,7 +258,7 @@ def test_first_launch_creates_private_storage_not_served_by_the_app(
             schema_version = connection.execute(
                 "SELECT value FROM app_metadata WHERE key = 'schema_version'"
             ).fetchone()
-        assert schema_version == ("1",)
+        assert schema_version == ("2",)
 
         response = httpx.get(
             f"http://127.0.0.1:{lock['port']}/data/whitebook.sqlite3",

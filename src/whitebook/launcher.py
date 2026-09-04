@@ -39,7 +39,7 @@ class LauncherError(RuntimeError):
 
 def initialize_storage(data_dir: Path) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
-    for child in ("documents", "renders", "runtime"):
+    for child in ("assets", "backups", "documents", "logs", "renders", "runtime"):
         (data_dir / child).mkdir(exist_ok=True)
 
     initialize_database(data_dir)

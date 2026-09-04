@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import secrets
 import uuid
 from collections.abc import Awaitable, Callable
@@ -12,7 +13,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from whitebook.answer_csv import blank_answer_csv, example_answer_csv
+from whitebook.attempts import AttemptEngine, AttemptError
 from whitebook.authoring import AuthoringError, PackageAuthoring
+from whitebook.backups import BackupError, BackupManager
+from whitebook.diagnostics import DiagnosticLog
 
 
 class QuestionRegionInput(BaseModel):
@@ -28,6 +32,51 @@ class QuestionRegionInput(BaseModel):
 
 class QuestionRegionsInput(BaseModel):
     regions: list[QuestionRegionInput]
+
+
+class AttemptSetupInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    package_id: str = Field(alias="packageId")
+    kind: str
+    selection: dict[str, object]
+
+
+class ResponseInput(BaseModel):
+    response: str | None
+
+
+class ReviewStateInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    marked: bool = False
+    eliminated_choices: list[str] = Field(
+        default_factory=list, alias="eliminatedChoices"
+    )
+
+
+class CurrentQuestionInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    question_id: str = Field(alias="questionId")
+
+
+class CalculatorReadinessInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    script_loaded: bool = Field(alias="scriptLoaded")
+    constructor_available: bool = Field(alias="constructorAvailable")
+    instance_created: bool = Field(alias="instanceCreated")
+    state_readable: bool = Field(alias="stateReadable")
+    usable_size: bool = Field(alias="usableSize")
+
+
+class CalculatorStateInput(BaseModel):
+    state: dict[str, object]
+
+
+class PermanentDeleteInput(BaseModel):
+    confirmation: str
 
 
 def create_app(
@@ -47,6 +96,10 @@ def create_app(
     expected_host = f"127.0.0.1:{port}"
     expected_origin = f"http://{expected_host}"
     authoring = PackageAuthoring(storage_root)
+    attempts = AttemptEngine(storage_root)
+    backups = BackupManager(storage_root)
+    diagnostics = DiagnosticLog(storage_root)
+    diagnostics.record("startup", stage="application_ready", resource_id=instance_id)
 
     def secured(response: Response) -> Response:
         response.headers["Cache-Control"] = "no-store"
@@ -160,6 +213,14 @@ def create_app(
                 temporary_pdf=upload_path,
                 answer_csv=csv_bytes,
             )
+            diagnostics.record(
+                "import_stage",
+                stage="draft_created",
+                error_code=(
+                    draft.diagnostics[0]["code"] if draft.diagnostics else None
+                ),
+                resource_id=draft.id,
+            )
             return draft.as_payload()
         finally:
             upload_path.unlink(missing_ok=True)
@@ -230,6 +291,273 @@ def create_app(
         if source is None:
             raise HTTPException(status_code=404, detail="Source PDF not found.")
         return FileResponse(source, media_type="application/pdf")
+
+    @app.get("/api/test-packages/{package_id}/practice-options")
+    async def get_practice_options(package_id: str) -> dict[str, object]:
+        try:
+            return attempts.practice_options(package_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=404, detail=error.message) from error
+
+    @app.post("/api/test-packages/{package_id}/archive")
+    async def archive_test_package(package_id: str) -> dict[str, object]:
+        try:
+            return authoring.set_archived(package_id, archived=True)
+        except AuthoringError as error:
+            raise HTTPException(status_code=404, detail=error.message) from error
+
+    @app.post("/api/test-packages/{package_id}/restore")
+    async def restore_test_package(package_id: str) -> dict[str, object]:
+        try:
+            return authoring.set_archived(package_id, archived=False)
+        except AuthoringError as error:
+            raise HTTPException(status_code=404, detail=error.message) from error
+
+    @app.delete("/api/test-packages/{package_id}")
+    async def permanently_delete_test_package(
+        package_id: str, payload: PermanentDeleteInput
+    ) -> dict[str, int]:
+        try:
+            return authoring.permanently_delete(package_id, payload.confirmation)
+        except AuthoringError as error:
+            status_code = 404 if error.code == "package_not_found" else 409
+            raise HTTPException(
+                status_code=status_code, detail=error.message
+            ) from error
+
+    @app.post("/api/attempt-setups", status_code=201)
+    async def create_attempt_setup(payload: AttemptSetupInput) -> dict[str, object]:
+        try:
+            return attempts.prepare(
+                package_id=payload.package_id,
+                kind=payload.kind,
+                selection=payload.selection,
+            )
+        except AttemptError as error:
+            raise HTTPException(status_code=422, detail=error.message) from error
+
+    @app.post("/api/attempt-setups/{setup_id}/begin", status_code=201)
+    async def begin_attempt(setup_id: str) -> dict[str, object]:
+        try:
+            return attempts.begin(setup_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempt-setups/{setup_id}/use-scientific")
+    async def use_scientific_calculator(setup_id: str) -> dict[str, object]:
+        try:
+            return attempts.use_scientific(setup_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempt-setups/{setup_id}/confirm-calculator")
+    async def confirm_calculator(
+        setup_id: str, payload: CalculatorReadinessInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.confirm_calculator(
+                setup_id,
+                {
+                    "scriptLoaded": payload.script_loaded,
+                    "constructorAvailable": payload.constructor_available,
+                    "instanceCreated": payload.instance_created,
+                    "stateReadable": payload.state_readable,
+                    "usableSize": payload.usable_size,
+                },
+            )
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.get("/api/attempts")
+    async def list_attempts() -> list[dict[str, object]]:
+        return attempts.list_attempts()
+
+    @app.get("/api/attempts/{attempt_id}")
+    async def get_attempt(attempt_id: str) -> dict[str, object]:
+        attempt = attempts.get_attempt(attempt_id)
+        if attempt is None:
+            raise HTTPException(status_code=404, detail="Attempt not found.")
+        return attempt
+
+    @app.delete("/api/attempts/{attempt_id}")
+    async def delete_unfinished_attempt(
+        attempt_id: str, confirmed: bool = False
+    ) -> dict[str, bool]:
+        try:
+            return attempts.delete_unfinished(attempt_id, confirmed=confirmed)
+        except AttemptError as error:
+            status_code = 404 if error.code == "attempt_not_found" else 409
+            raise HTTPException(
+                status_code=status_code, detail=error.message
+            ) from error
+
+    @app.put("/api/attempts/{attempt_id}/questions/{question_id}/response")
+    async def save_response(
+        attempt_id: str, question_id: str, payload: ResponseInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.save_response(attempt_id, question_id, payload.response)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.put("/api/attempts/{attempt_id}/questions/{question_id}/review-state")
+    async def save_review_state(
+        attempt_id: str, question_id: str, payload: ReviewStateInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.save_review_state(
+                attempt_id,
+                question_id,
+                marked=payload.marked,
+                eliminated_choices=payload.eliminated_choices,
+            )
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.put("/api/attempts/{attempt_id}/current-question")
+    async def set_current_question(
+        attempt_id: str, payload: CurrentQuestionInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.navigate(attempt_id, payload.question_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.put("/api/attempts/{attempt_id}/calculator-state")
+    async def save_calculator_state(
+        attempt_id: str, payload: CalculatorStateInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.save_calculator_state(attempt_id, payload.state)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/pause")
+    async def pause_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.pause(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/prepare-resume")
+    async def prepare_attempt_resume(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.prepare_resume(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/resume")
+    async def resume_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.resume(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/submit")
+    async def submit_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.submit(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/tick")
+    async def tick_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.tick(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/continue")
+    async def continue_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.continue_after_transition(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/end-break")
+    async def end_attempt_break(
+        attempt_id: str, confirmed: bool = False
+    ) -> dict[str, object]:
+        try:
+            return attempts.end_break(attempt_id, confirmed=confirmed)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/retake", status_code=201)
+    async def retake_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.retake(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/practice-mistakes", status_code=201)
+    async def practice_mistakes(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.practice_mistakes(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.get("/api/math/reference-sheet.png")
+    async def get_reference_sheet() -> FileResponse:
+        reference = (storage_root / "assets" / "reference-sheet.png").resolve()
+        assets_root = (storage_root / "assets").resolve()
+        if (
+            not reference.is_relative_to(assets_root)
+            or not reference.is_file()
+            or reference.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n"
+        ):
+            raise HTTPException(status_code=404, detail="Reference Sheet not found.")
+        return FileResponse(reference, media_type="image/png")
+
+    @app.post("/api/backups/export", status_code=201)
+    async def export_backup() -> dict[str, object]:
+        try:
+            return backups.export()
+        except (BackupError, OSError) as error:
+            message = (
+                error.message
+                if isinstance(error, BackupError)
+                else "Backup export failed."
+            )
+            raise HTTPException(status_code=500, detail=message) from error
+
+    @app.get("/api/backups/{archive_name}")
+    async def download_backup(archive_name: str) -> FileResponse:
+        archive = backups.archive_path(archive_name)
+        if archive is None:
+            raise HTTPException(status_code=404, detail="Backup not found.")
+        return FileResponse(
+            archive,
+            media_type="application/zip",
+            filename=f"whitebook-backup-{archive.stem[:8]}.zip",
+        )
+
+    @app.post("/api/backups/restore")
+    async def restore_backup(
+        backup: Annotated[UploadFile, File()],
+    ) -> dict[str, int]:
+        temporary = storage_root / "runtime" / f"restore-upload-{uuid.uuid4().hex}.zip"
+        try:
+            with temporary.open("xb") as output:
+                while chunk := await backup.read(1024 * 1024):
+                    output.write(chunk)
+            return backups.restore(temporary)
+        except BackupError as error:
+            raise HTTPException(status_code=422, detail=error.message) from error
+        finally:
+            temporary.unlink(missing_ok=True)
+            await backup.close()
+
+    @app.post("/api/diagnostics/open-logs")
+    async def open_logs_folder() -> dict[str, bool]:
+        opener = getattr(os, "startfile", None)
+        if opener is None:
+            raise HTTPException(
+                status_code=501,
+                detail="Open Logs Folder is available from the Windows launcher.",
+            )
+        opener(str(diagnostics.folder))
+        return {"opened": True}
 
     if static_root.is_dir():
         assets_root = static_root / "assets"

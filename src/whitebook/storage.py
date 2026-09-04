@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 SCHEMA_VERSION = "2"
 
 
-def connect(data_root: Path) -> sqlite3.Connection:
+@contextmanager
+def connect(data_root: Path) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(data_root / "whitebook.sqlite3")
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    try:
+        yield connection
+    finally:
+        connection.close()
 
 
 def initialize_database(data_root: Path) -> None:
@@ -73,6 +79,37 @@ def initialize_database(data_root: Path) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_package_family
                 ON test_packages(family_id, revision);
+
+            CREATE TABLE IF NOT EXISTS attempt_setups (
+                id TEXT PRIMARY KEY,
+                package_id TEXT NOT NULL REFERENCES test_packages(id),
+                kind TEXT NOT NULL,
+                selection_json TEXT NOT NULL,
+                plan_json TEXT NOT NULL,
+                readiness_json TEXT NOT NULL,
+                resume_attempt_id TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS attempts (
+                id TEXT PRIMARY KEY,
+                package_id TEXT NOT NULL REFERENCES test_packages(id),
+                kind TEXT NOT NULL,
+                status TEXT NOT NULL,
+                plan_json TEXT NOT NULL,
+                state_json TEXT NOT NULL,
+                result_json TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_attempt_updated
+                ON attempts(updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             """
         )
         connection.execute(

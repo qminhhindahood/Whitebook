@@ -392,6 +392,61 @@ class PackageAuthoring:
         documents = (self._data_root / "documents").resolve()
         return path if path.is_relative_to(documents) and path.is_file() else None
 
+    def set_archived(self, package_id: str, *, archived: bool) -> dict[str, object]:
+        with connect(self._data_root) as connection:
+            changed = connection.execute(
+                "UPDATE test_packages SET archived = ? WHERE id = ?",
+                (archived, package_id),
+            ).rowcount
+            connection.commit()
+        if not changed:
+            raise AuthoringError("package_not_found", "Test Package not found.")
+        package = self.get_package(package_id)
+        assert package is not None
+        return package
+
+    def permanently_delete(self, package_id: str, confirmation: str) -> dict[str, int]:
+        with connect(self._data_root) as connection:
+            package = connection.execute(
+                "SELECT * FROM test_packages WHERE id = ?", (package_id,)
+            ).fetchone()
+            if package is None:
+                raise AuthoringError("package_not_found", "Test Package not found.")
+            if confirmation != package["title"]:
+                raise AuthoringError(
+                    "confirmation_mismatch",
+                    "Type the exact Test Package title to confirm permanent deletion.",
+                )
+            attempt_count = connection.execute(
+                "SELECT COUNT(*) FROM attempts WHERE package_id = ?", (package_id,)
+            ).fetchone()[0]
+            connection.execute(
+                "DELETE FROM attempt_setups WHERE package_id = ?", (package_id,)
+            )
+            connection.execute(
+                "DELETE FROM attempts WHERE package_id = ?", (package_id,)
+            )
+            connection.execute(
+                "DELETE FROM import_drafts WHERE published_package_id = ?",
+                (package_id,),
+            )
+            connection.execute("DELETE FROM test_packages WHERE id = ?", (package_id,))
+            connection.commit()
+
+        document = (
+            self._data_root / "documents" / package["stored_pdf_name"]
+        ).resolve()
+        documents_root = (self._data_root / "documents").resolve()
+        if document.is_relative_to(documents_root):
+            document.unlink(missing_ok=True)
+        render_root = (self._data_root / "renders" / package_id).resolve()
+        allowed_renders = (self._data_root / "renders").resolve()
+        if render_root.is_relative_to(allowed_renders) and render_root.is_dir():
+            import shutil
+
+            shutil.rmtree(render_root)
+        return {"removedAttempts": int(attempt_count), "removedPackages": 1}
+
     def _questions_with_regions(
         self, draft_id: str, manifest: list[dict[str, object]]
     ) -> tuple[dict[str, object], ...]:
