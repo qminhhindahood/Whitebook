@@ -10,6 +10,33 @@ class GradeStatus(str, Enum):
     UNANSWERED = "unanswered"
 
 
+MULTIPLE_CHOICE = "multiple_choice"
+STUDENT_PRODUCED_RESPONSE = "student_produced_response"
+
+SPR_GLYPH_SUBSTITUTIONS: dict[str, str] = {
+    "−": "-",  # U+2212 MINUS SIGN
+    "－": "-",  # U+FF0D FULLWIDTH HYPHEN-MINUS
+    "﹣": "-",  # U+FE63 SMALL HYPHEN-MINUS
+    "．": ".",  # U+FF0E FULLWIDTH FULL STOP
+    "。": ".",  # U+3002 IDEOGRAPHIC FULL STOP
+}
+_SPR_TRANSLATIONS = str.maketrans(SPR_GLYPH_SUBSTITUTIONS)
+
+
+@dataclass(frozen=True)
+class LearnerResponse:
+    """One recorded answer; only the selected response participates in grading."""
+
+    selected: str | None
+    eliminated: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GradingQuestion:
+    response_type: str
+    accepted_answers: tuple[str, ...]
+
+
 @dataclass(frozen=True)
 class GradeSummary:
     correct: int
@@ -29,28 +56,27 @@ def grade_mcq(selected: str | None, correct: str) -> GradeStatus:
     )
 
 
+def _normalize_spr(value: str) -> str:
+    return value.strip().translate(_SPR_TRANSLATIONS)
+
+
 def grade_spr(selected: str | None, accepted: tuple[str, ...]) -> GradeStatus:
     if selected is None or not selected.strip():
         return GradeStatus.UNANSWERED
-    translations = str.maketrans(
-        {
-            "−": "-",
-            "－": "-",
-            "﹣": "-",
-            "．": ".",
-            "。": ".",
-        }
-    )
-
-    def normalized(value: str) -> str:
-        return value.strip().translate(translations)
-
-    answer = normalized(selected)
+    answer = _normalize_spr(selected)
     return (
         GradeStatus.CORRECT
-        if any(answer == normalized(value) for value in accepted)
+        if any(answer == _normalize_spr(value) for value in accepted)
         else GradeStatus.INCORRECT
     )
+
+
+def grade_question(response: LearnerResponse, question: GradingQuestion) -> GradeStatus:
+    if question.response_type == MULTIPLE_CHOICE:
+        return grade_mcq(response.selected, question.accepted_answers[0])
+    if question.response_type == STUDENT_PRODUCED_RESPONSE:
+        return grade_spr(response.selected, question.accepted_answers)
+    raise ValueError(f"unsupported response type: {question.response_type}")
 
 
 def summarize_grades(statuses: list[GradeStatus]) -> GradeSummary:
