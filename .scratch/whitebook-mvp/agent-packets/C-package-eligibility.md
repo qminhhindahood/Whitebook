@@ -26,4 +26,3 @@ Accept ordinary immutable descriptors rather than importing database models. Ret
 - `uv run pytest tests/test_package_eligibility.py -q` passes.
 
 Return the commit hash and the final public function signature.
-

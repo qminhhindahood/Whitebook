@@ -26,4 +26,3 @@ Accept immutable question descriptors from one package and an explicit selection
 - `uv run pytest tests/test_practice_rules.py -q` passes.
 
 Return the commit hash and the final request/result types.
-

@@ -3,24 +3,23 @@ from __future__ import annotations
 import argparse
 import asyncio
 import ctypes
-from ctypes import wintypes
-from dataclasses import asdict, dataclass
 import json
 import os
-from pathlib import Path
 import secrets
 import socket
 import sqlite3
 import sys
 import uuid
 import webbrowser
+from ctypes import wintypes
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 import uvicorn
 
 from whitebook.app import create_app
-
 
 LOOPBACK_HOST = "127.0.0.1"
 
@@ -102,7 +101,10 @@ def process_is_alive(pid: int) -> bool:
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
     kernel32.GetExitCodeProcess.restype = wintypes.BOOL
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.CloseHandle.restype = wintypes.BOOL
@@ -126,8 +128,9 @@ def is_verified_whitebook(record: InstanceRecord) -> bool:
         f"http://{record.host}:{record.port}/api/health",
         headers={"X-Whitebook-Token": record.token},
     )
+    direct_opener = build_opener(ProxyHandler({}))
     try:
-        with urlopen(request, timeout=1) as response:
+        with direct_opener.open(request, timeout=1) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError):
         return False
@@ -165,7 +168,9 @@ def inspect_existing_instance(lock_path: Path) -> InstanceRecord | None:
     try:
         lock_path.unlink()
     except OSError as error:
-        raise LauncherError(f"The stale Whitebook lock could not be removed: {error}") from error
+        raise LauncherError(
+            f"The stale Whitebook lock could not be removed: {error}"
+        ) from error
     return None
 
 
@@ -176,10 +181,12 @@ async def serve(
     no_browser: bool,
 ) -> None:
     lock_path = data_dir / "runtime" / "instance.json"
+    project_root = Path(__file__).resolve().parents[2]
     app = create_app(
         capability_token=record.token,
         instance_id=record.instance_id,
         port=record.port,
+        static_root=project_root / "web" / "dist",
         storage_root=data_dir,
     )
     config = uvicorn.Config(
@@ -200,7 +207,9 @@ async def serve(
             return
 
         if not no_browser:
-            webbrowser.open(f"http://{record.host}:{record.port}/")
+            webbrowser.open(
+                f"http://{record.host}:{record.port}/bootstrap/{record.token}"
+            )
         print(f"Whitebook is ready at http://{record.host}:{record.port}/", flush=True)
         await server_task
     finally:
@@ -234,8 +243,12 @@ def main() -> None:
         existing = inspect_existing_instance(lock_path)
         if existing is not None:
             if not args.no_browser:
-                webbrowser.open(f"http://{existing.host}:{existing.port}/")
-            print(f"Whitebook is already running at http://{existing.host}:{existing.port}/")
+                webbrowser.open(
+                    f"http://{existing.host}:{existing.port}/bootstrap/{existing.token}"
+                )
+            print(
+                f"Whitebook is already running at http://{existing.host}:{existing.port}/"
+            )
             return
 
         server_socket = reserve_loopback_socket()

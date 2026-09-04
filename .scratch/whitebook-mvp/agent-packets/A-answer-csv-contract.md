@@ -27,4 +27,3 @@ Expose immutable row and diagnostic value objects plus one parse function. Calle
 - `uv run pytest tests/test_answer_csv.py -q` passes.
 
 Return the commit hash and a short list of any deliberately unresolved integration decisions.
-

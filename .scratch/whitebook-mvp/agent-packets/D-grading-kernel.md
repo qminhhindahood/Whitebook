@@ -26,4 +26,3 @@ Accept primitive values or small local immutable value objects so Package Author
 - `uv run pytest tests/test_grading.py -q` passes.
 
 Return the commit hash and list the exact glyph substitutions implemented.
-

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-04T12:44:07.9317246Z",
+  "title": "Design System: Whitebook",
+  "extensions": {
+    "colorMeta": {
+      "ink-navy": { "role": "neutral", "displayName": "Desk Ink", "canonical": "#14233b", "tonalRamp": ["#07101d", "#0d1a2b", "#14233b", "#263a57", "#435671", "#68798f", "#a7b1be", "#e9edf2"] },
+      "slate": { "role": "neutral", "displayName": "Working Slate", "canonical": "#526176", "tonalRamp": ["#171c24", "#2b3441", "#526176", "#6b798b", "#8793a3", "#a7b0bd", "#cbd1d9", "#f0f2f5"] },
+      "muted": { "role": "neutral", "displayName": "Quiet Slate", "canonical": "#718096", "tonalRamp": ["#20262e", "#3a4655", "#596a7d", "#718096", "#8e9aab", "#aeb7c3", "#d0d5dc", "#f2f4f6"] },
+      "cool-rule": { "role": "neutral", "displayName": "Cool Rule", "canonical": "#d6dfea", "tonalRamp": ["#1b2633", "#3e4c5d", "#69798b", "#98a6b5", "#b9c4d0", "#d6dfea", "#e8edf3", "#f7f9fb"] },
+      "pale-ice": { "role": "neutral", "displayName": "Pale Ice", "canonical": "#edf3fa", "tonalRamp": ["#172432", "#344a61", "#60768d", "#91a4b7", "#becbd8", "#dce6f0", "#edf3fa", "#f8fbfd"] },
+      "canvas": { "role": "neutral", "displayName": "Work Canvas", "canonical": "#f8fafc", "tonalRamp": ["#20262c", "#46515c", "#75818c", "#a6afb8", "#cbd1d7", "#e4e8ec", "#f8fafc", "#ffffff"] },
+      "white": { "role": "neutral", "displayName": "White Surface", "canonical": "#ffffff", "tonalRamp": ["#262626", "#4d4d4d", "#737373", "#999999", "#bfbfbf", "#d9d9d9", "#f2f2f2", "#ffffff"] },
+      "cobalt": { "role": "primary", "displayName": "Action Cobalt", "canonical": "#2166d1", "tonalRamp": ["#071a38", "#0e3470", "#174fa6", "#2166d1", "#4b82d8", "#78a2e3", "#b1c8ed", "#eef4fc"] },
+      "cobalt-deep": { "role": "primary", "displayName": "Deep Action Cobalt", "canonical": "#174fa6", "tonalRamp": ["#06152e", "#0c2a59", "#174fa6", "#3569b2", "#628ac3", "#8fadd5", "#c0d0e8", "#f0f5fb"] },
+      "success": { "role": "secondary", "displayName": "Ready Green", "canonical": "#168a52", "tonalRamp": ["#05291a", "#0b5031", "#117345", "#168a52", "#45a575", "#78c19c", "#b2dcc7", "#edf8f2"] },
+      "warning": { "role": "secondary", "displayName": "Attention Amber", "canonical": "#9a5b00", "tonalRamp": ["#2d1900", "#5a3400", "#7b4800", "#9a5b00", "#b97d2d", "#d4a45f", "#e9cda1", "#fcf5e8"] },
+      "danger": { "role": "secondary", "displayName": "Failure Red", "canonical": "#a33b32", "tonalRamp": ["#30100d", "#5e211c", "#833029", "#a33b32", "#ba625b", "#d18d88", "#e7bbb8", "#faefee"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Workspace Headline", "purpose": "Primary workspace section headings." },
+      "title": { "displayName": "Operating Title", "purpose": "Persistent workspace and panel titles." },
+      "body": { "displayName": "Instruction Body", "purpose": "Explanations, empty states, and task guidance." },
+      "label": { "displayName": "Control Label", "purpose": "Table headers, controls, and metadata." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "workspace-arrival", "value": "420ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "One restrained first-load entrance; removed for reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "laptop-minimum", "value": "1024px" },
+      { "name": "compact-laptop", "value": "1180px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single strongest action in an operating region.",
+      "html": "<button class=\"ds-btn-primary\">IMPORT PACKAGE</button>",
+      "css": ".ds-btn-primary { min-height: 48px; padding: 0 22px; border: 1px solid var(--cobalt, #2166d1); border-radius: 5px; color: #fff; background: var(--cobalt, #2166d1); font: 700 15px 'Segoe UI', Arial, sans-serif; } .ds-btn-primary:hover { background: var(--cobalt-dark, #174fa6); border-color: var(--cobalt-dark, #174fa6); } .ds-btn-primary:focus-visible { outline: 3px solid #f0a93a; outline-offset: 3px; }"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "description": "Default text-and-icon row in the fixed rail.",
+      "html": "<button class=\"ds-nav-item\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 5.5h13.5A2.5 2.5 0 0 1 20 8v11H6.5A2.5 2.5 0 0 1 4 16.5v-11Z\"/></svg><span>Library</span></button>",
+      "css": ".ds-nav-item { display: flex; gap: 14px; align-items: center; width: 100%; min-height: 54px; padding: 0 18px; border: 0; border-radius: 5px; color: #24344d; background: transparent; font: 600 16px 'Segoe UI', Arial, sans-serif; } .ds-nav-item svg { width: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; } .ds-nav-item:hover { background: #e2ebf6; } .ds-nav-item:focus-visible { outline: 3px solid #f0a93a; outline-offset: 3px; }"
+    },
+    {
+      "name": "Active Navigation Item",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "Current rail destination with a leading cobalt marker.",
+      "html": "<a class=\"ds-nav-active\" href=\"#\">Library</a>",
+      "css": ".ds-nav-active { display: flex; align-items: center; min-height: 54px; padding: 0 18px; border-left: 4px solid var(--cobalt, #2166d1); border-radius: 5px; color: var(--cobalt-dark, #174fa6); background: #dce9f9; font: 600 16px 'Segoe UI', Arial, sans-serif; text-decoration: none; } .ds-nav-active:focus-visible { outline: 3px solid #f0a93a; outline-offset: 3px; }"
+    },
+    {
+      "name": "Operating Region",
+      "kind": "card",
+      "description": "A flat task boundary used for tables and supporting guidance.",
+      "html": "<section class=\"ds-region\"><strong>Before you begin</strong></section>",
+      "css": ".ds-region { padding: 24px 26px; border: 1px solid var(--rule, #d6dfea); border-radius: 6px; color: var(--ink, #14233b); background: #fff; font: 400 15px 'Segoe UI', Arial, sans-serif; }"
+    },
+    {
+      "name": "Readiness Status",
+      "kind": "custom",
+      "description": "Color-plus-text application readiness signal.",
+      "html": "<span class=\"ds-ready\" role=\"status\"><span aria-hidden=\"true\"></span>Application ready</span>",
+      "css": ".ds-ready { display: inline-flex; gap: 7px; align-items: center; color: #526176; font: 400 14px 'Segoe UI', Arial, sans-serif; } .ds-ready span { width: 9px; height: 9px; border-radius: 50%; background: var(--success, #168a52); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Local Exam Desk",
+    "overview": "Whitebook feels like a prepared desk at the start of a serious study session: quiet, orderly, and immediately operational. A pale navigation rail establishes place, while a broad white work surface gives source material and testing controls room to breathe.\n\nThe system favors clear state over decoration. Cobalt identifies the next deliberate action, green always arrives with readable readiness text, and authored line icons keep the application independent without making the learner decode a novel visual language.",
+    "keyCharacteristics": [
+      "Fixed pale-ice navigation rail beside a broad white work surface.",
+      "Restrained cobalt actions and ink-navy hierarchy.",
+      "Flat regions separated by cool rules instead of layered cards.",
+      "Compact, consistent line icons paired with visible text."
+    ],
+    "rules": [
+      { "name": "The Quiet Accent Rule", "body": "Cobalt identifies interactive priority; it does not become a decorative page background.", "section": "colors" },
+      { "name": "The Operational Type Rule", "body": "Every text style must improve scanning, status recognition, or task order; decorative type changes do not belong in the application shell.", "section": "typography" },
+      { "name": "The One Workspace Rule", "body": "A screen gets one broad operating field; supporting regions join it rather than fragmenting the task into a dashboard of equal cards.", "section": "layout" },
+      { "name": "The Rule-Before-Shadow Rule", "body": "Use a boundary line or surface change before introducing elevation. A shadow requires a future interaction that genuinely moves above the workspace.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do give source material and exam controls one dominant work surface.",
+      "Do pair every semantic color with explicit status or action text.",
+      "Do use authored SVG icons with the established rounded stroke character.",
+      "Do preserve ordinary browser focus and selection behavior while styling them from the palette."
+    ],
+    "donts": [
+      "Don't copy logos, icons, wording, or exact trade dress from Bluebook, Bluebooky, or College Board.",
+      "Don't turn operational content into a grid of same-weight cards.",
+      "Don't introduce gradients, glass effects, decorative shadows, or gamified reward color into the application shell.",
+      "Don't use emoji or Unicode symbols as interface icons."
+    ]
+  }
+}

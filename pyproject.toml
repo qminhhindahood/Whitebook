@@ -29,4 +29,3 @@ packages = ["src/whitebook"]
 addopts = "-ra --strict-markers"
 testpaths = ["tests"]
 timeout = 20
-

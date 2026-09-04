@@ -21,4 +21,3 @@ Every agent must first read `AGENTS.md`, `CONTEXT.md`, the named parent ticket, 
 | [G — Local Math configuration](G-local-math-configuration.md) | 10, 13, 14 | Environment/config handling | None |
 
 All packets deliberately exclude React components, CSS, browser automation, FastAPI routes, migrations, and end-to-end wiring. The integration owner adds those after merging.
-

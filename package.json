@@ -1,0 +1,8 @@
+{
+  "name": "whitebook-workspace",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix web run build",
+    "typecheck": "npm --prefix web run typecheck"
+  }
+}

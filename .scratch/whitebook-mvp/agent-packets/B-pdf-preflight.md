@@ -29,4 +29,3 @@ Return a structured accepted result or structured diagnostics; callers must not 
 - `uv run pytest tests/test_pdf_preflight.py -q` passes.
 
 Return the commit hash and name the PDF dependency/version range added.
-

@@ -26,4 +26,3 @@ Every path decision must be explicit: return a safe resolved path or a structure
 - `uv run pytest tests/test_safety.py -q` passes.
 
 Return the commit hash and the structured rejection codes.
-
