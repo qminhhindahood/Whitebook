@@ -1,0 +1,26 @@
+# Local secrets and runtime data
+.env
+.env.*
+!.env.example
+data/
+logs/
+
+# JavaScript
+node_modules/
+dist/
+coverage/
+.vite/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
