@@ -13,6 +13,8 @@ class GradeStatus(str, Enum):
 MULTIPLE_CHOICE = "multiple_choice"
 STUDENT_PRODUCED_RESPONSE = "student_produced_response"
 
+VALID_MCQ_ANSWERS = frozenset({"A", "B", "C", "D"})
+
 SPR_GLYPH_SUBSTITUTIONS: dict[str, str] = {
     "−": "-",  # U+2212 MINUS SIGN
     "－": "-",  # U+FF0D FULLWIDTH HYPHEN-MINUS
@@ -47,11 +49,17 @@ class GradeSummary:
 
 
 def grade_mcq(selected: str | None, correct: str) -> GradeStatus:
+    normalized_correct = correct.strip().upper()
+    if normalized_correct not in VALID_MCQ_ANSWERS:
+        raise ValueError(f"invalid multiple-choice accepted answer: {correct!r}")
     if selected is None or not selected.strip():
         return GradeStatus.UNANSWERED
+    normalized_selection = selected.strip().upper()
+    if normalized_selection not in VALID_MCQ_ANSWERS:
+        raise ValueError(f"invalid multiple-choice selection: {selected!r}")
     return (
         GradeStatus.CORRECT
-        if selected.strip().upper() == correct.strip().upper()
+        if normalized_selection == normalized_correct
         else GradeStatus.INCORRECT
     )
 
@@ -73,6 +81,8 @@ def grade_spr(selected: str | None, accepted: tuple[str, ...]) -> GradeStatus:
 
 def grade_question(response: LearnerResponse, question: GradingQuestion) -> GradeStatus:
     if question.response_type == MULTIPLE_CHOICE:
+        if not question.accepted_answers:
+            raise ValueError("multiple-choice question has no accepted answers")
         return grade_mcq(response.selected, question.accepted_answers[0])
     if question.response_type == STUDENT_PRODUCED_RESPONSE:
         return grade_spr(response.selected, question.accepted_answers)

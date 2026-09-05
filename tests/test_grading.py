@@ -1,3 +1,5 @@
+import pytest
+
 from whitebook.grading import (
     SPR_GLYPH_SUBSTITUTIONS,
     GradeStatus,
@@ -21,11 +23,27 @@ def test_mcq_grades_correct_incorrect_and_unanswered() -> None:
     assert grade_mcq(" a ", "A") is GradeStatus.CORRECT
 
 
+def test_mcq_accepts_only_a_through_d() -> None:
+    assert grade_mcq("d", "D") is GradeStatus.CORRECT
+
+    with pytest.raises(ValueError):
+        grade_mcq("E", "A")
+    with pytest.raises(ValueError):
+        grade_mcq("1", "A")
+    with pytest.raises(ValueError):
+        grade_mcq("A", "E")
+
+
+def test_mcq_requires_at_least_one_accepted_answer() -> None:
+    question = GradingQuestion(response_type=MULTIPLE_CHOICE, accepted_answers=())
+
+    with pytest.raises(ValueError):
+        grade_question(LearnerResponse(selected="A"), question)
+
+
 def test_mcq_grades_only_the_selected_response() -> None:
     response = LearnerResponse(selected="A", eliminated=("B", "C", "D"))
-    question = GradingQuestion(
-        response_type=MULTIPLE_CHOICE, accepted_answers=("A",)
-    )
+    question = GradingQuestion(response_type=MULTIPLE_CHOICE, accepted_answers=("A",))
 
     assert grade_question(response, question) is GradeStatus.CORRECT
 
@@ -37,12 +55,9 @@ def test_mcq_grades_only_the_selected_response() -> None:
         is GradeStatus.INCORRECT
     )
 
-    unanswered_with_eliminations = LearnerResponse(
-        selected=None, eliminated=("A", "B")
-    )
+    unanswered_with_eliminations = LearnerResponse(selected=None, eliminated=("A", "B"))
     assert (
-        grade_question(unanswered_with_eliminations, question)
-        is GradeStatus.UNANSWERED
+        grade_question(unanswered_with_eliminations, question) is GradeStatus.UNANSWERED
     )
 
 
@@ -53,9 +68,7 @@ def test_grade_question_dispatches_by_response_type() -> None:
     )
 
     assert grade_question(LearnerResponse(selected="c"), mcq) is GradeStatus.CORRECT
-    assert (
-        grade_question(LearnerResponse(selected="1.5"), spr) is GradeStatus.INCORRECT
-    )
+    assert grade_question(LearnerResponse(selected="1.5"), spr) is GradeStatus.INCORRECT
     assert grade_question(LearnerResponse(selected="3/2"), spr) is GradeStatus.CORRECT
 
 
