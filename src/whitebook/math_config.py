@@ -9,9 +9,6 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def reference_sheet_setting(data_root: Path) -> str:
-    for name in ("reference-sheet.png", "reference-sheet.jpg"):
-        if (data_root / "assets" / name).is_file():
-            return f"assets/{name}"
     return "assets/reference-sheet.png"
 
 
@@ -38,6 +35,15 @@ class RedactedSecret:
 
     def __hash__(self) -> int:
         return hash(self._value)
+
+    def __copy__(self) -> RedactedSecret:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, object]) -> RedactedSecret:
+        return self
+
+    def __reduce__(self) -> None:
+        raise TypeError("RedactedSecret cannot be serialized")
 
 
 @dataclass(frozen=True)
@@ -110,13 +116,14 @@ def load_math_configuration(
                     )
                 )
             else:
-                valid_png = reference.suffix.lower() == ".png" and signature == PNG_SIGNATURE
-                valid_jpeg = reference.suffix.lower() in {".jpg", ".jpeg"} and signature.startswith(b"\xff\xd8\xff")
-                if not (valid_png or valid_jpeg):
+                valid_png = (
+                    reference.suffix.lower() == ".png" and signature == PNG_SIGNATURE
+                )
+                if not valid_png:
                     diagnostics.append(
                         MathDiagnostic(
                             "invalid_reference_sheet",
-                            "The Reference Sheet must be a valid PNG or JPEG image.",
+                            "The Reference Sheet must be a valid PNG image.",
                         )
                     )
 
