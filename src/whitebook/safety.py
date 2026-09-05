@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 import uuid
 from pathlib import Path, PurePosixPath, PureWindowsPath
+
+_SAFE_SUFFIX = re.compile(r"\.[a-zA-Z0-9]+")
+_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f]")
 
 
 class PathSafetyError(ValueError):
@@ -12,13 +16,14 @@ class PathSafetyError(ValueError):
 
 
 def generate_storage_name(suffix: str = "") -> str:
-    safe_suffix = (
-        suffix if not suffix or re.fullmatch(r"\.[a-zA-Z0-9]+", suffix) else ""
-    )
-    return f"{uuid.uuid4().hex}{safe_suffix.lower()}"
+    if suffix and not _SAFE_SUFFIX.fullmatch(suffix):
+        raise PathSafetyError("unsafe_suffix")
+    return f"{uuid.uuid4().hex}{suffix.lower()}"
 
 
 def resolve_below(root: Path, candidate: str) -> Path:
+    if _CONTROL_CHARACTERS.search(candidate):
+        raise PathSafetyError("unsafe_characters")
     windows = PureWindowsPath(candidate)
     normalized = candidate.replace("\\", "/")
     posix = PurePosixPath(normalized)
@@ -34,6 +39,8 @@ def resolve_below(root: Path, candidate: str) -> Path:
 
 
 def validate_zip_member(member: str) -> str:
+    if _CONTROL_CHARACTERS.search(member):
+        raise PathSafetyError("unsafe_characters")
     windows = PureWindowsPath(member)
     normalized = member.replace("\\", "/")
     posix = PurePosixPath(normalized)
@@ -42,6 +49,23 @@ def validate_zip_member(member: str) -> str:
     if not posix.parts or ".." in posix.parts:
         raise PathSafetyError("path_traversal")
     return posix.as_posix()
+
+
+def _redaction_variants(root: Path) -> list[str]:
+    try:
+        resolved = root.resolve()
+    except OSError:
+        resolved = root
+    candidates = [str(resolved), resolved.as_posix()]
+    if root.is_absolute():
+        candidates.append(str(root))
+        candidates.append(str(root).replace("\\", "/"))
+    variants = {
+        value
+        for value in candidates
+        if len(value) >= 2 and ("/" in value or "\\" in value)
+    }
+    return sorted(variants, key=lambda value: (-len(value), value))
 
 
 def redact_diagnostic(
@@ -53,8 +77,14 @@ def redact_diagnostic(
     result = message
     for secret in sorted((value for value in secrets if value), key=len, reverse=True):
         result = result.replace(secret, "[secret]")
-    for root in sorted(
-        (str(path.resolve()) for path in sensitive_roots), key=len, reverse=True
-    ):
-        result = result.replace(root, "[private-path]")
+    variants: list[str] = []
+    for root in sensitive_roots:
+        variants.extend(_redaction_variants(root))
+    if variants:
+        flags = re.IGNORECASE if os.name == "nt" else re.NOFLAG
+        pattern = "|".join(
+            re.escape(variant)
+            for variant in sorted(variants, key=lambda value: (-len(value), value))
+        )
+        result = re.sub(pattern, "[private-path]", result, flags=flags)
     return result
