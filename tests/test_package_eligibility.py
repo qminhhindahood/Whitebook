@@ -80,3 +80,39 @@ def test_empty_packages_are_ineligible() -> None:
     assert result.practice_eligible is False
     assert result.simulation_eligible is False
     assert set(result.reasons) == {"empty_package", "missing_standard_module"}
+
+
+def test_gap_in_numbering_blocks_simulation_but_not_practice() -> None:
+    gapped = [
+        question
+        for question in full_shape()
+        if not (
+            question.section == "Reading and Writing"
+            and question.module == 1
+            and question.question_number == 27
+        )
+    ]
+    gapped.append(QuestionDescriptor("Reading and Writing", 1, 28))
+
+    result = classify_package(gapped)
+
+    assert result.practice_eligible is True
+    assert result.simulation_eligible is False
+    assert set(result.reasons) == {"unordered_question_numbers"}
+
+
+def test_shuffled_numbering_blocks_simulation_but_not_practice() -> None:
+    shuffled = full_shape()
+    shuffled[-1], shuffled[-2] = shuffled[-2], shuffled[-1]
+
+    result = classify_package(shuffled)
+
+    assert result.practice_eligible is True
+    assert result.simulation_eligible is False
+    assert set(result.reasons) == {"unordered_question_numbers"}
+
+
+def test_short_but_contiguous_module_reports_only_the_count() -> None:
+    result = classify_package(full_shape()[:-1])
+
+    assert set(result.reasons) == {"wrong_question_count"}

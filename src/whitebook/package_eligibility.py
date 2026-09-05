@@ -28,6 +28,7 @@ def classify_package(questions: list[QuestionDescriptor]) -> PackageEligibility:
         add("empty_package")
     seen: set[tuple[str, int, int]] = set()
     counts: dict[tuple[str, int], int] = {}
+    numbers: dict[tuple[str, int], list[int]] = {}
     structurally_valid = bool(questions)
     for question in questions:
         if question.section not in {"Reading and Writing", "Math"}:
@@ -47,6 +48,9 @@ def classify_package(questions: list[QuestionDescriptor]) -> PackageEligibility:
         counts[(question.section, question.module)] = (
             counts.get((question.section, question.module), 0) + 1
         )
+        numbers.setdefault((question.section, question.module), []).append(
+            question.question_number
+        )
 
     expected = {
         ("Reading and Writing", 1): 27,
@@ -61,6 +65,11 @@ def classify_package(questions: list[QuestionDescriptor]) -> PackageEligibility:
         for module, expected_count in expected.items()
     ):
         add("wrong_question_count")
+    for module, module_numbers in numbers.items():
+        if module in expected and module_numbers != list(
+            range(1, len(module_numbers) + 1)
+        ):
+            add("unordered_question_numbers")
     return PackageEligibility(
         practice_eligible=structurally_valid,
         simulation_eligible=structurally_valid and not reasons,
