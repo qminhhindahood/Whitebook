@@ -5,6 +5,40 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from pathlib import Path
 
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def reference_sheet_setting(data_root: Path) -> str:
+    for name in ("reference-sheet.png", "reference-sheet.jpg"):
+        if (data_root / "assets" / name).is_file():
+            return f"assets/{name}"
+    return "assets/reference-sheet.png"
+
+
+class RedactedSecret:
+    """Holds one secret so no representation or copy reveals its value."""
+
+    __slots__ = ("_value",)
+
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+    @property
+    def value(self) -> str:
+        return self._value
+
+    def __repr__(self) -> str:
+        return "[redacted]"
+
+    def __str__(self) -> str:
+        return "[redacted]"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, RedactedSecret) and self._value == other._value
+
+    def __hash__(self) -> int:
+        return hash(self._value)
+
 
 @dataclass(frozen=True)
 class MathDiagnostic:
@@ -15,13 +49,15 @@ class MathDiagnostic:
 @dataclass(frozen=True)
 class MathConfiguration:
     reference_sheet: Path
-    _desmos_api_key: str = dataclass_field(repr=False)
+    reference_sheet_setting: str
+    _desmos_api_key: RedactedSecret = dataclass_field(repr=False)
 
     def reveal_desmos_api_key(self) -> str:
-        return self._desmos_api_key
+        """The only intentional accessor for the Desmos API key."""
+        return self._desmos_api_key.value
 
     def non_secret_settings(self) -> dict[str, str]:
-        return {"reference_sheet": self.reference_sheet.name}
+        return {"reference_sheet": self.reference_sheet_setting}
 
 
 @dataclass(frozen=True)
@@ -65,7 +101,8 @@ def load_math_configuration(
             )
         else:
             try:
-                signature = reference.read_bytes()[:8]
+                with reference.open("rb") as handle:
+                    signature = handle.read(len(PNG_SIGNATURE))
             except OSError:
                 diagnostics.append(
                     MathDiagnostic(
@@ -73,17 +110,19 @@ def load_math_configuration(
                     )
                 )
             else:
-                if (
-                    reference.suffix.lower() != ".png"
-                    or signature != b"\x89PNG\r\n\x1a\n"
-                ):
+                valid_png = reference.suffix.lower() == ".png" and signature == PNG_SIGNATURE
+                valid_jpeg = reference.suffix.lower() in {".jpg", ".jpeg"} and signature.startswith(b"\xff\xd8\xff")
+                if not (valid_png or valid_jpeg):
                     diagnostics.append(
                         MathDiagnostic(
                             "invalid_reference_sheet",
-                            "The Reference Sheet must be a valid PNG image.",
+                            "The Reference Sheet must be a valid PNG or JPEG image.",
                         )
                     )
 
     if diagnostics or reference is None:
         return MathConfigurationResult(None, tuple(diagnostics))
-    return MathConfigurationResult(MathConfiguration(reference, key), ())
+    setting = reference.relative_to(data_root.resolve()).as_posix()
+    return MathConfigurationResult(
+        MathConfiguration(reference, setting, RedactedSecret(key)), ()
+    )
