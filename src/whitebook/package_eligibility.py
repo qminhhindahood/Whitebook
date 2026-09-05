@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from whitebook.sat_policy import STANDARD_MODULE_COUNTS
+
 
 @dataclass(frozen=True)
 class QuestionDescriptor:
@@ -52,12 +54,7 @@ def classify_package(questions: list[QuestionDescriptor]) -> PackageEligibility:
             question.question_number
         )
 
-    expected = {
-        ("Reading and Writing", 1): 27,
-        ("Reading and Writing", 2): 27,
-        ("Math", 1): 22,
-        ("Math", 2): 22,
-    }
+    expected = STANDARD_MODULE_COUNTS
     if any(module not in counts for module in expected):
         add("missing_standard_module")
     if any(

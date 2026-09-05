@@ -4,6 +4,8 @@
 !.env.example
 data/
 logs/
+.scratch/runtime-review/
+question-bank/
 
 # JavaScript
 node_modules/

@@ -85,6 +85,24 @@ def test_resolution_rejects_unsafe_candidates(tmp_path: Path) -> None:
         assert _rejection_of(resolve_below, root, candidate) == code
 
 
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        "",
+        ".",
+        "documents/NUL.pdf",
+        "documents/a:secret",
+        "documents/a.",
+        "documents/a ",
+    ],
+)
+def test_windows_aliases_and_root_targets_are_rejected(tmp_path: Path, candidate: str):
+    with pytest.raises(PathSafetyError):
+        resolve_below(tmp_path, candidate)
+    with pytest.raises(PathSafetyError):
+        validate_zip_member(candidate)
+
+
 def test_resolution_rejects_symlink_escape(tmp_path: Path) -> None:
     root = tmp_path / "data"
     root.mkdir()

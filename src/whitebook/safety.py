@@ -29,8 +29,9 @@ def resolve_below(root: Path, candidate: str) -> Path:
     posix = PurePosixPath(normalized)
     if windows.drive or windows.root or posix.is_absolute():
         raise PathSafetyError("absolute_path")
-    if ".." in posix.parts:
+    if not posix.parts or ".." in posix.parts:
         raise PathSafetyError("path_traversal")
+    _validate_parts(posix.parts)
     root_resolved = root.resolve()
     resolved = (root_resolved / Path(*posix.parts)).resolve()
     if not resolved.is_relative_to(root_resolved):
@@ -48,7 +49,20 @@ def validate_zip_member(member: str) -> str:
         raise PathSafetyError("absolute_path")
     if not posix.parts or ".." in posix.parts:
         raise PathSafetyError("path_traversal")
+    _validate_parts(posix.parts)
     return posix.as_posix()
+
+
+def _validate_parts(parts: tuple[str, ...]) -> None:
+    for part in parts:
+        stem = part.split(".")[0].upper()
+        if (
+            ":" in part
+            or part.endswith((".", " "))
+            or stem in {"CON", "PRN", "AUX", "NUL"}
+            or re.fullmatch(r"(?:COM|LPT)[1-9]", stem)
+        ):
+            raise PathSafetyError("unsafe_characters")
 
 
 def _redaction_variants(root: Path) -> list[str]:

@@ -12,13 +12,21 @@ from typing import Any, Protocol
 from urllib.parse import quote
 
 from whitebook.authoring import PackageAuthoring
-from whitebook.grading import GradeStatus, grade_mcq, grade_spr, summarize_grades
-from whitebook.math_config import load_math_configuration
+from whitebook.diagnostics import DiagnosticLog
+from whitebook.grading import (
+    GradeStatus,
+    GradingQuestion,
+    LearnerResponse,
+    grade_question,
+    summarize_grades,
+)
+from whitebook.math_config import load_math_configuration, reference_sheet_setting
 from whitebook.practice_rules import (
     PracticeQuestion,
     PracticeRequest,
     build_practice_plan,
 )
+from whitebook.sat_policy import BREAK_SECONDS, standard_module_seconds
 from whitebook.storage import connect
 
 
@@ -45,6 +53,7 @@ class AttemptEngine:
         self._data_root = data_root
         self._authoring = PackageAuthoring(data_root)
         self._clock = clock or SystemClock()
+        self._diagnostics = DiagnosticLog(data_root)
 
     def practice_options(self, package_id: str) -> dict[str, object]:
         package = self._require_package(package_id)
@@ -80,7 +89,9 @@ class AttemptEngine:
         selection: dict[str, Any],
         resume_attempt_id: str | None = None,
     ) -> dict[str, object]:
-        package = self._require_package(package_id)
+        package = self._require_package(
+            package_id, allow_archived=bool(resume_attempt_id)
+        )
         if kind not in {"practice", "simulation"}:
             raise AttemptError("invalid_attempt_kind", "Attempt kind is not supported.")
         if kind == "simulation" and not package["simulationEligible"]:
@@ -96,7 +107,13 @@ class AttemptEngine:
             plan = attempt["plan"]
             selection = plan["selection"]
         else:
-            plan = self._build_plan(package, kind, selection)
+            try:
+                plan = self._build_plan(package, kind, selection)
+            except (TypeError, ValueError, KeyError, OverflowError) as error:
+                raise AttemptError(
+                    "invalid_selection",
+                    "Check the Practice selection fields and try again.",
+                ) from error
 
         stages, math_tool = self._readiness_stages(package, plan, selection)
         failed = next((stage for stage in stages if stage["status"] == "failed"), None)
@@ -140,17 +157,20 @@ class AttemptEngine:
                     kind,
                     json.dumps(selection, separators=(",", ":")),
                     json.dumps(plan, separators=(",", ":")),
-                    json.dumps(readiness, separators=(",", ":")),
+                    self._stored_readiness(readiness),
                     resume_attempt_id,
                     now,
                 ),
             )
             connection.commit()
+        self._log_readiness(setup_id, readiness)
         return {
             "setupId": setup_id,
             "packageId": package_id,
             "kind": kind,
             "selection": selection,
+            "sourcePdfUrl": plan["sourcePdfUrl"],
+            "questions": plan["questions"],
             **readiness,
         }
 
@@ -165,6 +185,21 @@ class AttemptEngine:
         if readiness["status"] != "ready":
             raise AttemptError("setup_not_ready", "Attempt setup is not ready.")
         if setup["resume_attempt_id"]:
+            row, plan, state = self._load_attempt(setup["resume_attempt_id"])
+            state["resumeReady"] = True
+            selection = json.loads(setup["selection_json"])
+            state["calculatorMode"] = selection.get("calculatorMode", "none")
+            plan["selection"] = selection
+            with connect(self._data_root) as connection:
+                connection.execute(
+                    "UPDATE attempts SET plan_json = ? WHERE id = ?",
+                    (json.dumps(plan), row["id"]),
+                )
+                connection.execute(
+                    "DELETE FROM attempt_setups WHERE id = ?", (setup_id,)
+                )
+                connection.commit()
+            self._save_state(row, state)
             return self.resume(setup["resume_attempt_id"])
 
         plan = json.loads(setup["plan_json"])
@@ -179,7 +214,11 @@ class AttemptEngine:
             "lockedModules": [],
             "elapsedSeconds": 0,
             "questionSeconds": {question["id"]: 0 for question in questions},
-            "remainingSeconds": plan["modules"][0].get("durationSeconds"),
+            "remainingSeconds": (
+                plan.get("durationSeconds")
+                if setup["kind"] == "practice"
+                else plan["modules"][0].get("durationSeconds")
+            ),
             "breakRemainingSeconds": None,
             "lastTick": self._clock.now(),
             "resumeReady": False,
@@ -210,6 +249,19 @@ class AttemptEngine:
         assert attempt is not None
         return attempt
 
+    def retry_setup(self, setup_id: str) -> dict[str, object]:
+        setup = self._load_setup(setup_id)
+        replacement = self.prepare(
+            package_id=setup["package_id"],
+            kind=setup["kind"],
+            selection=json.loads(setup["selection_json"]),
+            resume_attempt_id=setup["resume_attempt_id"],
+        )
+        with connect(self._data_root) as connection:
+            connection.execute("DELETE FROM attempt_setups WHERE id = ?", (setup_id,))
+            connection.commit()
+        return replacement
+
     def get_attempt(self, attempt_id: str) -> dict[str, object] | None:
         with connect(self._data_root) as connection:
             row = connection.execute(
@@ -230,6 +282,8 @@ class AttemptEngine:
         state["lastTick"] = now
         result = None
         if status == "active":
+            if state["remainingSeconds"] is not None:
+                elapsed = min(elapsed, state["remainingSeconds"])
             state["elapsedSeconds"] += elapsed
             current = state["currentQuestionId"]
             state["questionSeconds"][current] = (
@@ -328,6 +382,11 @@ class AttemptEngine:
 
     def navigate(self, attempt_id: str, question_id: str) -> dict[str, object]:
         row, plan, state = self._active_attempt(attempt_id)
+        if row["kind"] == "practice":
+            for index, module in enumerate(plan["modules"]):
+                if question_id in module["questionIds"]:
+                    state["activeModuleIndex"] = index
+                    break
         self._require_active_question(plan, state, question_id)
         state["currentQuestionId"] = question_id
         self._save_state(row, state)
@@ -337,13 +396,35 @@ class AttemptEngine:
 
     def pause(self, attempt_id: str) -> dict[str, object]:
         self.tick(attempt_id)
-        row, _plan, state = self._active_attempt(attempt_id)
+        row, _plan, state = self._load_attempt(attempt_id)
+        if row["status"] == "completed":
+            return self.get_attempt(attempt_id)
+        if row["status"] != "paused":
+            state["pausedStatus"] = row["status"]
         state["lastTick"] = None
         state["resumeReady"] = False
         self._save_state(row, state, status="paused")
         attempt = self.get_attempt(attempt_id)
         assert attempt is not None
         return attempt
+
+    def recover_interrupted(self) -> None:
+        """Called only after the launcher owns its data lock; never charges downtime."""
+        with connect(self._data_root) as connection:
+            rows = connection.execute(
+                "SELECT * FROM attempts WHERE status IN ('active', 'break', 'transition')"
+            ).fetchall()
+            for row in rows:
+                state = json.loads(row["state_json"])
+                state.update(
+                    lastTick=None, resumeReady=False, pausedStatus=row["status"]
+                )
+                connection.execute(
+                    "UPDATE attempts SET status='paused', state_json=? WHERE id=?",
+                    (json.dumps(state), row["id"]),
+                )
+            connection.execute("DELETE FROM attempt_setups")
+            connection.commit()
 
     def prepare_resume(self, attempt_id: str) -> dict[str, object]:
         attempt = self.get_attempt(attempt_id)
@@ -371,7 +452,7 @@ class AttemptEngine:
             )
         state["lastTick"] = self._clock.now()
         state["resumeReady"] = False
-        self._save_state(row, state, status="active")
+        self._save_state(row, state, status=state.pop("pausedStatus", "active"))
         attempt = self.get_attempt(attempt_id)
         assert attempt is not None
         return attempt
@@ -544,6 +625,18 @@ class AttemptEngine:
             "questionIds": missed,
             "count": len(missed),
             "timing": "elapsed",
+            "sections": list(
+                dict.fromkeys(
+                    q["section"] for q in result["questions"] if q["id"] in missed
+                )
+            ),
+            "modules": list(
+                dict.fromkeys(
+                    q["module"] for q in result["questions"] if q["id"] in missed
+                )
+            ),
+            "moduleCounts": None,
+            "category": None,
         }
         return self.prepare(
             package_id=attempt["packageId"], kind="practice", selection=selection
@@ -555,19 +648,19 @@ class AttemptEngine:
         if kind == "simulation":
             selected = package["questions"]
             duration = None
-        elif selection.get("questionIds"):
-            wanted = selection["questionIds"]
-            by_id = {question["id"]: question for question in package["questions"]}
-            if len(set(wanted)) != len(wanted) or any(
-                item not in by_id for item in wanted
-            ):
-                raise AttemptError(
-                    "invalid_question_selection",
-                    "Practice question selection is invalid.",
-                )
-            selected = [by_id[item] for item in wanted]
-            duration = None
         else:
+            candidates = package["questions"]
+            if selection.get("questionIds"):
+                wanted = selection["questionIds"]
+                by_id = {q["id"]: q for q in candidates}
+                if len(set(wanted)) != len(wanted) or any(
+                    item not in by_id for item in wanted
+                ):
+                    raise AttemptError(
+                        "invalid_question_selection",
+                        "Practice question selection is invalid.",
+                    )
+                candidates = [by_id[item] for item in wanted]
             descriptors = tuple(
                 PracticeQuestion(
                     id=question["id"],
@@ -576,7 +669,7 @@ class AttemptEngine:
                     question_number=int(question["question_number"]),
                     category=question.get("category"),
                 )
-                for question in package["questions"]
+                for question in candidates
             )
             module_counts = selection.get("moduleCounts")
             request = PracticeRequest(
@@ -621,9 +714,7 @@ class AttemptEngine:
             modules[-1]["questionIds"].append(question["id"])
         if kind == "simulation":
             for module in modules:
-                module["durationSeconds"] = (
-                    32 * 60 if module["section"] == "Reading and Writing" else 35 * 60
-                )
+                module["durationSeconds"] = standard_module_seconds(module["section"])
         elif len(modules) == 1:
             modules[0]["durationSeconds"] = duration
         return {
@@ -643,11 +734,17 @@ class AttemptEngine:
         plan: dict[str, Any],
         selection: dict[str, Any],
     ) -> tuple[list[dict[str, str]], dict[str, object] | None]:
-        source = self._authoring.package_source_pdf(package["id"])
-        source_status = "ready" if source and source.is_file() else "failed"
+        source_status = (
+            "ready"
+            if self._authoring.verify_package_source(package["id"])
+            else "failed"
+        )
         regions_status = (
             "ready"
-            if all(question.get("regions") for question in plan["questions"])
+            if all(
+                question.get("presentation") or question.get("regions")
+                for question in plan["questions"]
+            )
             else "failed"
         )
         autosave_status = "ready"
@@ -676,7 +773,7 @@ class AttemptEngine:
                 configuration = load_math_configuration(
                     self._data_root,
                     os.environ,
-                    "assets/reference-sheet.png",
+                    reference_sheet_setting(self._data_root),
                 )
                 if configuration.configuration is None:
                     math_status = "failed"
@@ -708,6 +805,17 @@ class AttemptEngine:
                         },
                     }
             stages.append({"name": "math_tools", "status": math_status})
+            reference = load_math_configuration(
+                self._data_root,
+                {"WHITEBOOK_DESMOS_API_KEY": "reference-check"},
+                reference_sheet_setting(self._data_root),
+            )
+            stages.append(
+                {
+                    "name": "reference_sheet",
+                    "status": "ready" if reference.configuration else "failed",
+                }
+            )
         stages.append({"name": "autosave_verification", "status": autosave_status})
         if all(stage["status"] == "ready" for stage in stages):
             stages.append({"name": "ready", "status": "ready"})
@@ -729,6 +837,7 @@ class AttemptEngine:
         plan: dict[str, Any],
         readiness: dict[str, Any],
     ) -> None:
+        self._refresh_readiness(readiness)
         with connect(self._data_root) as connection:
             connection.execute(
                 """
@@ -739,21 +848,76 @@ class AttemptEngine:
                 (
                     json.dumps(selection, separators=(",", ":")),
                     json.dumps(plan, separators=(",", ":")),
-                    json.dumps(readiness, separators=(",", ":")),
+                    self._stored_readiness(readiness),
                     setup_id,
                 ),
             )
             connection.commit()
+        self._log_readiness(setup_id, readiness)
+
+    def _log_readiness(self, setup_id: str, readiness: dict) -> None:
+        try:
+            for stage in readiness["stages"]:
+                self._diagnostics.record(
+                    "loading_stage",
+                    stage=stage["name"],
+                    error_code=stage["status"],
+                    resource_id=setup_id,
+                )
+        except OSError:
+            # Diagnostic IO must not interrupt a durable learning-state operation.
+            pass
 
     def _setup_payload(self, setup_id: str) -> dict[str, object]:
         setup = self._load_setup(setup_id)
+        plan = json.loads(setup["plan_json"])
+        readiness = json.loads(setup["readiness_json"])
+        tool = readiness.get("mathTool")
+        if (
+            tool
+            and tool["mode"] == "desmos"
+            and os.environ.get("WHITEBOOK_DESMOS_API_KEY")
+        ):
+            tool["scriptUrl"] = (
+                "https://www.desmos.com/api/v1.12/calculator.js?apiKey="
+                + quote(os.environ["WHITEBOOK_DESMOS_API_KEY"], safe="")
+            )
         return {
             "setupId": setup["id"],
             "packageId": setup["package_id"],
             "kind": setup["kind"],
             "selection": json.loads(setup["selection_json"]),
-            **json.loads(setup["readiness_json"]),
+            "sourcePdfUrl": plan["sourcePdfUrl"],
+            "questions": plan["questions"],
+            **readiness,
         }
+
+    @staticmethod
+    def _stored_readiness(readiness: dict) -> str:
+        stored = {**readiness}
+        if stored.get("mathTool"):
+            stored["mathTool"] = {
+                key: value
+                for key, value in stored["mathTool"].items()
+                if key != "scriptUrl"
+            }
+        return json.dumps(stored, separators=(",", ":"))
+
+    @staticmethod
+    def _refresh_readiness(readiness: dict) -> None:
+        stages = [stage for stage in readiness["stages"] if stage["name"] != "ready"]
+        failed = next((s for s in stages if s["status"] == "failed"), None)
+        loading = next((s for s in stages if s["status"] == "loading"), None)
+        readiness["status"] = "failed" if failed else "loading" if loading else "ready"
+        readiness["failedStage"] = failed["name"] if failed else None
+        readiness["allowedActions"] = (
+            ["begin"] if not (failed or loading) else ["retry", "return_to_setup"]
+        )
+        if any(s["name"] == "math_tools" and s["status"] != "ready" for s in stages):
+            readiness["allowedActions"].append("use_scientific")
+        if not (failed or loading):
+            stages.append({"name": "ready", "status": "ready"})
+        readiness["stages"] = stages
 
     def _active_attempt(self, attempt_id: str) -> tuple[object, dict, dict]:
         self.tick(attempt_id)
@@ -836,7 +1000,7 @@ class AttemptEngine:
         if active_index == len(plan["modules"]) - 1:
             return "completed", self._grade(plan, state)
         if active_index == 1:
-            state["breakRemainingSeconds"] = 10 * 60
+            state["breakRemainingSeconds"] = BREAK_SECONDS
             state["lastTick"] = self._clock.now()
             return "break", None
         return "transition", None
@@ -846,10 +1010,13 @@ class AttemptEngine:
         statuses = []
         for question in plan["questions"]:
             response = state["responses"].get(question["id"])
-            if question["response_type"] == "multiple_choice":
-                status = grade_mcq(response, question["accepted_answers"][0])
-            else:
-                status = grade_spr(response, tuple(question["accepted_answers"]))
+            status = grade_question(
+                LearnerResponse(selected=response),
+                GradingQuestion(
+                    response_type=question["response_type"],
+                    accepted_answers=tuple(question["accepted_answers"]),
+                ),
+            )
             statuses.append(status)
             review = state["reviewState"].get(
                 question["id"], {"marked": False, "eliminatedChoices": []}
@@ -868,6 +1035,11 @@ class AttemptEngine:
                     "marked": review["marked"],
                     "elapsedSeconds": state["questionSeconds"].get(question["id"], 0),
                     "regions": question["regions"],
+                    **(
+                        {"presentation": question["presentation"]}
+                        if question.get("presentation")
+                        else {}
+                    ),
                 }
             )
         summary = summarize_grades(statuses)
@@ -879,15 +1051,20 @@ class AttemptEngine:
                 (question["section"], by_section),
                 (f"{question['section']} · Module {question['module']}", by_module),
             ):
-                bucket = target.setdefault(key, {"correct": 0, "total": 0})
-                bucket["total"] += 1
-                bucket["correct"] += question["status"] == "correct"
-            if question["category"]:
-                bucket = by_category.setdefault(
-                    question["category"], {"correct": 0, "total": 0}
+                bucket = target.setdefault(
+                    key, {"correct": 0, "total": 0, "elapsedSeconds": 0}
                 )
                 bucket["total"] += 1
                 bucket["correct"] += question["status"] == "correct"
+                bucket["elapsedSeconds"] += question["elapsedSeconds"]
+            if question["category"]:
+                bucket = by_category.setdefault(
+                    question["category"],
+                    {"correct": 0, "total": 0, "elapsedSeconds": 0},
+                )
+                bucket["total"] += 1
+                bucket["correct"] += question["status"] == "correct"
+                bucket["elapsedSeconds"] += question["elapsedSeconds"]
         return {
             **asdict(summary),
             "questions": question_results,
@@ -897,9 +1074,11 @@ class AttemptEngine:
             "byCategory": by_category,
         }
 
-    def _require_package(self, package_id: str) -> dict[str, Any]:
+    def _require_package(
+        self, package_id: str, *, allow_archived: bool = False
+    ) -> dict[str, Any]:
         package = self._authoring.get_package(package_id)
-        if package is None or package["archived"]:
+        if package is None or (package["archived"] and not allow_archived):
             raise AttemptError("package_not_found", "Test Package not found.")
         return package
 

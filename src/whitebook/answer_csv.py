@@ -83,6 +83,7 @@ def _diagnostic(code: str, row: int | None, field: str | None) -> CsvDiagnostic:
     messages = {
         "csv_too_large": "The Answer CSV exceeds the configured size limit.",
         "invalid_encoding": "The Answer CSV must use UTF-8 encoding.",
+        "malformed_csv": "The Answer CSV contains malformed quoting or an oversized field.",
         "invalid_headers": "The Answer CSV headers must match the v1 template exactly.",
         "invalid_row_width": "This row does not contain exactly six fields.",
         "required": "This required field is empty.",
@@ -108,18 +109,24 @@ def parse_answer_csv(
     except UnicodeDecodeError:
         return AnswerCsvResult((), (_diagnostic("invalid_encoding", None, None),))
 
-    reader = csv.reader(io.StringIO(text, newline=""))
+    reader = csv.reader(io.StringIO(text, newline=""), strict=True)
     try:
         headers = next(reader)
+        values_rows = list(reader)
+    except csv.Error:
+        return AnswerCsvResult(
+            (), (_diagnostic("malformed_csv", reader.line_num, None),)
+        )
     except StopIteration:
         headers = []
+        values_rows = []
     if tuple(headers) != HEADERS:
         return AnswerCsvResult((), (_diagnostic("invalid_headers", 1, "headers"),))
 
     rows: list[AnswerRow] = []
     diagnostics: list[CsvDiagnostic] = []
     seen: set[tuple[str, int, int]] = set()
-    for source_row, values in enumerate(reader, start=2):
+    for source_row, values in enumerate(values_rows, start=2):
         if not values or all(not value.strip() for value in values):
             continue
         if len(values) != len(HEADERS):

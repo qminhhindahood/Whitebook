@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +23,7 @@ from whitebook.attempts import AttemptEngine, AttemptError
 from whitebook.authoring import AuthoringError, PackageAuthoring
 from whitebook.backups import BackupError, BackupManager
 from whitebook.diagnostics import DiagnosticLog
+from whitebook.question_presentation import QuestionPresentation
 
 
 class QuestionRegionInput(BaseModel):
@@ -103,16 +110,28 @@ def create_app(
 
     def secured(response: Response) -> Response:
         response.headers["Cache-Control"] = "no-store"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
-            "form-action 'self'; img-src 'self' data:; object-src 'none'; "
-            "script-src 'self'; style-src 'self'"
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            (
+                "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
+                "form-action 'self'; img-src 'self' data: blob:; object-src 'none'; "
+                "script-src 'self'; frame-src 'self'; "
+                "connect-src 'self' https://www.desmos.com; "
+                "worker-src 'self' blob:; style-src 'self' 'unsafe-inline'"
+            ),
         )
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Frame-Options"] = (
+            "SAMEORIGIN"
+            if "sandbox allow-scripts" in response.headers["Content-Security-Policy"]
+            else "DENY"
+        )
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        )
         return response
 
     @app.middleware("http")
@@ -192,6 +211,22 @@ def create_app(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    @app.get("/app/calculator-frame")
+    async def calculator_frame(request: Request) -> HTMLResponse:
+        from whitebook.calculator_frame import frame_html
+
+        request.state.calculator_nonce = secrets.token_urlsafe(24)
+        return HTMLResponse(
+            frame_html(request.state.calculator_nonce),
+            headers={
+                "Content-Security-Policy": (
+                    "default-src 'none'; sandbox allow-scripts; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; "
+                    f"script-src 'nonce-{request.state.calculator_nonce}' https://www.desmos.com 'unsafe-eval'; "
+                    "style-src 'unsafe-inline'; font-src data:; img-src data: blob:; connect-src https://www.desmos.com; worker-src blob:"
+                )
+            },
+        )
+
     @app.post("/api/import-drafts", status_code=201)
     async def create_import_draft(
         source_pdf: Annotated[UploadFile, File()],
@@ -204,7 +239,14 @@ def create_app(
         )
         try:
             with upload_path.open("xb") as output:
+                total_bytes = 0
                 while chunk := await source_pdf.read(1024 * 1024):
+                    total_bytes += len(chunk)
+                    if total_bytes > 250 * 1024 * 1024:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Source PDF exceeds the 250 MB limit.",
+                        )
                     output.write(chunk)
             csv_bytes = await answer_csv.read(10 * 1024 * 1024 + 1)
             draft = authoring.create_import_draft(
@@ -234,6 +276,22 @@ def create_app(
             raise HTTPException(status_code=404, detail="Import Draft not found.")
         return draft.as_payload()
 
+    @app.get("/api/import-drafts")
+    async def list_import_drafts() -> list[dict[str, object]]:
+        return authoring.list_import_drafts()
+
+    @app.put("/api/import-drafts/{draft_id}/answer-csv")
+    async def replace_draft_answer_csv(
+        draft_id: str, answer_csv: Annotated[UploadFile, File()]
+    ) -> dict[str, object]:
+        try:
+            data = await answer_csv.read(10 * 1024 * 1024 + 1)
+            return authoring.replace_answer_csv(draft_id, data).as_payload()
+        except AuthoringError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+        finally:
+            await answer_csv.close()
+
     @app.get("/api/import-drafts/{draft_id}/source.pdf")
     async def get_import_draft_source(draft_id: str) -> FileResponse:
         source = authoring.source_pdf(draft_id)
@@ -261,6 +319,22 @@ def create_app(
                 status_code=status_code, detail=error.message
             ) from error
         return draft.as_payload()
+
+    @app.put("/api/import-drafts/{draft_id}/questions/{question_index}/presentation")
+    async def set_question_presentation(
+        draft_id: str, question_index: int, payload: QuestionPresentation
+    ) -> dict[str, object]:
+        try:
+            return authoring.set_question_presentation(
+                draft_id, question_index, payload
+            ).as_payload()
+        except AuthoringError as error:
+            status_code = 404 if error.code.endswith("not_found") else 409
+            if error.code == "invalid_presentation":
+                status_code = 422
+            raise HTTPException(
+                status_code=status_code, detail=error.message
+            ) from error
 
     @app.post("/api/import-drafts/{draft_id}/publish", status_code=201)
     async def publish_import_draft(draft_id: str) -> dict[str, object]:
@@ -325,6 +399,13 @@ def create_app(
                 status_code=status_code, detail=error.message
             ) from error
 
+    @app.post("/api/test-packages/{package_id}/revision", status_code=201)
+    async def start_package_revision(package_id: str) -> dict[str, object]:
+        try:
+            return authoring.start_package_revision(package_id).as_payload()
+        except AuthoringError as error:
+            raise HTTPException(status_code=404, detail=error.message) from error
+
     @app.post("/api/attempt-setups", status_code=201)
     async def create_attempt_setup(payload: AttemptSetupInput) -> dict[str, object]:
         try:
@@ -347,6 +428,13 @@ def create_app(
     async def use_scientific_calculator(setup_id: str) -> dict[str, object]:
         try:
             return attempts.use_scientific(setup_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempt-setups/{setup_id}/retry", status_code=201)
+    async def retry_attempt_setup(setup_id: str) -> dict[str, object]:
+        try:
+            return attempts.retry_setup(setup_id)
         except AttemptError as error:
             raise HTTPException(status_code=409, detail=error.message) from error
 
@@ -499,14 +587,18 @@ def create_app(
 
     @app.get("/api/math/reference-sheet.png")
     async def get_reference_sheet() -> FileResponse:
-        reference = (storage_root / "assets" / "reference-sheet.png").resolve()
+        from whitebook.math_config import reference_sheet_setting
+
+        reference = (storage_root / reference_sheet_setting(storage_root)).resolve()
         assets_root = (storage_root / "assets").resolve()
-        if (
-            not reference.is_relative_to(assets_root)
-            or not reference.is_file()
-            or reference.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n"
-        ):
+        if not reference.is_relative_to(assets_root) or not reference.is_file():
             raise HTTPException(status_code=404, detail="Reference Sheet not found.")
+        with reference.open("rb") as handle:
+            signature = handle.read(8)
+        if signature != b"\x89PNG\r\n\x1a\n":
+            raise HTTPException(
+                status_code=422, detail="Reference Sheet image is invalid."
+            )
         return FileResponse(reference, media_type="image/png")
 
     @app.post("/api/backups/export", status_code=201)
@@ -539,7 +631,14 @@ def create_app(
         temporary = storage_root / "runtime" / f"restore-upload-{uuid.uuid4().hex}.zip"
         try:
             with temporary.open("xb") as output:
+                total_bytes = 0
                 while chunk := await backup.read(1024 * 1024):
+                    total_bytes += len(chunk)
+                    if total_bytes > 1024**3:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Backup ZIP exceeds the 1 GB upload limit.",
+                        )
                     output.write(chunk)
             return backups.restore(temporary)
         except BackupError as error:

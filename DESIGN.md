@@ -1,30 +1,33 @@
 ---
 name: Whitebook
-description: A calm, private exam workspace built for focused laptop use.
+description: An indigo exam desk — polished digital exam software for one learner on one laptop.
 colors:
-  ink-navy: "#14233b"
-  slate: "#526176"
-  muted: "#718096"
-  cool-rule: "#d6dfea"
-  pale-ice: "#edf3fa"
-  canvas: "#f8fafc"
+  ink: "#1b2337"
+  slate: "#4c5a70"
+  muted: "#6b7890"
+  rule: "#e3e6f0"
+  rule-strong: "#c9cfdf"
+  canvas: "#f5f6fb"
   white: "#ffffff"
-  cobalt: "#2166d1"
-  cobalt-deep: "#174fa6"
+  indigo: "#3f51c5"
+  indigo-deep: "#3343ab"
+  indigo-bright: "#637aec"
+  indigo-tint: "#eef1fc"
+  halo: "rgb(99 122 236 / 32%)"
   success: "#168a52"
   warning: "#9a5b00"
-  danger: "#a33b32"
+  danger: "#b03a30"
 typography:
   headline:
     fontFamily: "Segoe UI, Aptos, Arial, sans-serif"
-    fontSize: "32px"
-    fontWeight: 720
+    fontSize: "34px"
+    fontWeight: 750
     letterSpacing: "-0.025em"
   title:
     fontFamily: "Segoe UI, Aptos, Arial, sans-serif"
-    fontSize: "20px"
-    fontWeight: 700
-    letterSpacing: "-0.01em"
+    fontSize: "22px"
+    fontWeight: 720
+    letterSpacing: "-0.015em"
   body:
     fontFamily: "Segoe UI, Aptos, Arial, sans-serif"
     fontSize: "15px"
@@ -35,150 +38,146 @@ typography:
     fontSize: "14px"
     fontWeight: 700
 rounded:
-  active-marker: "4px"
-  control: "5px"
-  region: "6px"
+  control: "8px"
+  tile: "10px"
+  card: "14px"
+  pill: "999px"
 spacing:
-  compact: "8px"
-  control-gap: "14px"
-  group: "24px"
-  region: "28px"
-  workspace: "42px"
+  control-gap: "10px"
+  group: "26px"
+  region: "38px"
+  page-x: "34px"
 components:
   button-primary:
-    backgroundColor: "{colors.cobalt}"
+    backgroundColor: "{colors.indigo}"
     textColor: "{colors.white}"
     rounded: "{rounded.control}"
-    padding: "0 22px"
-    height: "48px"
-  button-primary-hover:
-    backgroundColor: "{colors.cobalt-deep}"
+    height: "46px"
+  nav-pill:
+    backgroundColor: "{colors.indigo}"
     textColor: "{colors.white}"
-    rounded: "{rounded.control}"
-  navigation-active:
-    backgroundColor: "#dce9f9"
-    textColor: "{colors.cobalt-deep}"
-    rounded: "{rounded.control}"
-    padding: "0 18px"
-    height: "54px"
+    rounded: "{rounded.pill}"
+    height: "40px"
+  card:
+    backgroundColor: "{colors.white}"
+    border: "1px solid #dfe3f0"
+    rounded: "{rounded.card}"
+    shadow: "0 1px 2px rgb(23 28 63 / 5%), 0 10px 28px rgb(23 28 63 / 7%)"
+  selected-tile:
+    backgroundColor: "{colors.indigo}"
+    textColor: "{colors.white}"
+    halo: "0 0 0 3px {colors.halo}"
+  toggle-track-on:
+    backgroundColor: "{colors.indigo}"
 ---
 
 # Design System: Whitebook
 
 ## Overview
 
-**Creative North Star: "The Local Exam Desk"**
+**Creative North Star: "The Indigo Exam Desk"**
 
-Whitebook feels like a prepared desk at the start of a serious study session: quiet, orderly, and immediately operational. A pale navigation rail establishes place, while a broad white work surface gives source material and testing controls room to breathe.
+Whitebook reads as polished digital exam software: indigo actions, white rounded
+cards with soft shadows on a pale lavender canvas, chip badges, pill buttons,
+and segmented tiles that fill indigo under a light-blue halo when selected. The
+exam player is a full-bleed split-pane surface framed by a multicolor dashed
+accent strip, with a black position pill anchoring the footer.
 
-The system favors clear state over decoration. Cobalt identifies the next deliberate action, green always arrives with readable readiness text, and authored line icons keep the application independent without making the learner decode a novel visual language.
-
-**Key Characteristics:**
-
-- Fixed pale-ice navigation rail beside a broad white work surface.
-- Restrained cobalt actions and ink-navy hierarchy.
-- Flat regions separated by cool rules instead of layered cards.
-- Compact, consistent line icons paired with visible text.
+The 2026-09-05 direction update supersedes the earlier pale-ice rail world: the
+user pinned Bluebooky-style reference screenshots, and the shell, library,
+drill builder, and player follow them. Standing limits: no copied logos, icons,
+wording, or trade dress; the Whitebook mark stays authored; no impersonation of
+College Board or any commercial product.
 
 ## Colors
 
-The palette is restrained: cool neutrals own most of the surface, cobalt is reserved for interaction, and semantic colors report real state.
+- **Action Indigo** (`indigo`): primary buttons, nav pills, selected tiles,
+  links, and the letter-circle fill on selected answers. Hover deepens to
+  `indigo-deep`.
+- **Selection Halo** (`halo`): a 3px light-blue ring on every selected tile or
+  answer — the signature selected state.
+- **Neutrals**: ink `#1b2337` headings, slate/muted secondary text, cool
+  `rule` borders, canvas `#f5f6fb` behind white cards.
+- **Semantics**: green ready/correct, amber warnings, red failure — always
+  paired with text.
 
-### Primary
-
-- **Action Cobalt** (`cobalt`): primary actions, active icon strokes, and selected navigation emphasis.
-- **Deep Action Cobalt** (`cobalt-deep`): hover and strong active text.
-
-### Neutral
-
-- **Desk Ink** (`ink-navy`): headings, important labels, and the Whitebook mark.
-- **Working Slate** (`slate`): explanatory copy and secondary state text.
-- **Quiet Slate** (`muted`): inactive status and low-emphasis details.
-- **Cool Rule** (`cool-rule`): dividers and container boundaries.
-- **Pale Ice** (`pale-ice`): the navigation rail and scrollbar track.
-- **Work Canvas** (`canvas`): browser background surrounding the application surface.
-- **White Surface** (`white`): the primary operating field and content regions.
-
-### Secondary
-
-- **Ready Green** (`success`): confirmed readiness only, always paired with text.
-- **Attention Amber** (`warning`): actionable, nonfatal status copy.
-- **Failure Red** (`danger`): unavailable and failed states.
-
-**The Quiet Accent Rule.** Cobalt identifies interactive priority; it does not become a decorative page background.
+**The Indigo Rule.** Indigo marks interaction and selection; it is not a
+decorative page background. The only large indigo surfaces are pill buttons.
 
 ## Typography
 
-**Display Font:** none; Whitebook is an operating surface rather than a promotional one.
-
-**Body Font:** Segoe UI with Aptos and Arial fallbacks.
-
-**Character:** A familiar Windows workhorse stack keeps instructions and state effortless to scan. Hierarchy comes from measured size and weight changes, not an ornamental display face.
-
-### Hierarchy
-
-- **Headline** (720, 32px, -0.025em): primary workspace section headings.
-- **Title** (700, 20px, -0.01em): persistent workspace and panel titles.
-- **Body** (400, 15px, 1.55): explanations, empty states, and task guidance, held near a 70-character measure.
-- **Label** (700, 14px): table headers, compact controls, and metadata.
-- **Brand wordmark** (700, 21px, 0.12em, uppercase): the sole wide-tracked type treatment.
-
-**The Operational Type Rule.** Every text style must improve scanning, status recognition, or task order; decorative type changes do not belong in the application shell.
+Segoe UI workhorse stack. Hierarchy from size and weight: 34px/750 page leads,
+22px dialog titles, 19px card titles, 15px body, 14px labels, 13px metadata.
+Timers and counts use tabular numerals. No display face.
 
 ## Layout
 
-Laptop layouts use a fixed 220px rail and a fluid workspace with a 1024px minimum application width. The workspace body is capped at 1320px and uses a 42px outer rhythm; below 1180px, outer padding tightens while the rail and task hierarchy remain stable.
-
-Major task regions stack in reading order: page identity, introduction and action, durable content region, then preparation or supporting guidance. Groups use 8–24px internal spacing and 28–44px separation between major regions.
-
-**The One Workspace Rule.** A screen gets one broad operating field; supporting regions join it rather than fragmenting the task into a dashboard of equal cards.
+- **Shell**: white sticky navbar — brand left; Library / Import / History as
+  solid indigo pills and the readiness chip right. No left rail.
+- **Library**: page lead, then a responsive card grid (min 330px columns).
+- **Drill builder**: a centered modal dialog (max 1280px) over a dimmed
+  backdrop: left column of target tiles with paging; right sticky settings
+  card with timing, toggles, plan summary, and the Start Drill CTA.
+- **Player**: full-bleed, outside the shell. Header (section title +
+  Directions disclosure / centered tabular timer with Hide pill /
+  icon-over-label tools), dashed accent strip, split panes with draggable
+  divider, footer (wordmark / black position pill / indigo pill actions),
+  closing accent strip.
+- Laptop-first, 1024px minimum; page content capped at 1320px.
 
 ## Elevation & Depth
 
-Whitebook is flat by design. Tonal changes and one-pixel cool rules establish region boundaries; the shell currently uses no shadows. Interactive depth comes from direct color changes and a one-pixel active press, never ambient card elevation.
+Cards carry a soft two-layer shadow plus a 1px `#dfe3f0` border; modals and
+popovers carry a deeper ambient shadow. Selected states add the halo ring.
+No gradients elsewhere; the dashed multicolor accent strip is the one
+decorative element, owned by the exam player.
 
-**The Rule-Before-Shadow Rule.** Use a boundary line or surface change before introducing elevation. A shadow requires a future interaction that genuinely moves above the workspace.
+## Shapes & Icons
 
-## Shapes
-
-Controls use compact 5px corners, operating regions use 6px corners, and the active navigation marker uses a 4px leading edge. Circles are reserved for status dots. Authored icons use rounded line caps and joins with a consistent 1.7–1.8 stroke weight.
+Controls 8px, tiles and answer rows 10px, cards 14px, pills fully rounded.
+Icons are authored SVG line work (1.7–2 stroke, rounded caps): nav, upload,
+bookmark, calculator, x² reference, exit, chevron, close.
 
 ## Components
 
-### Buttons
+- **Pills**: primary (indigo fill), outline (white/indigo), soft (pale indigo,
+  for secondary footer actions), nav (indigo fill in the navbar).
+- **Segmented tiles**: hidden radio/checkbox, centered or left-aligned label;
+  selected = indigo fill + white text + halo; disabled = grey wash.
+- **Toggle switch**: 46×26 track, knob slides right; on-track indigo.
+- **Chips**: small pill badges; `chip--total` is indigo-filled, others tinted.
+- **Answer rows**: full-width bordered cards, letter badge at left, actual
+  answer content in the card; selected = indigo border/wash + filled badge;
+  elimination dims, strikes the letter, and offers Restore. Converted
+  packages carry separate stem and per-choice content (text plus optional
+  Source PDF crops); unconverted packages still render region images.
+- **Question banner**: dark number square, bookmark Mark-for-Review control,
+  category at right.
+- **Navigator**: centered modal — title, Current/Unanswered/Answered/For
+  Review legend, numbered grid (dashed unanswered, tinted answered, indigo
+  current, red flag marked).
+- **Position pill**: black footer pill "Question N of M" with chevron; opens
+  the navigator.
 
-- **Shape:** compact rectangular control with gently eased corners (`control`).
-- **Primary:** Action Cobalt with white text, 48px tall, and 22px horizontal padding.
-- **Hover / Focus:** Deep Action Cobalt on hover; a 3px amber focus outline with 3px separation; a one-pixel press movement.
+## Motion
 
-### Cards / Containers
-
-- **Corner Style:** restrained region corner (`region`).
-- **Background:** White Surface or the light table-header tint already present in the shell.
-- **Shadow Strategy:** none; see Elevation & Depth.
-- **Border:** one-pixel Cool Rule.
-- **Internal Padding:** 24–26px for supporting regions.
-
-### Navigation
-
-Navigation is a text-and-icon row at least 54px tall. Default items are transparent, hover uses a stronger pale-ice field, and the active item adds a cobalt leading marker, blue-tinted field, and deep-cobalt text. The fixed rail also owns the local-readiness block at its bottom edge.
-
-### Readiness status
-
-Readiness always combines a colored dot or shield state with plain text. “Ready,” “Checking,” and “Unavailable” remain readable without color, and status changes use `aria-live` or `role="status"` where appropriate.
+One 420ms workspace entrance (opacity/translate), 240ms dialog rise, 140ms
+control color transitions, pulsing stage dot while loading. All removed under
+`prefers-reduced-motion`.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** give source material and exam controls one dominant work surface.
-- **Do** pair every semantic color with explicit status or action text.
-- **Do** use authored SVG icons with the established rounded stroke character.
-- **Do** preserve ordinary browser focus and selection behavior while styling them from the palette.
+- **Do** keep every selected state as indigo fill + halo — never outline-only.
+- **Do** pair semantic colors with readable text.
+- **Do** keep the player chrome quiet so the PDF region is the visual focus.
 
 ### Don't:
 
-- **Don't** copy logos, icons, wording, or exact trade dress from Bluebook, Bluebooky, or College Board.
-- **Don't** turn operational content into a grid of same-weight cards.
-- **Don't** introduce gradients, glass effects, decorative shadows, or gamified reward color into the application shell.
-- **Don't** use emoji or Unicode symbols as interface icons.
+- **Don't** copy Bluebook/Bluebooky/College Board logos, wording, or trade
+  dress; branding stays "Whitebook" with the authored mark.
+- **Don't** add countdown banners, dated administrations, difficulty labels,
+  or per-question Check buttons — the product has no such data or behavior.
+- **Don't** reintroduce the left rail or flat 5px-radius world.
+- **Don't** use emoji or Unicode glyphs as interface icons.

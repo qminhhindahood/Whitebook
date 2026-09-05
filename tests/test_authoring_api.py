@@ -70,6 +70,34 @@ def region(x: float = 0.1) -> dict[str, object]:
     }
 
 
+def test_unpublished_drafts_can_be_discovered_and_csv_corrected(tmp_path: Path):
+    client = make_client(tmp_path)
+    draft = create_draft(client, answer="not-a-choice")
+    listing = client.get("/api/import-drafts")
+    assert listing.status_code == 200
+    assert listing.json()[0]["id"] == draft["id"]
+    corrected = client.put(
+        f"/api/import-drafts/{draft['id']}/answer-csv",
+        files={"answer_csv": ("corrected.csv", make_csv(), "text/csv")},
+    )
+    assert corrected.status_code == 200
+    assert corrected.json()["id"] == draft["id"]
+    assert corrected.json()["status"] == "mapping"
+    assert corrected.json()["questionCount"] == 2
+    assert corrected.json()["diagnostics"] == []
+
+
+def test_region_cannot_reference_a_page_outside_the_source(tmp_path: Path):
+    client = make_client(tmp_path)
+    draft = create_draft(client)
+    invalid = {**region(), "pageNumber": 2}
+    response = client.put(
+        f"/api/import-drafts/{draft['id']}/questions/0/regions",
+        json={"regions": [invalid]},
+    )
+    assert response.status_code == 422
+
+
 def test_region_mapping_is_normalized_ordered_and_resumable(tmp_path: Path) -> None:
     client = make_client(tmp_path)
     draft = create_draft(client)

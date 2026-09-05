@@ -3,6 +3,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+from whitebook.sat_policy import standard_module_count, standard_module_seconds
+
 
 @dataclass(frozen=True)
 class PracticeQuestion:
@@ -69,13 +71,7 @@ def build_practice_plan(
     if request.timing == "sat_paced":
         standard_count = None
         if len(request.sections) == 1 and len(request.modules) == 1:
-            standard_count = (
-                27
-                if request.sections[0] == "Reading and Writing"
-                else 22
-                if request.sections[0] == "Math"
-                else None
-            )
+            standard_count = standard_module_count(request.sections[0])
         if (
             standard_count is None
             or request.count != standard_count
@@ -83,9 +79,7 @@ def build_practice_plan(
         ):
             errors.append("sat_paced_requires_complete_module")
         else:
-            duration = (
-                32 * 60 if request.sections[0] == "Reading and Writing" else 35 * 60
-            )
+            duration = standard_module_seconds(request.sections[0])
     elif request.timing == "custom_countdown":
         duration = request.countdown_seconds
 
@@ -127,17 +121,30 @@ def build_practice_plan(
                 break
 
     selected: list[PracticeQuestion] = []
+    section_allocations = {
+        (section, module): 0 for section in request.sections for module in module_order
+    }
+    section_buckets = {
+        (section, module): [q for q in buckets[module] if q.section == section]
+        for section in request.sections
+        for module in module_order
+    }
+    for module in module_order:
+        remaining = allocations[module]
+        while remaining:
+            for section in request.sections:
+                key = (section, module)
+                if remaining and section_allocations[key] < len(section_buckets[key]):
+                    section_allocations[key] += 1
+                    remaining -= 1
+    rng = random.Random(request.seed)
     for section in request.sections:
-        section_questions: list[PracticeQuestion] = []
         for module in module_order:
-            section_questions.extend(
-                question
-                for question in buckets[module][: allocations[module]]
-                if question.section == section
-            )
-        if request.shuffle:
-            random.Random(request.seed).shuffle(section_questions)
-        selected.extend(section_questions)
+            key = (section, module)
+            candidates = section_buckets[key][:]
+            if request.shuffle:
+                rng.shuffle(candidates)
+            selected.extend(candidates[: section_allocations[key]])
 
     flat_allocation = tuple(
         value for module in module_order for value in (module, allocations[module])

@@ -169,6 +169,9 @@ async def serve(
 ) -> None:
     lock_path = data_dir / "runtime" / "instance.json"
     project_root = Path(__file__).resolve().parents[2]
+    from whitebook.attempts import AttemptEngine
+
+    AttemptEngine(data_dir).recover_interrupted()
     app = create_app(
         capability_token=record.token,
         instance_id=record.instance_id,
@@ -221,6 +224,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
     args = build_parser().parse_args()
     data_dir = args.data_dir.resolve()
     initialize_storage(data_dir)

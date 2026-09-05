@@ -28,6 +28,7 @@ def client_for(data_root: Path) -> TestClient:
 
 def math_package(data_root: Path) -> dict:
     initialize_storage(data_root)
+    (data_root / "assets/reference-sheet.png").write_bytes(b"\x89PNG\r\n\x1a\nfixture")
     source = data_root / "runtime" / "math.pdf"
     output = io.BytesIO()
     writer = PdfWriter()

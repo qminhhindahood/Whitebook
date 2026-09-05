@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pypdf import PdfReader
+
 from whitebook.answer_csv import AnswerCsvResult, parse_answer_csv
 from whitebook.package_eligibility import QuestionDescriptor, classify_package
 from whitebook.pdf_preflight import PdfPreflightResult, preflight_pdf
+from whitebook.question_presentation import QuestionPresentation
 from whitebook.storage import connect
 
 
@@ -25,14 +29,18 @@ class ImportDraft:
     questions: tuple[dict[str, object], ...]
     source_pdf_url: str | None
     published_package_id: str | None
+    revision_package_id: str | None = None
 
     @property
     def mapping_progress(self) -> dict[str, int]:
         confirmed = sum(
             1
             for question in self.questions
-            if question["regions"]
-            and all(region["confirmed"] for region in question["regions"])
+            if question.get("presentation")
+            or (
+                question["regions"]
+                and all(region["confirmed"] for region in question["regions"])
+            )
         )
         return {"confirmed": confirmed, "total": self.question_count}
 
@@ -41,8 +49,11 @@ class ImportDraft:
             (
                 question["index"]
                 for question in self.questions
-                if not question["regions"]
-                or not all(region["confirmed"] for region in question["regions"])
+                if not question.get("presentation")
+                and (
+                    not question["regions"]
+                    or not all(region["confirmed"] for region in question["regions"])
+                )
             ),
             None,
         )
@@ -59,6 +70,7 @@ class ImportDraft:
             "nextUnmappedQuestion": next_unmapped,
             "sourcePdfUrl": self.source_pdf_url,
             "publishedPackageId": self.published_package_id,
+            "revisionOfPackageId": self.revision_package_id,
         }
 
 
@@ -178,7 +190,70 @@ class PackageAuthoring:
                 else None
             ),
             published_package_id=row["published_package_id"],
+            revision_package_id=row["revision_package_id"],
         )
+
+    def list_import_drafts(self) -> list[dict[str, object]]:
+        with connect(self._data_root) as connection:
+            rows = connection.execute(
+                "SELECT id FROM import_drafts WHERE editable = 1 ORDER BY updated_at DESC"
+            ).fetchall()
+        return [
+            draft.as_payload()
+            for row in rows
+            if (draft := self.get_import_draft(row["id"]))
+        ]
+
+    def replace_answer_csv(self, draft_id: str, data: bytes) -> ImportDraft:
+        draft = self.get_import_draft(draft_id)
+        if draft is None:
+            raise AuthoringError("draft_not_found", "Import Draft not found.")
+        if not draft.editable:
+            raise AuthoringError(
+                "draft_locked", "Published Import Drafts are read-only."
+            )
+        parsed = parse_answer_csv(data)
+        diagnostics = [
+            item for item in draft.diagnostics if item.get("field") == "source_pdf"
+        ]
+        diagnostics.extend(asdict(item) for item in parsed.diagnostics)
+        with connect(self._data_root) as connection:
+            connection.execute(
+                "DELETE FROM question_regions WHERE draft_id = ?", (draft_id,)
+            )
+            connection.execute(
+                """UPDATE import_drafts SET csv_sha256=?, manifest_json=?,
+                               diagnostics_json=?, status=?, updated_at=? WHERE id=?""",
+                (
+                    hashlib.sha256(data).hexdigest(),
+                    json.dumps([asdict(row) for row in parsed.rows]),
+                    json.dumps(diagnostics),
+                    "invalid" if diagnostics else "mapping",
+                    datetime.now(UTC).isoformat(),
+                    draft_id,
+                ),
+            )
+            connection.commit()
+        updated = self.get_import_draft(draft_id)
+        assert updated is not None
+        return updated
+
+    def verify_package_source(self, package_id: str) -> bool:
+        source = self.package_source_pdf(package_id)
+        if source is None:
+            return False
+        with connect(self._data_root) as connection:
+            row = connection.execute(
+                "SELECT pdf_sha256 FROM test_packages WHERE id=?", (package_id,)
+            ).fetchone()
+        try:
+            with source.open("rb") as handle:
+                return (
+                    hashlib.file_digest(handle, "sha256").hexdigest()
+                    == row["pdf_sha256"]
+                )
+        except OSError:
+            return False
 
     def source_pdf(self, draft_id: str) -> Path | None:
         with connect(self._data_root) as connection:
@@ -190,6 +265,71 @@ class PackageAuthoring:
         path = (self._data_root / "documents" / row["stored_pdf_name"]).resolve()
         documents = (self._data_root / "documents").resolve()
         return path if path.is_relative_to(documents) and path.is_file() else None
+
+    def _page_count(self, draft_id: str, error: str) -> int:
+        source = self.source_pdf(draft_id)
+        if source is None:
+            raise AuthoringError(error, "Source PDF is unavailable.")
+        with source.open("rb") as handle:
+            return len(PdfReader(handle).pages)
+
+    def set_question_presentation(
+        self, draft_id: str, question_index: int, presentation: QuestionPresentation
+    ) -> ImportDraft:
+        draft = self.get_import_draft(draft_id)
+        if draft is None:
+            raise AuthoringError("draft_not_found", "Import Draft not found.")
+        if not draft.editable:
+            raise AuthoringError(
+                "draft_locked", "Published Import Drafts are read-only."
+            )
+        if not 0 <= question_index < draft.question_count:
+            raise AuthoringError("question_not_found", "Question not found.")
+        question = draft.questions[question_index]
+        section = question["section"]
+        response_type = question["responseType"]
+        if response_type == "multiple_choice":
+            if not presentation.choices:
+                raise AuthoringError(
+                    "invalid_presentation",
+                    "Multiple-choice questions need answer content for A, B, C, and D.",
+                )
+            if section == "Math" and presentation.stimulus:
+                raise AuthoringError(
+                    "invalid_presentation",
+                    "Place Math figures in the question stem or answer content.",
+                )
+        else:
+            if presentation.choices:
+                raise AuthoringError(
+                    "invalid_presentation",
+                    "Student-produced responses do not take answer choices.",
+                )
+            if presentation.stimulus:
+                raise AuthoringError(
+                    "invalid_presentation",
+                    "Place the problem content in the question stem.",
+                )
+        page_count = self._page_count(draft_id, "invalid_presentation")
+        if any(region["pageNumber"] > page_count for region in presentation.regions()):
+            raise AuthoringError(
+                "invalid_presentation",
+                "Question Region page is outside the Source PDF.",
+            )
+        with connect(self._data_root) as connection:
+            row = connection.execute(
+                "SELECT manifest_json FROM import_drafts WHERE id = ?", (draft_id,)
+            ).fetchone()
+            manifest = json.loads(row["manifest_json"])
+            manifest[question_index]["presentation"] = presentation.model_dump(
+                exclude_none=True
+            )
+            connection.execute(
+                "UPDATE import_drafts SET manifest_json = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(manifest), datetime.now(UTC).isoformat(), draft_id),
+            )
+            connection.commit()
+        return self.get_import_draft(draft_id)
 
     def set_question_regions(
         self, draft_id: str, question_index: int, regions: list[dict[str, object]]
@@ -207,6 +347,7 @@ class PackageAuthoring:
             raise AuthoringError(
                 "missing_regions", "At least one Question Region is required."
             )
+        page_count = self._page_count(draft_id, "invalid_region")
         for item in regions:
             page = int(item["page_number"])
             x = float(item["x"])
@@ -215,6 +356,8 @@ class PackageAuthoring:
             height = float(item["height"])
             if (
                 page < 1
+                or page > page_count
+                or not all(math.isfinite(value) for value in (x, y, width, height))
                 or x < 0
                 or y < 0
                 or width <= 0
@@ -259,6 +402,65 @@ class PackageAuthoring:
         updated = self.get_import_draft(draft_id)
         assert updated is not None
         return updated
+
+    def start_package_revision(self, package_id: str) -> ImportDraft:
+        """Open an editable revision draft that carries a package's own
+        source files and answer manifest so converted question content can be
+        published as a new revision of the same family."""
+
+        with connect(self._data_root) as connection:
+            package = connection.execute(
+                "SELECT * FROM test_packages WHERE id = ?", (package_id,)
+            ).fetchone()
+        if package is None:
+            raise AuthoringError("package_not_found", "Test Package not found.")
+        stored_pdf = self._data_root / "documents" / package["stored_pdf_name"]
+        if not stored_pdf.is_file():
+            raise AuthoringError(
+                "unavailable_source", "The Test Package Source PDF is missing."
+            )
+        manifest = []
+        for question in json.loads(package["manifest_json"]):
+            manifest.append(
+                {
+                    "section": question["section"],
+                    "module": question["module"],
+                    "question_number": question["question_number"],
+                    "response_type": question["response_type"],
+                    "accepted_answers": question["accepted_answers"],
+                    "category": question["category"],
+                    "source_row": question["source_row"],
+                }
+            )
+        draft_id = str(uuid.uuid4())
+        now = datetime.now(UTC).isoformat()
+        with connect(self._data_root) as connection:
+            connection.execute(
+                """
+                INSERT INTO import_drafts (
+                    id, title, original_filename, stored_pdf_name, pdf_sha256,
+                    csv_sha256, manifest_json, diagnostics_json, status, editable,
+                    published_package_id, revision_package_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'mapping', 1, NULL, ?, ?, ?)
+                """,
+                (
+                    draft_id,
+                    package["title"],
+                    package["original_filename"],
+                    package["stored_pdf_name"],
+                    package["pdf_sha256"],
+                    package["csv_sha256"],
+                    json.dumps(manifest, separators=(",", ":")),
+                    "[]",
+                    package_id,
+                    now,
+                    now,
+                ),
+            )
+            connection.commit()
+        draft = self.get_import_draft(draft_id)
+        assert draft is not None
+        return draft
 
     def publish(self, draft_id: str) -> dict[str, object]:
         draft = self.get_import_draft(draft_id)
@@ -307,15 +509,46 @@ class PackageAuthoring:
                     "invalid_package", "This Import Draft cannot form a Test Package."
                 )
 
-            latest = connection.execute(
-                """
-                SELECT family_id, revision FROM test_packages
-                WHERE title = ? ORDER BY revision DESC LIMIT 1
-                """,
-                (row["title"],),
-            ).fetchone()
-            family_id = latest["family_id"] if latest else str(uuid.uuid4())
-            revision = int(latest["revision"]) + 1 if latest else 1
+            if row["revision_package_id"]:
+                target = connection.execute(
+                    """
+                    SELECT family_id, pdf_sha256, csv_sha256 FROM test_packages
+                    WHERE id = ?
+                    """,
+                    (row["revision_package_id"],),
+                ).fetchone()
+                if target is None:
+                    raise AuthoringError(
+                        "package_not_found",
+                        "The package being revised no longer exists.",
+                    )
+                if (
+                    target["pdf_sha256"] != row["pdf_sha256"]
+                    or target["csv_sha256"] != row["csv_sha256"]
+                ):
+                    raise AuthoringError(
+                        "revision_mismatch",
+                        "A revision must keep the package's Source PDF and Answer CSV.",
+                    )
+                latest = connection.execute(
+                    """
+                    SELECT revision FROM test_packages
+                    WHERE family_id = ? ORDER BY revision DESC LIMIT 1
+                    """,
+                    (target["family_id"],),
+                ).fetchone()
+                family_id = target["family_id"]
+                revision = int(latest["revision"]) + 1
+            else:
+                latest = connection.execute(
+                    """
+                    SELECT family_id, revision FROM test_packages
+                    WHERE title = ? ORDER BY revision DESC LIMIT 1
+                    """,
+                    (row["title"],),
+                ).fetchone()
+                family_id = latest["family_id"] if latest else str(uuid.uuid4())
+                revision = int(latest["revision"]) + 1 if latest else 1
             package_id = str(uuid.uuid4())
             questions = []
             for index, item in enumerate(manifest):
@@ -430,6 +663,10 @@ class PackageAuthoring:
                 "DELETE FROM import_drafts WHERE published_package_id = ?",
                 (package_id,),
             )
+            connection.execute(
+                "DELETE FROM import_drafts WHERE revision_package_id = ?",
+                (package_id,),
+            )
             connection.execute("DELETE FROM test_packages WHERE id = ?", (package_id,))
             connection.commit()
 
@@ -482,8 +719,14 @@ class PackageAuthoring:
                 "responseType": item["response_type"],
                 "acceptedAnswers": item["accepted_answers"],
                 "category": item["category"],
-                "regions": grouped.get(index, []),
+                "regions": (
+                    QuestionPresentation.model_validate(item["presentation"]).regions()
+                    if item.get("presentation")
+                    else grouped.get(index, [])
+                ),
             }
+            if item.get("presentation"):
+                question["presentation"] = item["presentation"]
             questions.append(question)
         return tuple(questions)
 

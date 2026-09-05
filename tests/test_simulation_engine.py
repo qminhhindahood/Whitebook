@@ -24,6 +24,7 @@ class FakeClock:
 
 def publish_full_package(data_root: Path) -> dict:
     initialize_storage(data_root)
+    (data_root / "assets/reference-sheet.png").write_bytes(b"\x89PNG\r\n\x1a\nfixture")
     source = data_root / "runtime" / "full.pdf"
     output = io.BytesIO()
     writer = PdfWriter()

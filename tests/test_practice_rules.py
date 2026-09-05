@@ -139,3 +139,30 @@ def test_sat_paced_requires_exactly_one_complete_module() -> None:
     assert complete.plan is not None and complete.plan.duration_seconds == 32 * 60
     assert partial.errors == ("sat_paced_requires_complete_module",)
     assert bad_countdown.errors == ("invalid_countdown",)
+
+
+def test_mixed_sections_are_evenly_sampled_without_repeating_modules():
+    questions = QUESTIONS + tuple(
+        PracticeQuestion(f"math-{module}-{n}", "Math", module, n)
+        for module in (1, 2)
+        for n in range(1, 23)
+    )
+    result = build_practice_plan(
+        questions,
+        PracticeRequest(
+            sections=("Reading and Writing", "Math"),
+            modules=(1, 2),
+            count=8,
+            timing="elapsed",
+            shuffle=True,
+            seed=8,
+        ),
+    )
+    assert result.plan is not None
+    identities = [(q.section, q.module) for q in result.plan.questions]
+    assert identities == [
+        (section, module)
+        for section in ("Reading and Writing", "Math")
+        for module in (1, 2)
+        for _ in range(2)
+    ]

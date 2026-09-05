@@ -16,7 +16,7 @@ from whitebook.safety import (
     resolve_below,
     validate_zip_member,
 )
-from whitebook.storage import connect
+from whitebook.storage import connect, prepare_database
 
 
 class BackupError(RuntimeError):
@@ -42,6 +42,11 @@ class BackupManager:
             closing(sqlite3.connect(snapshot)) as target,
         ):
             source.backup(target)
+            # Loading setups are ephemeral and old versions could contain a Desmos URL.
+            target.execute("PRAGMA secure_delete = ON")
+            target.execute("DELETE FROM attempt_setups")
+            target.commit()
+            target.execute("VACUUM")
 
         payloads: list[tuple[str, Path]] = [("database.sqlite3", snapshot)]
         for folder in ("documents", "assets"):
@@ -92,6 +97,11 @@ class BackupManager:
             database = stage / "database.sqlite3"
             try:
                 with closing(sqlite3.connect(database)) as restored:
+                    if restored.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                        raise BackupError(
+                            "invalid_database",
+                            "Backup database failed integrity checks.",
+                        )
                     required = {
                         row[0]
                         for row in restored.execute(
@@ -109,6 +119,15 @@ class BackupManager:
                 raise BackupError(
                     "invalid_database", "Backup database is not compatible."
                 ) from error
+            try:
+                # Upgrade the staged database before it replaces the live
+                # one, so a restore never leaves an unmigrated database.
+                prepare_database(database)
+            except (sqlite3.Error, RuntimeError) as error:
+                raise BackupError(
+                    "incompatible_database",
+                    "This backup's database cannot be upgraded for use.",
+                ) from error
             self._apply_restore(stage)
             return {"restoredPackages": int(package_count)}
         finally:
@@ -119,17 +138,38 @@ class BackupManager:
         try:
             with zipfile.ZipFile(archive_path) as archive:
                 names = archive.namelist()
+                if (
+                    len(names) > 10000
+                    or sum(item.file_size for item in archive.infolist()) > 4 * 1024**3
+                ):
+                    raise BackupError(
+                        "backup_too_large", "Backup exceeds the safe restore limit."
+                    )
                 if len(names) != len(set(names)):
                     raise BackupError(
                         "duplicate_member", "Backup contains duplicate paths."
                     )
                 for name in names:
+                    if name not in {
+                        "manifest.json",
+                        "database.sqlite3",
+                    } and not name.startswith(("documents/", "assets/")):
+                        raise BackupError(
+                            "invalid_structure", "Backup contains unsupported payloads."
+                        )
                     try:
                         validate_zip_member(name)
                     except PathSafetyError as error:
                         raise BackupError(
                             "unsafe_member", "Backup contains an unsafe path."
                         ) from error
+                normalized_names = [
+                    validate_zip_member(name).casefold() for name in names
+                ]
+                if len(normalized_names) != len(set(normalized_names)):
+                    raise BackupError(
+                        "duplicate_member", "Backup contains aliased paths."
+                    )
                 if "manifest.json" not in names or "database.sqlite3" not in names:
                     raise BackupError(
                         "invalid_structure", "Backup structure is incomplete."
@@ -171,29 +211,39 @@ class BackupManager:
 
     def _apply_restore(self, stage: Path) -> None:
         token = uuid.uuid4().hex
-        current_db = self._data_root / "whitebook.sqlite3"
-        old_db = self._data_root / "runtime" / f"old-{token}.sqlite3"
-        documents = self._data_root / "documents"
-        old_documents = self._data_root / "runtime" / f"old-documents-{token}"
-        staged_documents = stage / "documents"
-        staged_documents.mkdir(exist_ok=True)
+        rollback = self._data_root / "runtime" / f"rollback-{token}"
+        rollback.mkdir()
+        names = (
+            ("database.sqlite3", "whitebook.sqlite3"),
+            ("documents", "documents"),
+            ("assets", "assets"),
+        )
+        for folder in ("documents", "assets"):
+            (stage / folder).mkdir(exist_ok=True)
+        moved_old: list[str] = []
+        installed: list[tuple[str, str]] = []
         try:
-            os.replace(current_db, old_db)
-            os.replace(documents, old_documents)
-            os.replace(stage / "database.sqlite3", current_db)
-            os.replace(staged_documents, documents)
+            for staged_name, name in names:
+                current = self._data_root / name
+                if current.exists():
+                    os.replace(current, rollback / name)
+                    moved_old.append(name)
+                os.replace(stage / staged_name, current)
+                installed.append((staged_name, name))
         except OSError as error:
-            if not current_db.exists() and old_db.exists():
-                os.replace(old_db, current_db)
-            if not documents.exists() and old_documents.exists():
-                os.replace(old_documents, documents)
+            for staged_name, name in reversed(installed):
+                os.replace(self._data_root / name, stage / staged_name)
+            for name in reversed(moved_old):
+                os.replace(rollback / name, self._data_root / name)
+            rollback.rmdir()
             raise BackupError(
                 "restore_interrupted", "Backup restore could not be applied."
             ) from error
         else:
-            old_db.unlink(missing_ok=True)
-            if old_documents.is_dir():
-                shutil.rmtree(old_documents)
+            if rollback.resolve().is_relative_to(
+                (self._data_root / "runtime").resolve()
+            ):
+                shutil.rmtree(rollback)
 
     @staticmethod
     def _hash_file(path: Path) -> str:

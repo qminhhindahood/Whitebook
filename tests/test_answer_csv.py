@@ -83,3 +83,13 @@ def test_blank_and_example_downloads_use_the_same_contract() -> None:
         "multiple_choice",
         "student_produced_response",
     }
+
+
+def test_malformed_quoted_csv_returns_diagnostics():
+    from whitebook.answer_csv import parse_answer_csv
+
+    result = parse_answer_csv(
+        b'section,module,question_number,type,correct_answer,category\n"Math,1,1,spr,2,Algebra'
+    )
+    assert not result.rows
+    assert result.diagnostics[0].code == "malformed_csv"
