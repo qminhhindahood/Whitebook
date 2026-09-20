@@ -4,6 +4,11 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 import type { Region } from "./types";
 import { suggestRegion } from "./region-suggestions";
+import {
+  MAX_RENDER_PIXELS,
+  MINIMUM_RENDER_SCALE,
+  regionCanvas,
+} from "./renderScale";
 
 export async function suggestPageRegion(
   document: PDFDocumentProxy,
@@ -87,12 +92,18 @@ export function renderRegion(
   if (existing) return existing;
   const rendering = (async () => {
     const page = await document.getPage(region.pageNumber);
-    const viewport = page.getViewport({ scale: 2 });
-    const canvas = window.document.createElement("canvas");
-    canvas.width = Math.max(1, Math.ceil(viewport.width * region.width));
-    canvas.height = Math.max(1, Math.ceil(viewport.height * region.height));
-    if (canvas.width * canvas.height > 16_000_000)
+    const pageViewport = page.getViewport({ scale: 1 });
+    const canvasPlan = regionCanvas(
+      pageViewport.width,
+      pageViewport.height,
+      region,
+    );
+    if (canvasPlan.width * canvasPlan.height > MAX_RENDER_PIXELS)
       throw new Error("Question Region is too large to render safely.");
+    const viewport = page.getViewport({ scale: canvasPlan.scale });
+    const canvas = window.document.createElement("canvas");
+    canvas.width = canvasPlan.width;
+    canvas.height = canvasPlan.height;
     try {
       await page.render({
         canvas,
