@@ -25,15 +25,20 @@ export function Overlay({
   title,
   onClose,
   children,
+  className = "",
+  style,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
 }) {
   return (
     <div className="overlay-backdrop">
       <section
-        className="tool-overlay"
+        className={`tool-overlay ${className}`}
+        style={style}
         role="dialog"
         aria-modal="true"
         aria-label={title}

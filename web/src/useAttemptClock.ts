@@ -35,12 +35,21 @@ export function useAttemptClock(
   useEffect(() => {
     if (attempt.status !== "active" && attempt.status !== "break") return;
     const epoch = ++generation.current;
+    // Skipped ticks are safe: the server charges elapsed time since the last
+    // tick, so serialization costs nothing but guarantees echoes can never
+    // apply out of order.
+    let inFlight = false;
     const timer = window.setInterval(() => {
+      if (inFlight) return;
+      inFlight = true;
       void postJson<Attempt>(`/api/attempts/${attempt.id}/tick`)
         .then((next) => {
           if (generation.current === epoch) update(next);
         })
-        .catch((error: Error) => fail(error.message));
+        .catch((error: Error) => fail(error.message))
+        .finally(() => {
+          inFlight = false;
+        });
     }, 1000);
     return () => {
       window.clearInterval(timer);

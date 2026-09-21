@@ -31,6 +31,44 @@ vi.mock("./pdf", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  sessionStorage.clear();
+});
+
+it("docks the calculator beside Math answers without a modal", () => {
+  const question = { ...readingQuestion(), section: "Math" };
+  question.presentation!.stimulus = [];
+  const attempt = { ...attemptWith(question), calculatorMode: "desmos" as const };
+  const { container } = render(<Player initial={attempt} onChange={vi.fn()} fail={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
+  const calculator = screen.getByRole("region", { name: "Calculator" });
+  expect(calculator.contains(screen.getByTitle("Desmos graphing calculator"))).toBe(true);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(container.querySelector(".player-body--calculator")).toBeTruthy();
+  expect(screen.getAllByRole("radio")).toHaveLength(4);
+  fireEvent.click(screen.getByRole("button", { name: "Close calculator" }));
+  expect(screen.queryByRole("region", { name: "Calculator" })).toBeNull();
+  expect(container.querySelector(".player-body--calculator")).toBeNull();
+});
+
+it("covers SPR directions while keeping the answer available, then restores them", () => {
+  render(<Player initial={{ ...attemptWith(sprQuestion()), calculatorMode: "desmos" }} onChange={vi.fn()} fail={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
+  expect(screen.queryByRole("heading", { name: "Student-produced responses" })).toBeNull();
+  expect(screen.getByRole("textbox", { name: "Answer" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Close calculator" }));
+  expect(screen.getByRole("heading", { name: "Student-produced responses" })).toBeTruthy();
+});
+
+it("zooms the reference with the wheel instead of a slider and resets on reopen", () => {
+  render(<Player initial={attemptWith(sprQuestion())} onChange={vi.fn()} fail={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Reference" }));
+  expect(screen.queryByRole("slider")).toBeNull();
+  const sheet = screen.getByRole("region", { name: "Zoomable reference sheet" });
+  fireEvent.wheel(sheet, { deltaY: -200 });
+  expect(screen.getByLabelText("Reference zoom").textContent).not.toBe("100%");
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  fireEvent.click(screen.getByRole("button", { name: "Reference" }));
+  expect(screen.getByLabelText("Reference zoom").textContent).toBe("100%");
 });
 
 const CROP = {
@@ -227,6 +265,12 @@ it("reads passages in a split layout with a keyboard-adjustable divider", () => 
   fireEvent.keyDown(divider, { key: "ArrowLeft" });
   fireEvent.keyDown(divider, { key: "ArrowLeft" });
   expect(divider.getAttribute("aria-valuenow")).toBe("48");
+});
+
+it("uses the practice position in both the banner and navigator when source numbers differ", () => {
+  const { container } = render(<Player initial={attemptWith(readingQuestion())} onChange={vi.fn()} fail={vi.fn()} />);
+  expect(container.querySelector(".question-banner__number")?.textContent).toBe("1");
+  expect(screen.getByRole("button", { name: "Question 1 of 1" })).toBeTruthy();
 });
 
 it("restores the divider split saved for the same attempt session", () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { postJson, putJson } from "../api";
 import { DesmosCalculatorPanel, ScientificCalculator } from "../calculator";
@@ -11,7 +11,8 @@ import {
 } from "../QuestionContent";
 import { playerLayout, presentationIssue } from "../questionPresentation";
 import { BookMark, LineIcon } from "../icons";
-import { Overlay, formatTime } from "../ui";
+import { formatTime } from "../ui";
+import { ReferenceSheet } from "../ReferenceSheet";
 import { useAttemptClock } from "../useAttemptClock";
 import { useAttemptSession } from "../useAttemptSession";
 import type { Attempt } from "../types";
@@ -63,7 +64,6 @@ export function Player({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tool, setTool] = useState<"calculator" | "reference" | null>(null);
-  const [zoom, setZoom] = useState(1);
   const { document, error } = usePdf(attempt.plan.sourcePdfUrl);
   const update = useCallback(
     (next: Attempt) => {
@@ -88,6 +88,7 @@ export function Player({
     attempt.questions[0];
   const activeIndex = activeIds.indexOf(question.id);
   const layout = playerLayout(question);
+  const calculatorOpen = tool === "calculator" && question.section === "Math";
   const issue = presentationIssue(question);
   const review = attempt.reviewState[question.id] ?? {
     marked: false,
@@ -132,12 +133,14 @@ export function Player({
   }, [splitKind, attempt.currentQuestionId]);
   const saveCalculator = useCallback(
     (state: Record<string, unknown>) => {
-      setAttempt((current) => ({ ...current, calculatorState: state }));
+      // Route through update like every other mutation so App's copy of the
+      // Attempt keeps calculator state in sync too.
+      update({ ...attempt, calculatorState: state });
       void putJson(`/api/attempts/${attempt.id}/calculator-state`, {
         state,
       }).catch((error: Error) => fail(error.message));
     },
-    [attempt.id, fail],
+    [attempt, update, fail],
   );
   useEffect(() => {
     if (error) fail(error);
@@ -227,7 +230,7 @@ export function Player({
   const banner = (
     <div className="question-banner">
       <span className="question-banner__number" aria-hidden="true">
-        {question.question_number}
+        {activeIndex + 1}
       </span>
       <label className="mark-control">
         <input
@@ -329,7 +332,7 @@ export function Player({
   ) => (
     <>
       <section className="player-pane player-pane--left" aria-label={leftLabel}>
-        <div className="player-pane__scroll">{left}</div>
+        <div className="player-pane__scroll" hidden={calculatorOpen}>{left}</div>
       </section>
       {divider}
       <section className="player-pane player-pane--right" aria-label="Question and answers">
@@ -343,7 +346,7 @@ export function Player({
       <div
         key={question.id}
         ref={bodyRef}
-        className="player-body player-body--centered"
+        className={`player-body player-body--centered${calculatorOpen ? " player-body--calculator" : ""}`}
       >
         <section className="response-panel">
           {banner}
@@ -359,7 +362,7 @@ export function Player({
       <div
         key={question.id}
         ref={bodyRef}
-        className="player-body player-body--centered"
+        className={`player-body player-body--centered${calculatorOpen ? " player-body--calculator" : ""}`}
       >
         <section className="response-panel">
           {banner}
@@ -481,7 +484,8 @@ export function Player({
               <button
                 type="button"
                 className="player-tool"
-                onClick={() => setTool("calculator")}
+                aria-pressed={calculatorOpen}
+                onClick={() => setTool((current) => current === "calculator" ? null : "calculator")}
               >
                 <LineIcon name="calculator" />
                 <span>Calculator</span>
@@ -614,7 +618,31 @@ export function Player({
           </section>
         </div>
       )}
-      {body}
+      <div
+        className="player-workspace"
+        style={{ "--calculator-split": `${layout?.kind === "spr" || layout?.kind === "split" ? split : 50}%` } as CSSProperties}
+      >
+        {body}
+        {calculatorOpen && (
+          <section className="player-calculator" aria-label="Calculator">
+            <header>
+              <h2>Calculator</h2>
+              <button type="button" className="dialog-close" aria-label="Close calculator" onClick={() => setTool(null)}>
+                <LineIcon name="close" />
+              </button>
+            </header>
+            <div className="player-calculator__content">
+              {attempt.calculatorMode === "desmos" ? (
+                <DesmosCalculatorPanel
+                  options={{ images: false, folders: false, notes: false, links: false, pasteGraphLink: false, authorFeatures: false }}
+                  savedState={attempt.calculatorState}
+                  onSave={saveCalculator}
+                />
+              ) : <ScientificCalculator />}
+            </div>
+          </section>
+        )}
+      </div>
       <footer className="player-footer">
         <span className="player-footer__brand">Whitebook</span>
         <button
@@ -657,56 +685,8 @@ export function Player({
         </div>
       </footer>
       <div className="accent-strip" aria-hidden="true" />
-      {tool === "calculator" && (
-        <Overlay
-          title={
-            attempt.calculatorMode === "desmos"
-              ? "Graphing calculator"
-              : "Scientific calculator"
-          }
-          onClose={() => setTool(null)}
-        >
-          {attempt.calculatorMode === "desmos" ? (
-            <DesmosCalculatorPanel
-              options={{
-                images: false,
-                folders: false,
-                notes: false,
-                links: false,
-                pasteGraphLink: false,
-                authorFeatures: false,
-              }}
-              savedState={attempt.calculatorState}
-              onSave={saveCalculator}
-            />
-          ) : (
-            <ScientificCalculator />
-          )}
-        </Overlay>
-      )}
       {tool === "reference" && (
-        <Overlay title="Reference Sheet" onClose={() => setTool(null)}>
-          <div className="reference-controls">
-            <label>
-              Zoom
-              <input
-                type="range"
-                min={0.6}
-                max={2.5}
-                step={0.1}
-                value={zoom}
-                onChange={(event) => setZoom(Number(event.target.value))}
-              />
-            </label>
-          </div>
-          <div className="reference-sheet">
-            <img
-              src="/api/math/reference-sheet.png"
-              alt="Math Reference Sheet"
-              style={{ width: `${zoom * 100}%` }}
-            />
-          </div>
-        </Overlay>
+        <ReferenceSheet onClose={() => setTool(null)} />
       )}
     </main>
   );

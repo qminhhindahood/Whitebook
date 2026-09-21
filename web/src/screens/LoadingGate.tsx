@@ -35,6 +35,7 @@ export function LoadingGate({
     setResourcesReady(false);
     setResourceError("");
     setPreparedCount(0);
+    setScriptReady(false);
     const issue = initial.questions.map(presentationIssue).find(Boolean);
     if (issue) {
       setResourceError(issue);
@@ -75,21 +76,7 @@ export function LoadingGate({
   }, [initial.setupId]);
   useEffect(() => {
     if (gate.status !== "loading" || !gate.mathTool?.scriptUrl) return;
-    loadDesmos(gate.mathTool.scriptUrl)
-      .then(() => setScriptReady(true))
-      .catch(async () => {
-        const updated = await postJson<AttemptGate>(
-          `/api/attempt-setups/${gate.setupId}/confirm-calculator`,
-          {
-            scriptLoaded: false,
-            constructorAvailable: false,
-            instanceCreated: false,
-            stateReadable: false,
-            usableSize: false,
-          },
-        );
-        setGate(updated);
-      });
+    void loadDesmos(gate.mathTool.scriptUrl).then(() => setScriptReady(true));
   }, [gate.mathTool?.scriptUrl, gate.setupId, gate.status]);
   const report = useCallback(
     async (checks: Record<string, boolean>) => {
@@ -103,6 +90,8 @@ export function LoadingGate({
           ),
         );
       } catch (error) {
+        // Allow a later probe of the same setup to report again.
+        reported.current = false;
         fail(
           error instanceof Error
             ? error.message

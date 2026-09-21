@@ -6,6 +6,16 @@ export async function loadDesmos(scriptUrl: string): Promise<void> {
   preparedScriptUrl = scriptUrl;
 }
 
+/** The payload the backend requires when the probe could not verify the
+ * frame; every check must be present and false, not partially reported. */
+export const FAILED_CALCULATOR_CHECKS: Record<string, boolean> = {
+  scriptLoaded: false,
+  constructorAvailable: false,
+  instanceCreated: false,
+  stateReadable: false,
+  usableSize: false,
+};
+
 function CalculatorFrame({
   options,
   savedState,
@@ -25,7 +35,7 @@ function CalculatorFrame({
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setFailed(true);
-      callbacks.current.onReady?.({ scriptLoaded: false });
+      callbacks.current.onReady?.({ ...FAILED_CALCULATOR_CHECKS });
     }, 25000);
     const receive = (event: MessageEvent) => {
       if (

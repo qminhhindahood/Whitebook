@@ -40,6 +40,10 @@ _Avoid_: Mock test, exam mode, full practice
 A configurable sitting containing a learner-selected number or category of questions, with flexible timing and pause behavior.
 _Avoid_: Drill, custom test, quiz
 
+**Section Exam Attempt**:
+A randomly assembled sitting from one selected Test Package containing two Modules of one Section: 22 questions per Math Module or 27 per Reading and Writing Module. Questions do not repeat within the sitting but may appear again in later Attempts.
+_Avoid_: Full Simulation, mixed-section exam
+
 **Practice Builder**:
 The setup flow that creates a Practice Attempt from exactly one selected Test Package using section, module, count, category, ordering, and timing choices.
 _Avoid_: Test generator, drill builder, question mixer
@@ -65,7 +69,7 @@ The single user-provided PNG available as a zoomable overlay from the References
 _Avoid_: Formula website, built-in formula document, reference PDF
 
 **Attempt**:
-The durable record of one Simulation Attempt or Practice Attempt, including responses, timing, question state, and completion status.
+The durable record of one Simulation Attempt, Section Exam Attempt, or Practice Attempt, including responses, timing, question state, and completion status.
 _Avoid_: Session, run, result
 
 **Paused Attempt**:

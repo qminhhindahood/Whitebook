@@ -42,6 +42,14 @@ export function useAttemptSession(
         );
         failedSave.current = false;
         update(payload.attempt);
+        // The server echo is authoritative once it matches the draft; a
+        // newer keystroke leaves a different value behind and keeps its
+        // overlay until its own save echoes back.
+        setDraftResponses((current) => {
+          if (current[id] !== (response ?? "")) return current;
+          const { [id]: _reconciled, ...rest } = current;
+          return rest;
+        });
       });
       responseQueue.current = saving.catch(() => {
         failedSave.current = true;

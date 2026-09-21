@@ -76,6 +76,9 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
+summary:focus-visible,
+.file-action:has(input:focus-visible),
+.choice-tile:has(input:focus-visible),
 [role="separator"]:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
@@ -660,7 +663,7 @@ select {
   padding: 18px 22px;
   border: 1px solid #ecd9a8;
   border-radius: var(--card-radius);
-  background: linear-gradient(0deg, #fffbf2, #fffbf2);
+  background: var(--warning-tint);
   box-shadow: var(--card-shadow);
 }
 
@@ -679,10 +682,103 @@ select {
 
 .library-lead {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 38px;
   margin-bottom: 30px;
+}
+
+.library-lead > div {
+  min-width: 0;
+}
+
+.library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 18px 26px;
+  padding: 22px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.library-search {
+  display: grid;
+  flex: 1 1 300px;
+  max-width: 440px;
+  gap: 8px;
+  color: var(--slate);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.library-search input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--control-radius);
+  color: var(--ink);
+  background: var(--white);
+  font-weight: 400;
+}
+
+.library-search input::placeholder {
+  color: var(--slate);
+}
+
+.library-count {
+  flex: 1 1 160px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 0;
+  color: var(--slate);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.library-filters .check-control {
+  min-height: 44px;
+}
+
+.library-filters--compact {
+  padding-top: 0;
+}
+
+.library-utilities {
+  margin-bottom: 26px;
+  color: var(--slate);
+  font-size: 14px;
+}
+
+.library-utilities summary {
+  width: fit-content;
+  padding: 8px 0;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.library-utilities summary:hover {
+  color: var(--indigo-deep);
+}
+
+.library-utilities .utility-actions {
+  justify-content: flex-start;
+  padding-top: 12px;
+}
+
+.package-management {
+  margin-top: 52px;
+  padding-top: 38px;
+  border-top: 1px solid var(--rule);
+}
+
+.package-management .library-lead {
+  margin-bottom: 18px;
+}
+
+.package-management .library-lead h2 {
+  font-size: 28px;
 }
 
 .library-lead h2 {
@@ -743,7 +839,8 @@ select {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 20px 22px 22px;
+  min-width: 0;
+  padding: 24px;
   border: 1px solid #dfe3f0;
   border-radius: var(--card-radius);
   background: var(--white);
@@ -751,8 +848,28 @@ select {
 }
 
 .package-card--muted {
-  background: #f7f8fc;
-  opacity: 0.85;
+  background: var(--indigo-wash);
+  box-shadow: none;
+}
+
+.package-card > .status-chip {
+  align-self: flex-start;
+}
+
+.package-card h3,
+.package-card__meta {
+  overflow-wrap: anywhere;
+}
+
+.package-card__actions .pill {
+  min-width: 0;
+  padding: 6px 12px;
+}
+
+.package-card__tools button:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: not-allowed;
 }
 
 .package-card__chips {
@@ -791,9 +908,16 @@ select {
 
 .package-card__tools {
   display: flex;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+
+.package-card__tools .danger-link {
+  margin-left: auto;
 }
 
 .package-card__tools button {
@@ -827,13 +951,18 @@ select {
   align-items: center;
   justify-content: center;
   grid-column: 1 / -1;
-  min-height: 280px;
+  min-height: 320px;
+  padding: 38px 26px;
   border: 1px solid #dfe3f0;
   border-radius: var(--card-radius);
   color: var(--slate);
   background: var(--white);
   box-shadow: var(--card-shadow);
   text-align: center;
+}
+
+.empty-state > button {
+  margin-top: 22px;
 }
 
 .empty-state__icon {
@@ -1758,9 +1887,10 @@ button:disabled {
 
 .player-shell {
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   min-width: 1024px;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   background: var(--white);
 }
 
@@ -2079,7 +2209,88 @@ button:disabled {
 
 .player-body {
   min-height: 0;
-  height: calc(100vh - 150px);
+  height: 100%;
+}
+
+.player-shell:has(.time-warning) {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+}
+
+.player-workspace {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.player-workspace .player-body--centered {
+  height: 100%;
+}
+
+.player-body.player-body--calculator {
+  padding-left: calc(50% + 5px);
+  background: linear-gradient(to right, var(--canvas) 50%, var(--white) 50%);
+}
+
+.player-workspace .player-body--calculator .response-panel {
+  width: calc(100% - 48px);
+}
+
+.player-calculator {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  bottom: 12px;
+  left: 12px;
+  width: calc(var(--calculator-split) - 24px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--white);
+  box-shadow: 0 4px 16px rgb(12 16 45 / 12%);
+}
+
+.player-calculator > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--indigo);
+  color: var(--white);
+}
+
+.player-calculator h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.player-calculator .dialog-close {
+  color: inherit;
+}
+
+.player-calculator__content {
+  min-height: 0;
+  overflow: auto;
+}
+
+.player-calculator .desmos-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.player-calculator .scientific-calculator {
+  width: min(100%, 420px);
+}
+
+.player-pane__scroll[hidden] {
+  display: none;
+}
+
+.player-tool[aria-pressed="true"] {
+  color: var(--indigo-deep);
+  background: var(--indigo-tint);
+  box-shadow: inset 0 -3px var(--indigo);
 }
 
 .player-body--split {
@@ -2580,26 +2791,45 @@ button:disabled {
 }
 
 .reference-controls {
-  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--rule);
 }
 
-.reference-controls label {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  font-weight: 700;
+.reference-controls output {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-overlay.reference-overlay {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  width: min(1000px, 88vw, calc((82vh - 110px) * var(--reference-aspect)));
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
 }
 
 .reference-sheet {
-  overflow: auto;
-  padding: 24px;
-  background: #e7eaf4;
+  aspect-ratio: var(--reference-aspect);
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  touch-action: none;
+  cursor: grab;
+  background: var(--white);
+}
+
+.reference-sheet:active {
+  cursor: grabbing;
 }
 
 .reference-sheet img {
   display: block;
-  margin: auto;
+  max-width: none;
+  user-select: none;
   background: var(--white);
 }
 

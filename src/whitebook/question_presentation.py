@@ -24,6 +24,17 @@ class PresentationRegion(PresentationModel):
         return self
 
 
+def inset_region_top(region: dict, top: float) -> dict:
+    """Remove a header from a region without moving its bottom into an answer."""
+    original = PresentationRegion.model_validate(region)
+    bottom = original.y + original.height
+    if not original.y <= top < bottom:
+        raise ValueError("The new top must stay inside the original Question Region.")
+    return PresentationRegion.model_validate(
+        {**region, "y": top, "height": bottom - top}
+    ).model_dump()
+
+
 class TextBlock(PresentationModel):
     kind: Literal["text"]
     text: str = Field(min_length=1, max_length=50000)

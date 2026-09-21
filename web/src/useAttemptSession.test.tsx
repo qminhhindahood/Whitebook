@@ -48,18 +48,22 @@ it("serializes response saves in call order", async () => {
   expect(put.mock.calls[1][1]).toEqual({ response: "12" });
 });
 
-it("overlays the local draft over the server echo", async () => {
+it("reconciles the draft overlay with the server echo once saved", async () => {
   const update = vi.fn();
   put.mockResolvedValue({
     saved: true,
     attempt: { ...attempt, responses: { q: "1" } },
   });
-  const { result } = renderHook(() =>
-    useAttemptSession(attempt, { update }),
+  const echoed = { ...attempt, responses: { q: "1" } };
+  const { result, rerender } = renderHook(
+    (props: { attempt: Attempt }) =>
+      useAttemptSession(props.attempt, { update }),
+    { initialProps: { attempt } },
   );
   await act(async () => {
     await result.current.setResponse("q", "1");
   });
+  rerender({ attempt: echoed });
   expect(result.current.draftFor("q")).toBe("1");
   put.mockImplementationOnce(() => new Promise(() => {}));
   act(() => {

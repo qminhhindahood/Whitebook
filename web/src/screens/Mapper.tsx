@@ -145,7 +145,10 @@ export function Mapper({
               min={1}
               max={document?.numPages ?? 999}
               value={page}
-              onChange={(event) => setPage(Number(event.target.value))}
+              onChange={(event) => {
+                const parsed = Number(event.target.value);
+                setPage(Number.isFinite(parsed) ? parsed : 1);
+              }}
             />
           </label>
         </div>

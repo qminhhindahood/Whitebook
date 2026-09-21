@@ -147,7 +147,9 @@ export function PracticeBuilder({
             category: category || null,
             timing,
             countdownSeconds:
-              timing === "custom_countdown" ? countdown * 60 : null,
+              timing === "custom_countdown"
+                ? Math.max(1, Math.floor(countdown)) * 60
+                : null,
             shuffle,
             seed: Date.now(),
             questionIds: questionPoolIds,
@@ -312,8 +314,9 @@ export function PracticeBuilder({
                     <input
                       type="radio"
                       name="drill-count"
-                      checked={count === Math.min(value, available)}
-                      onChange={() => setCount(Math.min(value, available))}
+                      disabled={value > available}
+                      checked={count === value}
+                      onChange={() => setCount(value)}
                     />
                     {value} Qs
                   </label>
@@ -339,7 +342,10 @@ export function PracticeBuilder({
                   min={1}
                   max={Math.max(1, available)}
                   value={count}
-                  onChange={(event) => setCount(Number(event.target.value))}
+                  onChange={(event) => {
+                    const parsed = Number(event.target.value);
+                    setCount(Number.isFinite(parsed) ? parsed : 1);
+                  }}
                 />
               </label>
             </fieldset>
@@ -387,9 +393,14 @@ export function PracticeBuilder({
                     type="number"
                     min={1}
                     value={countdown}
-                    onChange={(event) =>
-                      setCountdown(Number(event.target.value))
-                    }
+                    onChange={(event) => {
+                      const parsed = Number(event.target.value);
+                      setCountdown(
+                        Number.isFinite(parsed) && parsed >= 1
+                          ? Math.floor(parsed)
+                          : 1,
+                      );
+                    }}
                   />
                 </label>
               )}

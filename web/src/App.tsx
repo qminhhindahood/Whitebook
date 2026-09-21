@@ -34,6 +34,7 @@ export function App() {
   const [readiness, setReadiness] = useState<Readiness>("checking");
   const [screen, setScreen] = useState<Screen>("library");
   const [packages, setPackages] = useState<TestPackage[]>([]);
+  const [packagesLoading, setPackagesLoading] = useState(true);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [draft, setDraft] = useState<ImportDraft | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<TestPackage | null>(
@@ -49,12 +50,23 @@ export function App() {
   >();
   const [error, setError] = useState("");
   const refresh = useCallback(async () => {
-    const [packageList, attemptList] = await Promise.all([
-      api<TestPackage[]>("/api/test-packages?include_archived=true"),
-      api<Attempt[]>("/api/attempts"),
-    ]);
-    setPackages(packageList);
-    setAttempts(attemptList);
+    setPackagesLoading(true);
+    try {
+      const [packageList, attemptList] = await Promise.all([
+        api<TestPackage[]>("/api/test-packages?include_archived=true"),
+        api<Attempt[]>("/api/attempts"),
+      ]);
+      setPackages(packageList);
+      setAttempts(attemptList);
+    } catch (caught) {
+      // List screens keep showing their last data; surface why refresh
+      // instead of failing silently.
+      setError(
+        caught instanceof Error ? caught.message : "Could not load lists.",
+      );
+    } finally {
+      setPackagesLoading(false);
+    }
   }, []);
   useEffect(() => {
     api<{ status: string }>("/api/health")
@@ -62,7 +74,10 @@ export function App() {
         setReadiness(payload.status === "ready" ? "ready" : "unavailable");
         return refresh();
       })
-      .catch(() => setReadiness("unavailable"));
+      .catch(() => {
+        setReadiness("unavailable");
+        setPackagesLoading(false);
+      });
   }, [refresh]);
   const navigate = (next: "library" | "import" | "history") => {
     setScreen(next);
@@ -201,6 +216,7 @@ export function App() {
           {baseScreen === "library" && (
             <LibraryScreen
               packages={packages}
+              packagesLoading={packagesLoading}
               attempts={attempts}
               openImport={() => navigate("import")}
               openBuilder={(item) => {
@@ -210,14 +226,15 @@ export function App() {
                 setScreen("builder");
               }}
               startSimulation={prepareSimulation}
-              startRevision={startRevision}
-              refresh={refresh}
-              fail={setError}
             />
           )}
           {baseScreen === "import" && (
             <ImportScreen
+              packages={packages}
+              packagesLoading={packagesLoading}
               fail={setError}
+              refresh={refresh}
+              startRevision={startRevision}
               onCreated={(created) => {
                 setDraft(created);
                 if (created.status === "published") {
