@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from whitebook.sat_policy import STANDARD_MODULE_COUNTS
+from whitebook.sat_policy import (
+    STANDARD_MODULE_COUNTS,
+    standard_module_position,
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +70,19 @@ def classify_package(questions: list[QuestionDescriptor]) -> PackageEligibility:
             range(1, len(module_numbers) + 1)
         ):
             add("unordered_question_numbers")
+    # Modules must appear as contiguous runs in the standard sitting order;
+    # interleaved rows (e.g. RW1, M1, RW2, M2) would otherwise build a
+    # Simulation plan with the Section break in the wrong place.
+    positions = [
+        position
+        for question in questions
+        if (
+            position := standard_module_position((question.section, question.module))
+        )
+        is not None
+    ]
+    if positions != sorted(positions):
+        add("interleaved_modules")
     return PackageEligibility(
         practice_eligible=structurally_valid,
         simulation_eligible=structurally_valid and not reasons,

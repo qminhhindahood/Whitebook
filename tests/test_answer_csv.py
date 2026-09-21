@@ -93,3 +93,18 @@ def test_malformed_quoted_csv_returns_diagnostics():
     )
     assert not result.rows
     assert result.diagnostics[0].code == "malformed_csv"
+
+
+def test_integer_fields_reject_unicode_digits_and_signs() -> None:
+    result = parse_answer_csv(
+        (
+            HEADERS
+            + "Math,+1,١,multiple choice,A,Algebra\n"
+            + "Math,1,2,multiple choice,B,Algebra\n"
+        ).encode()
+    )
+
+    codes = [item.code for item in result.diagnostics]
+    assert "invalid_module" in codes
+    assert "invalid_question_number" in codes
+    assert [(row.module, row.question_number) for row in result.rows] == [(1, 2)]

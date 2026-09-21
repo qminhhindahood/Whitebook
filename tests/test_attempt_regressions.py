@@ -230,3 +230,72 @@ def test_mcq_with_no_accepted_answers_surfaces_clean_grading_error(
         connection.commit()
     with pytest.raises(ValueError, match="no accepted answers"):
         engine.submit(attempt["id"])
+
+
+def test_off_contract_mcq_selection_is_rejected_at_save_time(tmp_path: Path):
+    package = publish_full_package(tmp_path)
+    engine = AttemptEngine(tmp_path)
+    gate = engine.prepare(
+        package_id=package["id"],
+        kind="practice",
+        selection={
+            "sections": ["Reading and Writing"],
+            "modules": [1],
+            "count": 1,
+            "timing": "elapsed",
+        },
+    )
+    attempt = engine.begin(gate["setupId"])
+    question_id = attempt["questions"][0]["id"]
+
+    for junk in ("E", "AB", "Z"):
+        with pytest.raises(AttemptError, match="A, B, C, or D"):
+            engine.save_response(attempt["id"], question_id, junk)
+        assert attempt["responses"] == {}
+
+    saved = engine.save_response(attempt["id"], question_id, "b")
+    assert saved["attempt"]["responses"] == {question_id: "B"}
+
+
+def test_legacy_off_contract_response_grades_incorrect_without_wedging(
+    tmp_path: Path,
+):
+    package = publish_full_package(tmp_path)
+    clock = FakeClock()
+    engine = AttemptEngine(tmp_path, clock=clock)
+    gate = engine.prepare(
+        package_id=package["id"],
+        kind="practice",
+        selection={
+            "sections": ["Reading and Writing"],
+            "modules": [1],
+            "count": 1,
+            "timing": "custom_countdown",
+            "countdownSeconds": 60,
+        },
+    )
+    attempt = engine.begin(gate["setupId"])
+    question_id = attempt["questions"][0]["id"]
+    engine.save_response(attempt["id"], question_id, "A")
+    with connect(tmp_path) as connection:
+        state = json.loads(
+            connection.execute(
+                "SELECT state_json FROM attempts WHERE id = ?", (attempt["id"],)
+            ).fetchone()[0]
+        )
+    state["responses"][question_id] = "Z"
+    with connect(tmp_path) as connection:
+        connection.execute(
+            "UPDATE attempts SET state_json = ? WHERE id = ?",
+            (json.dumps(state), attempt["id"]),
+        )
+        connection.commit()
+
+    clock.advance(120)
+    expired = engine.tick(attempt["id"])
+
+    assert expired["status"] == "completed"
+    graded = expired["result"]["questions"][0]
+    assert graded["learnerResponse"] == "Z"
+    assert graded["status"] == "incorrect"
+    assert expired["result"]["correct"] == 0

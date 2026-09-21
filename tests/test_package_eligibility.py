@@ -92,7 +92,12 @@ def test_gap_in_numbering_blocks_simulation_but_not_practice() -> None:
             and question.question_number == 27
         )
     ]
-    gapped.append(QuestionDescriptor("Reading and Writing", 1, 28))
+    insert_at = next(
+        index
+        for index, question in enumerate(gapped)
+        if question.section == "Reading and Writing" and question.module == 2
+    )
+    gapped.insert(insert_at, QuestionDescriptor("Reading and Writing", 1, 28))
 
     result = classify_package(gapped)
 
@@ -116,3 +121,23 @@ def test_short_but_contiguous_module_reports_only_the_count() -> None:
     result = classify_package(full_shape()[:-1])
 
     assert set(result.reasons) == {"wrong_question_count"}
+
+
+def test_interleaved_module_rows_block_simulation_but_not_practice() -> None:
+    rows = full_shape()
+    rw2 = [question for question in rows if question.module == 2]
+    interleaved = [
+        question
+        for question in rows
+        if question.section == "Reading and Writing" and question.module == 1
+    ] + [
+        question
+        for question in rows
+        if question.section == "Math" and question.module == 1
+    ] + rw2
+
+    result = classify_package(interleaved)
+
+    assert result.practice_eligible is True
+    assert result.simulation_eligible is False
+    assert set(result.reasons) == {"interleaved_modules"}

@@ -509,6 +509,10 @@ class PackageAuthoring:
                     "invalid_package", "This Import Draft cannot form a Test Package."
                 )
 
+            # Serialize revision allocation: the write lock is taken before
+            # the latest revision is read so two concurrent publishes of the
+            # same title cannot both allocate the next revision number.
+            connection.execute("BEGIN IMMEDIATE")
             if row["revision_package_id"]:
                 target = connection.execute(
                     """
@@ -674,7 +678,9 @@ class PackageAuthoring:
             self._data_root / "documents" / package["stored_pdf_name"]
         ).resolve()
         documents_root = (self._data_root / "documents").resolve()
-        if document.is_relative_to(documents_root):
+        if document.is_relative_to(documents_root) and not self._stored_pdf_in_use(
+            package["stored_pdf_name"]
+        ):
             document.unlink(missing_ok=True)
         render_root = (self._data_root / "renders" / package_id).resolve()
         allowed_renders = (self._data_root / "renders").resolve()
@@ -683,6 +689,21 @@ class PackageAuthoring:
 
             shutil.rmtree(render_root)
         return {"removedAttempts": int(attempt_count), "removedPackages": 1}
+
+    def _stored_pdf_in_use(self, stored_pdf_name: str) -> bool:
+        """Revision drafts deliberately share a package's stored source files,
+        so a stored PDF may only be deleted when no remaining package or draft
+        still references it."""
+        with connect(self._data_root) as connection:
+            references = connection.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM test_packages WHERE stored_pdf_name = ?)
+                    + (SELECT COUNT(*) FROM import_drafts WHERE stored_pdf_name = ?)
+                """,
+                (stored_pdf_name, stored_pdf_name),
+            ).fetchone()[0]
+        return bool(references)
 
     def _questions_with_regions(
         self, draft_id: str, manifest: list[dict[str, object]]

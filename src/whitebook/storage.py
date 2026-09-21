@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS app_metadata (
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS test_packages (
     created_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_package_family
+CREATE UNIQUE INDEX IF NOT EXISTS idx_package_family
     ON test_packages(family_id, revision);
 
 CREATE TABLE IF NOT EXISTS attempt_setups (
@@ -142,6 +142,32 @@ def migrate_database(data_root: Path) -> None:
         connection.close()
 
 
+def _ensure_unique_family_revision(connection: sqlite3.Connection) -> None:
+    """Upgrade idx_package_family to UNIQUE so concurrent publishes of the
+    same draft can never insert the same (family_id, revision) twice."""
+
+    indexes = {
+        row["name"]: row["unique"]
+        for row in connection.execute("PRAGMA index_list(test_packages)")
+        if row["origin"] in ("c", "u")
+    }
+    if indexes.get("idx_package_family"):
+        return
+    if "idx_package_family" in indexes:
+        connection.execute("DROP INDEX idx_package_family")
+    try:
+        connection.execute(
+            "CREATE UNIQUE INDEX idx_package_family ON test_packages(family_id, revision)"
+        )
+    except sqlite3.IntegrityError:
+        # Data written before the constraint may already hold duplicate
+        # revisions; keep the plain index rather than block startup.
+        connection.execute(
+            "CREATE INDEX idx_package_family ON test_packages(family_id, revision)"
+        )
+    connection.commit()
+
+
 def _migrate_connection(connection: sqlite3.Connection) -> None:
     """Bring an older database up to the current schema.
 
@@ -217,15 +243,10 @@ def _migrate_connection(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE test_packages_migrated RENAME TO test_packages"
         )
-        connection.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_package_family
-                ON test_packages(family_id, revision)
-            """
-        )
         if connection.execute("PRAGMA foreign_key_check").fetchall():
             raise RuntimeError("Package migration broke foreign keys.")
         connection.commit()
+    _ensure_unique_family_revision(connection)
     connection.execute(
         """
         INSERT INTO app_metadata (key, value) VALUES ('schema_version', ?)

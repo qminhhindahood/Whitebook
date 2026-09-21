@@ -150,7 +150,7 @@ def test_restored_old_database_is_migrated_and_accepts_revisions(tmp_path: Path)
             connection.execute(
                 "SELECT value FROM app_metadata WHERE key = 'schema_version'"
             ).fetchone()[0]
-            == "3"
+            == "4"
         )
         assert unique_pair_indexes(connection) == []
         draft_columns = {

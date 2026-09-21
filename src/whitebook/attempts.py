@@ -14,6 +14,8 @@ from urllib.parse import quote
 from whitebook.authoring import PackageAuthoring
 from whitebook.diagnostics import DiagnosticLog
 from whitebook.grading import (
+    MULTIPLE_CHOICE,
+    VALID_MCQ_ANSWERS,
     GradeStatus,
     GradingQuestion,
     LearnerResponse,
@@ -26,7 +28,11 @@ from whitebook.practice_rules import (
     PracticeRequest,
     build_practice_plan,
 )
-from whitebook.sat_policy import BREAK_SECONDS, standard_module_seconds
+from whitebook.sat_policy import (
+    BREAK_SECONDS,
+    standard_module_position,
+    standard_module_seconds,
+)
 from whitebook.storage import connect
 
 
@@ -121,23 +127,10 @@ class AttemptEngine:
             (stage for stage in stages if stage["status"] == "loading"), None
         )
         gate_status = "failed" if failed else "loading" if loading else "ready"
-        if failed and failed["name"] == "math_tools":
-            allowed_actions = ["retry", "return_to_setup", "use_scientific"]
-        elif loading and loading["name"] == "math_tools":
-            allowed_actions = [
-                "confirm_calculator_ready",
-                "retry",
-                "return_to_setup",
-                "use_scientific",
-            ]
-        else:
-            allowed_actions = (
-                ["begin"] if gate_status == "ready" else ["retry", "return_to_setup"]
-            )
         readiness = {
             "status": gate_status,
             "failedStage": failed["name"] if failed else None,
-            "allowedActions": allowed_actions,
+            "allowedActions": self._gate_actions(gate_status, failed, loading),
             "stages": stages,
             "mathTool": math_tool,
         }
@@ -341,7 +334,20 @@ class AttemptEngine:
         if response is None or not response.strip():
             state["responses"].pop(question_id, None)
         else:
-            state["responses"][question_id] = response
+            question = next(
+                item for item in plan["questions"] if item["id"] == question_id
+            )
+            cleaned = response.strip()
+            if question["response_type"] == MULTIPLE_CHOICE:
+                # The grading kernel fails closed on non A-D selections; never
+                # persist one, or module expiry would wedge the Attempt.
+                cleaned = cleaned.upper()
+                if cleaned not in VALID_MCQ_ANSWERS:
+                    raise AttemptError(
+                        "invalid_response",
+                        "Multiple-choice responses must be A, B, C, or D.",
+                    )
+            state["responses"][question_id] = cleaned
         self._save_state(row, state)
         return {"saved": True, "attempt": self.get_attempt(attempt_id)}
 
@@ -360,7 +366,7 @@ class AttemptEngine:
             "eliminatedChoices": [
                 choice
                 for choice in dict.fromkeys(eliminated_choices)
-                if choice in "ABCD"
+                if choice in VALID_MCQ_ANSWERS
             ],
         }
         self._save_state(row, state)
@@ -713,6 +719,18 @@ class AttemptEngine:
                 )
             modules[-1]["questionIds"].append(question["id"])
         if kind == "simulation":
+            # A Simulation follows the standard sitting order regardless of
+            # Answer CSV row order, so the Section break always lands after
+            # Reading and Writing Module 2.
+            selected = sorted(
+                selected,
+                key=lambda question: (
+                    standard_module_position(
+                        (question["section"], int(question["module"]))
+                    ),
+                    int(question["question_number"]),
+                ),
+            )
             for module in modules:
                 module["durationSeconds"] = standard_module_seconds(module["section"])
         elif len(modules) == 1:
@@ -904,17 +922,36 @@ class AttemptEngine:
         return json.dumps(stored, separators=(",", ":"))
 
     @staticmethod
+    def _gate_actions(
+        gate_status: str,
+        failed: dict[str, str] | None,
+        loading: dict[str, str] | None,
+    ) -> list[str]:
+        """Single owner of the gate's transition table, shared by prepare()
+        and _refresh_readiness() so the two paths cannot drift."""
+        if failed and failed["name"] == "math_tools":
+            return ["retry", "return_to_setup", "use_scientific"]
+        if loading and loading["name"] == "math_tools":
+            return [
+                "confirm_calculator_ready",
+                "retry",
+                "return_to_setup",
+                "use_scientific",
+            ]
+        if gate_status == "ready":
+            return ["begin"]
+        return ["retry", "return_to_setup"]
+
+    @staticmethod
     def _refresh_readiness(readiness: dict) -> None:
         stages = [stage for stage in readiness["stages"] if stage["name"] != "ready"]
         failed = next((s for s in stages if s["status"] == "failed"), None)
         loading = next((s for s in stages if s["status"] == "loading"), None)
         readiness["status"] = "failed" if failed else "loading" if loading else "ready"
         readiness["failedStage"] = failed["name"] if failed else None
-        readiness["allowedActions"] = (
-            ["begin"] if not (failed or loading) else ["retry", "return_to_setup"]
+        readiness["allowedActions"] = AttemptEngine._gate_actions(
+            readiness["status"], failed, loading
         )
-        if any(s["name"] == "math_tools" and s["status"] != "ready" for s in stages):
-            readiness["allowedActions"].append("use_scientific")
         if not (failed or loading):
             stages.append({"name": "ready", "status": "ready"})
         readiness["stages"] = stages
@@ -1010,13 +1047,24 @@ class AttemptEngine:
         statuses = []
         for question in plan["questions"]:
             response = state["responses"].get(question["id"])
-            status = grade_question(
-                LearnerResponse(selected=response),
-                GradingQuestion(
-                    response_type=question["response_type"],
-                    accepted_answers=tuple(question["accepted_answers"]),
-                ),
-            )
+            if (
+                question["response_type"] == MULTIPLE_CHOICE
+                and response is not None
+                and response.strip().upper() not in VALID_MCQ_ANSWERS
+            ):
+                # Durable state written before save_response validation may
+                # hold an off-contract selection; grade it incorrect instead
+                # of wedging every future tick on the kernel's contract. Plan
+                # corruption (e.g. no accepted answers) still surfaces.
+                status = GradeStatus.INCORRECT
+            else:
+                status = grade_question(
+                    LearnerResponse(selected=response),
+                    GradingQuestion(
+                        response_type=question["response_type"],
+                        accepted_answers=tuple(question["accepted_answers"]),
+                    ),
+                )
             statuses.append(status)
             review = state["reviewState"].get(
                 question["id"], {"marked": False, "eliminatedChoices": []}

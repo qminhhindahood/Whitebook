@@ -23,6 +23,18 @@ def standard_module_count(section: str) -> int | None:
     return None
 
 
+def standard_module_position(module: tuple[str, int]) -> int | None:
+    """Position of a Module in the standard sitting order; None if non-standard.
+
+    The sitting order is the iteration order of STANDARD_MODULE_COUNTS:
+    Reading and Writing Module 1, then 2, then Math Modules 1 and 2.
+    """
+    for position, standard in enumerate(STANDARD_MODULE_COUNTS):
+        if standard == module:
+            return position
+    return None
+
+
 def standard_module_seconds(section: str) -> int:
     """Standard countdown of one complete Module for the Section."""
     return 32 * 60 if section == READING_AND_WRITING else 35 * 60

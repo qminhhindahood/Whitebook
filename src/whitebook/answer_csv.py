@@ -79,6 +79,15 @@ TYPE_VALUES = {
 CATEGORY_VALUES = {_key(value): value for value in READING_CATEGORIES + MATH_CATEGORIES}
 
 
+def _ascii_integer(raw_value: str) -> int | None:
+    """Parse a plain ASCII whole number; Unicode digits and signs are rejected
+    so a stored manifest value is always what the author visually typed."""
+    text = raw_value.strip()
+    if not text.isascii() or not text.isdigit():
+        return None
+    return int(text)
+
+
 def _diagnostic(code: str, row: int | None, field: str | None) -> CsvDiagnostic:
     messages = {
         "csv_too_large": "The Answer CSV exceeds the configured size limit.",
@@ -142,17 +151,11 @@ def parse_answer_csv(
         if raw["section"].strip() and section is None:
             diagnostics.append(_diagnostic("invalid_section", source_row, "section"))
 
-        try:
-            module = int(raw["module"])
-        except ValueError:
-            module = 0
+        module = _ascii_integer(raw["module"]) or 0
         if raw["module"].strip() and module not in (1, 2):
             diagnostics.append(_diagnostic("invalid_module", source_row, "module"))
 
-        try:
-            question_number = int(raw["question_number"])
-        except ValueError:
-            question_number = 0
+        question_number = _ascii_integer(raw["question_number"]) or 0
         if raw["question_number"].strip() and question_number <= 0:
             diagnostics.append(
                 _diagnostic("invalid_question_number", source_row, "question_number")
