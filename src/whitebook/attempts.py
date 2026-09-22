@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import time
 import uuid
 from collections import Counter
@@ -23,6 +24,7 @@ from whitebook.grading import (
     summarize_grades,
 )
 from whitebook.math_config import load_math_configuration, reference_sheet_setting
+from whitebook.package_eligibility import classify_section_exam
 from whitebook.practice_rules import (
     PracticeQuestion,
     PracticeRequest,
@@ -30,6 +32,8 @@ from whitebook.practice_rules import (
 )
 from whitebook.sat_policy import (
     BREAK_SECONDS,
+    section_exam_module_count,
+    section_exam_total_questions,
     standard_module_position,
     standard_module_seconds,
 )
@@ -47,6 +51,14 @@ class Clock(Protocol):
     def now(self) -> float: ...
 
 
+class RandomSource(Protocol):
+    def sample(
+        self, population: list[dict[str, Any]], count: int
+    ) -> list[dict[str, Any]]: ...
+
+    def shuffle(self, values: list[dict[str, Any]]) -> None: ...
+
+
 class SystemClock:
     def now(self) -> float:
         return time.time()
@@ -55,10 +67,17 @@ class SystemClock:
 class AttemptEngine:
     """Owns frozen plans, durable learner state, and Raw Accuracy results."""
 
-    def __init__(self, data_root: Path, *, clock: Clock | None = None) -> None:
+    def __init__(
+        self,
+        data_root: Path,
+        *,
+        clock: Clock | None = None,
+        random_source: RandomSource | None = None,
+    ) -> None:
         self._data_root = data_root
         self._authoring = PackageAuthoring(data_root)
         self._clock = clock or SystemClock()
+        self._random = random_source or random.SystemRandom()
         self._diagnostics = DiagnosticLog(data_root)
 
     def practice_options(self, package_id: str) -> dict[str, object]:
@@ -98,7 +117,7 @@ class AttemptEngine:
         package = self._require_package(
             package_id, allow_archived=bool(resume_attempt_id)
         )
-        if kind not in {"practice", "simulation"}:
+        if kind not in {"practice", "simulation", "section_exam"}:
             raise AttemptError("invalid_attempt_kind", "Attempt kind is not supported.")
         if kind == "simulation" and not package["simulationEligible"]:
             raise AttemptError(
@@ -120,52 +139,17 @@ class AttemptEngine:
                     "invalid_selection",
                     "Check the Practice selection fields and try again.",
                 ) from error
+        selection = plan["selection"]
 
-        stages, math_tool = self._readiness_stages(package, plan, selection)
-        failed = next((stage for stage in stages if stage["status"] == "failed"), None)
-        loading = next(
-            (stage for stage in stages if stage["status"] == "loading"), None
+        readiness = self._readiness(package, plan, selection)
+        return self._create_setup(
+            package_id=package_id,
+            kind=kind,
+            selection=selection,
+            plan=plan,
+            readiness=readiness,
+            resume_attempt_id=resume_attempt_id,
         )
-        gate_status = "failed" if failed else "loading" if loading else "ready"
-        readiness = {
-            "status": gate_status,
-            "failedStage": failed["name"] if failed else None,
-            "allowedActions": self._gate_actions(gate_status, failed, loading),
-            "stages": stages,
-            "mathTool": math_tool,
-        }
-        setup_id = str(uuid.uuid4())
-        now = self._timestamp()
-        with connect(self._data_root) as connection:
-            connection.execute(
-                """
-                INSERT INTO attempt_setups (
-                    id, package_id, kind, selection_json, plan_json,
-                    readiness_json, resume_attempt_id, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    setup_id,
-                    package_id,
-                    kind,
-                    json.dumps(selection, separators=(",", ":")),
-                    json.dumps(plan, separators=(",", ":")),
-                    self._stored_readiness(readiness),
-                    resume_attempt_id,
-                    now,
-                ),
-            )
-            connection.commit()
-        self._log_readiness(setup_id, readiness)
-        return {
-            "setupId": setup_id,
-            "packageId": package_id,
-            "kind": kind,
-            "selection": selection,
-            "sourcePdfUrl": plan["sourcePdfUrl"],
-            "questions": plan["questions"],
-            **readiness,
-        }
 
     def begin(self, setup_id: str) -> dict[str, object]:
         with connect(self._data_root) as connection:
@@ -244,16 +228,72 @@ class AttemptEngine:
 
     def retry_setup(self, setup_id: str) -> dict[str, object]:
         setup = self._load_setup(setup_id)
-        replacement = self.prepare(
-            package_id=setup["package_id"],
-            kind=setup["kind"],
-            selection=json.loads(setup["selection_json"]),
-            resume_attempt_id=setup["resume_attempt_id"],
-        )
+        selection = json.loads(setup["selection_json"])
+        if setup["kind"] == "section_exam" and not setup["resume_attempt_id"]:
+            package = self._require_package(setup["package_id"])
+            plan = json.loads(setup["plan_json"])
+            readiness = self._readiness(package, plan, selection)
+            replacement = self._create_setup(
+                package_id=setup["package_id"],
+                kind=setup["kind"],
+                selection=selection,
+                plan=plan,
+                readiness=readiness,
+                resume_attempt_id=setup["resume_attempt_id"],
+            )
+        else:
+            replacement = self.prepare(
+                package_id=setup["package_id"],
+                kind=setup["kind"],
+                selection=selection,
+                resume_attempt_id=setup["resume_attempt_id"],
+            )
         with connect(self._data_root) as connection:
             connection.execute("DELETE FROM attempt_setups WHERE id = ?", (setup_id,))
             connection.commit()
         return replacement
+
+    def _create_setup(
+        self,
+        *,
+        package_id: str,
+        kind: str,
+        selection: dict[str, Any],
+        plan: dict[str, Any],
+        readiness: dict[str, Any],
+        resume_attempt_id: str | None,
+    ) -> dict[str, object]:
+        setup_id = str(uuid.uuid4())
+        with connect(self._data_root) as connection:
+            connection.execute(
+                """
+                INSERT INTO attempt_setups (
+                    id, package_id, kind, selection_json, plan_json,
+                    readiness_json, resume_attempt_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    setup_id,
+                    package_id,
+                    kind,
+                    json.dumps(selection, separators=(",", ":")),
+                    json.dumps(plan, separators=(",", ":")),
+                    self._stored_readiness(readiness),
+                    resume_attempt_id,
+                    self._timestamp(),
+                ),
+            )
+            connection.commit()
+        self._log_readiness(setup_id, readiness)
+        return {
+            "setupId": setup_id,
+            "packageId": package_id,
+            "kind": kind,
+            "selection": selection,
+            "sourcePdfUrl": plan["sourcePdfUrl"],
+            "questions": plan["questions"],
+            **readiness,
+        }
 
     def get_attempt(self, attempt_id: str) -> dict[str, object] | None:
         with connect(self._data_root) as connection:
@@ -470,6 +510,11 @@ class AttemptEngine:
                 "simulation_early_submit",
                 "Simulation Modules close only when their standard time expires.",
             )
+        if row["kind"] == "section_exam":
+            raise AttemptError(
+                "section_exam_finish_module_required",
+                "Section Exam Modules close with Finish Module or timer expiry.",
+            )
         result = self._grade(plan, state)
         state["lastTick"] = None
         now = self._timestamp()
@@ -488,6 +533,19 @@ class AttemptEngine:
                 ),
             )
             connection.commit()
+        attempt = self.get_attempt(attempt_id)
+        assert attempt is not None
+        return attempt
+
+    def finish_module(self, attempt_id: str) -> dict[str, object]:
+        row, plan, state = self._active_attempt(attempt_id)
+        if row["kind"] != "section_exam":
+            raise AttemptError(
+                "finish_module_unavailable",
+                "Finish Module is available only for Section Exam Attempts.",
+            )
+        status, result = self._close_section_exam_module(plan, state)
+        self._persist(row, state, status=status, result=result)
         attempt = self.get_attempt(attempt_id)
         assert attempt is not None
         return attempt
@@ -651,7 +709,57 @@ class AttemptEngine:
     def _build_plan(
         self, package: dict[str, Any], kind: str, selection: dict[str, Any]
     ) -> dict[str, Any]:
-        if kind == "simulation":
+        if kind == "section_exam":
+            eligibility = classify_section_exam(package["questions"])
+            if not eligibility.eligible:
+                if "mixed_sections" in eligibility.reasons:
+                    raise AttemptError(
+                        "section_exam_mixed_sections",
+                        "Section Exam requires a package containing only one supported Section.",
+                    )
+                if "invalid_section" in eligibility.reasons:
+                    raise AttemptError(
+                        "section_exam_invalid_section",
+                        "Section Exam supports only Math or Reading and Writing questions.",
+                    )
+                if "invalid_question" in eligibility.reasons:
+                    raise AttemptError(
+                        "section_exam_invalid_questions",
+                        "This Test Package contains invalid questions for a Section Exam.",
+                    )
+                required = section_exam_total_questions(eligibility.section or "")
+                raise AttemptError(
+                    "section_exam_insufficient_questions",
+                    f"This Test Package needs {required} valid {eligibility.section} questions for a Section Exam, but only {eligibility.question_count} are available.",
+                )
+            section = eligibility.section
+            assert section is not None
+            required = section_exam_total_questions(section)
+            assert required is not None
+            module_count = section_exam_module_count(section)
+            assert module_count is not None
+            selected = list(
+                self._random.sample(list(package["questions"]), required)
+            )
+            self._random.shuffle(selected)
+            selection = {**selection, "section": section}
+            module_size = required // module_count
+            modules = [
+                {
+                    "section": section,
+                    "module": module_number,
+                    "questionIds": [
+                        question["id"]
+                        for question in selected[
+                            (module_number - 1) * module_size : module_number * module_size
+                        ]
+                    ],
+                    "durationSeconds": standard_module_seconds(section),
+                }
+                for module_number in range(1, module_count + 1)
+            ]
+            duration = None
+        elif kind == "simulation":
             selected = package["questions"]
             duration = None
         else:
@@ -703,21 +811,22 @@ class AttemptEngine:
             selected = [by_id[item.id] for item in planned.plan.questions]
             duration = planned.plan.duration_seconds
 
-        modules: list[dict[str, object]] = []
-        for question in selected:
-            identity = (question["section"], int(question["module"]))
-            if (
-                not modules
-                or (modules[-1]["section"], modules[-1]["module"]) != identity
-            ):
-                modules.append(
-                    {
-                        "section": identity[0],
-                        "module": identity[1],
-                        "questionIds": [],
-                    }
-                )
-            modules[-1]["questionIds"].append(question["id"])
+        if kind != "section_exam":
+            modules = []
+            for question in selected:
+                identity = (question["section"], int(question["module"]))
+                if (
+                    not modules
+                    or (modules[-1]["section"], modules[-1]["module"]) != identity
+                ):
+                    modules.append(
+                        {
+                            "section": identity[0],
+                            "module": identity[1],
+                            "questionIds": [],
+                        }
+                    )
+                modules[-1]["questionIds"].append(question["id"])
         if kind == "simulation":
             # A Simulation follows the standard sitting order regardless of
             # Answer CSV row order, so the Section break always lands after
@@ -744,6 +853,24 @@ class AttemptEngine:
             "questions": selected,
             "modules": modules,
             "durationSeconds": duration,
+        }
+
+    def _readiness(
+        self,
+        package: dict[str, Any],
+        plan: dict[str, Any],
+        selection: dict[str, Any],
+    ) -> dict[str, object]:
+        stages, math_tool = self._readiness_stages(package, plan, selection)
+        failed = next((stage for stage in stages if stage["status"] == "failed"), None)
+        loading = next((stage for stage in stages if stage["status"] == "loading"), None)
+        gate_status = "failed" if failed else "loading" if loading else "ready"
+        return {
+            "status": gate_status,
+            "failedStage": failed["name"] if failed else None,
+            "allowedActions": self._gate_actions(gate_status, failed, loading),
+            "stages": stages,
+            "mathTool": math_tool,
         }
 
     def _readiness_stages(
@@ -1030,6 +1157,8 @@ class AttemptEngine:
         if row["kind"] == "practice":
             state["lastTick"] = None
             return "completed", self._grade(plan, state)
+        if row["kind"] == "section_exam":
+            return self._close_section_exam_module(plan, state)
         active_index = state["activeModuleIndex"]
         if active_index not in state["lockedModules"]:
             state["lockedModules"].append(active_index)
@@ -1042,9 +1171,26 @@ class AttemptEngine:
             return "break", None
         return "transition", None
 
+    def _close_section_exam_module(
+        self, plan: dict, state: dict
+    ) -> tuple[str, dict[str, object] | None]:
+        active_index = state["activeModuleIndex"]
+        if active_index not in state["lockedModules"]:
+            state["lockedModules"].append(active_index)
+        state["lastTick"] = None
+        if active_index == len(plan["modules"]) - 1:
+            return "completed", self._grade(plan, state)
+        state["breakRemainingSeconds"] = None
+        return "transition", None
+
     def _grade(self, plan: dict, state: dict) -> dict[str, object]:
         question_results = []
         statuses = []
+        module_by_question = {
+            question_id: module["module"]
+            for module in plan["modules"]
+            for question_id in module["questionIds"]
+        }
         for question in plan["questions"]:
             response = state["responses"].get(question["id"])
             if (
@@ -1073,7 +1219,9 @@ class AttemptEngine:
                 {
                     "id": question["id"],
                     "section": question["section"],
-                    "module": question["module"],
+                    "module": module_by_question.get(
+                        question["id"], question["module"]
+                    ),
                     "questionNumber": question["question_number"],
                     "category": question.get("category"),
                     "responseType": question["response_type"],

@@ -41,7 +41,9 @@ export function HistoryScreen({
               <p>
                 {attempt.kind === "simulation"
                   ? "Full SAT Simulation"
-                  : "Practice"}{" "}
+                  : attempt.kind === "section_exam"
+                    ? "Section Exam Attempt"
+                    : "Practice"}{" "}
                 · Revision {attempt.plan.packageRevision}
               </p>
             </div>

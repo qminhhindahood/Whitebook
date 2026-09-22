@@ -9,14 +9,16 @@ export function LibraryScreen({
   attempts,
   openImport,
   openBuilder,
-  startSimulation,
+  startExam,
+  startingPackageId = null,
 }: {
   packages: TestPackage[];
   packagesLoading?: boolean;
   attempts: Attempt[];
   openImport: () => void;
   openBuilder: (item: TestPackage) => void;
-  startSimulation: (item: TestPackage) => void;
+  startExam: (item: TestPackage) => void;
+  startingPackageId?: string | null;
 }) {
   const [query, setQuery] = useState("");
   const paused = attempts.filter((attempt) => attempt.status === "paused");
@@ -47,8 +49,8 @@ export function LibraryScreen({
         <div>
           <h2>Study workspace</h2>
           <p>
-            Choose a package for Practice or a complete four-Module Simulation
-            Attempt. Package maintenance and local backups live in Import.
+            Choose a package for a randomized Section Exam or Practice. Package
+            maintenance and local backups live in Import.
           </p>
         </div>
         <button className="primary-action" type="button" onClick={openImport}>
@@ -100,20 +102,27 @@ export function LibraryScreen({
                 ))}
               </div>
               <span
-                className={`status-chip ${item.simulationEligible ? "status-chip--success" : ""}`}
+                className={`status-chip ${item.sectionExamEligible ? "status-chip--success" : ""}`}
               >
-                {item.simulationEligible
-                  ? "Practice + Simulation"
-                  : "Practice"}
+                {item.sectionExamEligible
+                  ? `Section Exam · ${item.sectionExamSection}`
+                  : "Section Exam unavailable"}
               </span>
+              {!item.sectionExamEligible && item.sectionExamEligibilityReasons.length > 0 && (
+                <small className="package-card__warning">
+                  {item.sectionExamEligibilityReasons[0].replaceAll("_", " ")}
+                </small>
+              )}
               <div className="package-card__actions">
                 <button
                   type="button"
                   className="primary-action"
-                  onClick={() => startSimulation(item)}
-                  disabled={!item.simulationEligible}
+                  onClick={() => startExam(item)}
+                  disabled={
+                    !item.sectionExamEligible || startingPackageId !== null
+                  }
                 >
-                  Start Exam
+                  {startingPackageId === item.id ? "Preparing…" : "Start Exam"}
                 </button>
                 <button
                   type="button"

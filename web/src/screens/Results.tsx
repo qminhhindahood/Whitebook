@@ -43,7 +43,9 @@ export function ResultsScreen({
             {attempt.plan.packageTitle} ·{" "}
             {attempt.kind === "simulation"
               ? "Simulation Attempt"
-              : "Practice Attempt"}
+              : attempt.kind === "section_exam"
+                ? "Section Exam Attempt"
+                : "Practice Attempt"}
           </p>
         </div>
         <strong>{result.percentage.toFixed(1)}%</strong>

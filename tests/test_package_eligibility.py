@@ -1,4 +1,8 @@
-from whitebook.package_eligibility import QuestionDescriptor, classify_package
+from whitebook.package_eligibility import (
+    QuestionDescriptor,
+    classify_package,
+    classify_section_exam,
+)
 
 
 def full_shape() -> list[QuestionDescriptor]:
@@ -141,3 +145,62 @@ def test_interleaved_module_rows_block_simulation_but_not_practice() -> None:
     assert result.practice_eligible is True
     assert result.simulation_eligible is False
     assert set(result.reasons) == {"interleaved_modules"}
+
+
+def section_exam_question(
+    section: str = "Math",
+    module: int = 1,
+    number: int = 1,
+    question_id: str | None = None,
+) -> dict[str, object]:
+    return {
+        "id": question_id or f"{section}-{module}-{number}",
+        "section": section,
+        "module": module,
+        "question_number": number,
+        "response_type": "multiple_choice",
+        "accepted_answers": ["A"],
+        "regions": [],
+    }
+
+
+def test_section_exam_accepts_a_single_section_pool_with_enough_valid_questions() -> None:
+    questions = [section_exam_question(number=index) for index in range(1, 45)]
+
+    result = classify_section_exam(questions)
+
+    assert result.eligible is True
+    assert result.section == "Math"
+    assert result.question_count == 44
+    assert result.reasons == ()
+
+
+def test_section_exam_rejects_mixed_sections_and_unsupported_questions() -> None:
+    mixed = [section_exam_question()] + [
+        section_exam_question("Reading and Writing", number=1)
+    ]
+    unsupported = [section_exam_question("Science")]
+
+    mixed_result = classify_section_exam(mixed)
+    unsupported_result = classify_section_exam(unsupported)
+
+    assert mixed_result.eligible is False
+    assert mixed_result.section is None
+    assert "mixed_sections" in mixed_result.reasons
+    assert unsupported_result.eligible is False
+    assert "invalid_section" in unsupported_result.reasons
+
+
+def test_section_exam_rejects_invalid_questions_and_insufficient_pools() -> None:
+    invalid = section_exam_question()
+    invalid["accepted_answers"] = []
+    questions = [invalid] + [
+        section_exam_question(number=index) for index in range(2, 44)
+    ]
+
+    result = classify_section_exam(questions)
+
+    assert result.eligible is False
+    assert result.question_count == 42
+    assert "invalid_question" in result.reasons
+    assert "insufficient_questions" in result.reasons

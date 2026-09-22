@@ -78,6 +78,10 @@ export type TestPackage = {
   practiceEligible: boolean;
   simulationEligible: boolean;
   eligibilityReasons: string[];
+  sectionExamEligible: boolean;
+  sectionExamSection: string | null;
+  sectionExamQuestionCount: number;
+  sectionExamEligibilityReasons: string[];
   archived: boolean;
   createdAt: string;
   questions: PackageQuestion[];
@@ -103,7 +107,7 @@ export type AttemptGate = {
   questions: PackageQuestion[];
   setupId: string;
   packageId: string;
-  kind: "practice" | "simulation";
+  kind: "practice" | "simulation" | "section_exam";
   selection: Record<string, unknown>;
   status: "ready" | "loading" | "failed";
   failedStage: string | null;
@@ -155,7 +159,7 @@ export type AttemptResult = {
 export type Attempt = {
   id: string;
   packageId: string;
-  kind: "practice" | "simulation";
+  kind: "practice" | "simulation" | "section_exam";
   status: "active" | "paused" | "transition" | "break" | "completed";
   plan: {
     packageId: string;

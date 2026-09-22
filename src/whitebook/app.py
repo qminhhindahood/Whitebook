@@ -548,6 +548,13 @@ def create_app(
         except AttemptError as error:
             raise HTTPException(status_code=409, detail=error.message) from error
 
+    @app.post("/api/attempts/{attempt_id}/finish-module")
+    async def finish_module(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.finish_module(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
     @app.post("/api/attempts/{attempt_id}/tick")
     async def tick_attempt(attempt_id: str) -> dict[str, object]:
         try:

@@ -220,12 +220,13 @@ export function Player({
       .catch((error: Error) => fail(error.message));
   const finish = async () => {
     await session.ensureSaved("submitting");
-    if (
-      window.confirm(
-        "Submit this Practice Attempt? Unanswered questions count in Raw Accuracy.",
-      )
-    )
-      await session.finishPractice();
+    const prompt =
+      attempt.kind === "section_exam"
+        ? "Finish this Module? The Module will be locked, and unanswered questions count in Raw Accuracy."
+        : "Submit this Practice Attempt? Unanswered questions count in Raw Accuracy.";
+    if (!window.confirm(prompt)) return;
+    if (attempt.kind === "section_exam") await session.finishModule();
+    else await session.finishPractice();
   };
   const banner = (
     <div className="question-banner">
@@ -664,6 +665,17 @@ export function Player({
               }
             >
               Submit Practice
+            </button>
+          )}
+          {attempt.kind === "section_exam" && (
+            <button
+              type="button"
+              className="pill pill--soft"
+              onClick={() =>
+                void finish().catch((error: Error) => fail(error.message))
+              }
+            >
+              Finish Module
             </button>
           )}
           <button

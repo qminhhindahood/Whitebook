@@ -11,7 +11,11 @@ from pathlib import Path
 from pypdf import PdfReader
 
 from whitebook.answer_csv import AnswerCsvResult, parse_answer_csv
-from whitebook.package_eligibility import QuestionDescriptor, classify_package
+from whitebook.package_eligibility import (
+    QuestionDescriptor,
+    classify_package,
+    classify_section_exam,
+)
 from whitebook.pdf_preflight import PdfPreflightResult, preflight_pdf
 from whitebook.question_presentation import QuestionPresentation
 from whitebook.storage import connect
@@ -755,6 +759,7 @@ class PackageAuthoring:
     def _package_payload(row: object) -> dict[str, object]:
         questions = json.loads(row["manifest_json"])
         sections = list(dict.fromkeys(question["section"] for question in questions))
+        section_exam = classify_section_exam(questions)
         return {
             "id": row["id"],
             "familyId": row["family_id"],
@@ -766,6 +771,10 @@ class PackageAuthoring:
             "practiceEligible": True,
             "simulationEligible": bool(row["simulation_eligible"]),
             "eligibilityReasons": json.loads(row["eligibility_reasons_json"]),
+            "sectionExamEligible": section_exam.eligible,
+            "sectionExamSection": section_exam.section,
+            "sectionExamQuestionCount": section_exam.question_count,
+            "sectionExamEligibilityReasons": list(section_exam.reasons),
             "archived": bool(row["archived"]),
             "createdAt": row["created_at"],
             "questions": questions,

@@ -87,12 +87,20 @@ export function useAttemptSession(
     update(await postJson<Attempt>(`/api/attempts/${attempt.id}/submit`));
   }, [attempt.id, ensureSaved, update]);
 
+  const finishModule = useCallback(async () => {
+    await ensureSaved("finishing this Module");
+    update(
+      await postJson<Attempt>(`/api/attempts/${attempt.id}/finish-module`),
+    );
+  }, [attempt.id, ensureSaved, update]);
+
   return {
     draftFor,
     setResponse,
     setReview,
     navigate,
     finishPractice,
+    finishModule,
     ensureSaved,
   };
 }

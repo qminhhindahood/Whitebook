@@ -48,6 +48,9 @@ export function App() {
   const [questionPoolIds, setQuestionPoolIds] = useState<
     string[] | undefined
   >();
+  const [startingPackageId, setStartingPackageId] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const refresh = useCallback(async () => {
     setPackagesLoading(true);
@@ -88,14 +91,19 @@ export function App() {
     setGate(next);
     setScreen("loading");
   };
-  const prepareSimulation = (item: TestPackage) =>
+  const prepareSectionExam = (item: TestPackage) => {
+    if (startingPackageId) return;
+    setStartingPackageId(item.id);
+    setError("");
     void postJson<AttemptGate>("/api/attempt-setups", {
       packageId: item.id,
-      kind: "simulation",
+      kind: "section_exam",
       selection: {},
     })
       .then(openGate)
-      .catch((caught: Error) => setError(caught.message));
+      .catch((caught: Error) => setError(caught.message))
+      .finally(() => setStartingPackageId(null));
+  };
   const begin = async (currentGate: AttemptGate) => {
     const next = await postJson<Attempt>(
       `/api/attempt-setups/${currentGate.setupId}/begin`,
@@ -225,7 +233,8 @@ export function App() {
                 setBuilderBase("library");
                 setScreen("builder");
               }}
-              startSimulation={prepareSimulation}
+              startExam={prepareSectionExam}
+              startingPackageId={startingPackageId}
             />
           )}
           {baseScreen === "import" && (

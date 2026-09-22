@@ -336,6 +336,46 @@ it("transitions into a module without changing hook order", async () => {
   );
 });
 
+it("confirms and finishes the active Section Exam Module", async () => {
+  const first = readingQuestion();
+  const second = { ...readingQuestion(), id: "rw2", question_number: 4 };
+  const attempt = {
+    ...attemptWith(first, second),
+    kind: "section_exam" as const,
+    remainingSeconds: 32 * 60,
+    plan: {
+      ...attemptWith(first, second).plan,
+      modules: [
+        {
+          section: "Reading and Writing",
+          module: 1,
+          questionIds: [first.id],
+          durationSeconds: 32 * 60,
+        },
+        {
+          section: "Reading and Writing",
+          module: 2,
+          questionIds: [second.id],
+          durationSeconds: 32 * 60,
+        },
+      ],
+    },
+  } as unknown as Attempt;
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  post.mockResolvedValue({ ...attempt, status: "transition", lockedModules: [0] });
+
+  render(<Player initial={attempt} onChange={vi.fn()} fail={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Finish Module" }));
+
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledWith(`/api/attempts/${attempt.id}/finish-module`),
+  );
+  expect(confirm).toHaveBeenCalledWith(
+    expect.stringContaining("Finish this Module"),
+  );
+  confirm.mockRestore();
+});
+
 it("keeps rapid SPR typing visible and saves edits in order", async () => {
   const attempt = attemptWith(sprQuestion());
   let release!: (value: unknown) => void;

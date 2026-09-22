@@ -163,6 +163,10 @@ def test_publication_is_immutable_visible_and_classifies_partial_packages(
     assert package["questionCount"] == 2
     assert package["practiceEligible"] is True
     assert package["simulationEligible"] is False
+    assert package["sectionExamEligible"] is False
+    assert package["sectionExamSection"] == "Reading and Writing"
+    assert package["sectionExamQuestionCount"] == 2
+    assert "insufficient_questions" in package["sectionExamEligibilityReasons"]
     assert package["eligibilityReasons"] == [
         "missing_standard_module",
         "wrong_question_count",

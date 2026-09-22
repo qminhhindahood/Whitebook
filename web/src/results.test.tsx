@@ -158,3 +158,18 @@ it("keeps the region fallback for historical questions without presentation", ()
     .find((text) => text?.includes("A"));
   expect(legacy).toBeTruthy();
 });
+
+it("labels Section Exam Results distinctly from Practice and Simulation", () => {
+  render(
+    <ResultsScreen
+      attempt={{ ...attempt(), kind: "section_exam" }}
+      openGate={vi.fn()}
+      onMistakes={vi.fn()}
+      fail={vi.fn()}
+    />,
+  );
+
+  expect(document.querySelector(".results-hero p")?.textContent).toContain(
+    "Section Exam Attempt",
+  );
+});
