@@ -17,12 +17,12 @@ export type AccountEnv = {
 
 type Identity = { sub: string; email: string; name: string };
 type Account = { id: string; provider_subject: string; email: string; display_name: string; nickname: string };
-type Session = { token_hash: string; csrf_hash: string; expires_at: number; account_id: string };
+export type Session = { token_hash: string; csrf_hash: string; expires_at: number; account_id: string };
 type Flow = { nonce: string; code_verifier: string; expires_at: number };
 
 const SESSION_SECONDS = 7 * 24 * 60 * 60;
 const FLOW_SECONDS = 10 * 60;
-const noStore = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", Vary: "Cookie" };
+export const noStore = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", Vary: "Cookie" };
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 
 function randomToken(): string {
@@ -51,11 +51,11 @@ function flowCookie(value: string, age = FLOW_SECONDS): string {
   return `__Host-wb_oauth=${value}; Path=/; Max-Age=${age}; HttpOnly; Secure; SameSite=Lax`;
 }
 
-function failure(status: number, code: string, message: string): Response {
+export function failure(status: number, code: string, message: string): Response {
   return Response.json({ error: { code, message } }, { status, headers: noStore });
 }
 
-function json(value: unknown, status = 200): Response {
+export function json(value: unknown, status = 200): Response {
   return Response.json(value, { status, headers: noStore });
 }
 
@@ -63,14 +63,14 @@ function sameOrigin(request: Request, origin: string): boolean {
   return request.headers.get("Origin") === origin && new URL(request.url).origin === origin;
 }
 
-async function currentSession(request: Request, env: AccountEnv): Promise<Session | null> {
+export async function currentSession(request: Request, env: AccountEnv): Promise<Session | null> {
   const token = cookie(request, "__Host-wb_session");
   if (!token) return null;
   return env.DB.prepare("SELECT token_hash, csrf_hash, expires_at, account_id FROM learner_sessions WHERE token_hash = ? AND expires_at > ?")
     .bind(await sha256(token), Math.floor(Date.now() / 1000)).first<Session>();
 }
 
-async function requireMutation(request: Request, env: AccountEnv, session: Session): Promise<Response | null> {
+export async function requireMutation(request: Request, env: AccountEnv, session: Session): Promise<Response | null> {
   if (!env.APP_ORIGIN || !sameOrigin(request, env.APP_ORIGIN))
     return failure(403, "invalid_origin", "Open Whitebook from its official address and try again.");
   const csrf = request.headers.get("X-CSRF-Token");
