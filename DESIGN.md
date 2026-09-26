@@ -177,7 +177,12 @@ control color transitions, pulsing stage dot while loading. All removed under
 
 - **Don't** copy Bluebook/Bluebooky/College Board logos, wording, or trade
   dress; branding stays "Whitebook" with the authored mark.
-- **Don't** add countdown banners, dated administrations, difficulty labels,
-  or per-question Check buttons — the product has no such data or behavior.
+- **Don't** add countdown banners in the player, difficulty labels, or
+  per-question Check buttons — the product has no such data or behavior. The
+  one exception is the Dashboard's SAT test-date section: a compact
+  calendar-day countdown to the learner's chosen official SAT Weekend date,
+  fed by the reviewed College Board catalog (date-only; never an 8 a.m. or
+  other time claim). This supersedes the earlier blanket
+  no-dated-administrations rule.
 - **Don't** reintroduce the left rail or flat 5px-radius world.
 - **Don't** use emoji or Unicode glyphs as interface icons.

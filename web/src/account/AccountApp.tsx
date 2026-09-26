@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { SatWeekend } from "./SatWeekend";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
@@ -99,6 +100,7 @@ export function AccountApp() {
   }
 
   const loginError = new URLSearchParams(window.location.search).get("error");
+  const handleSessionEnded = useCallback(() => setMe(null), []);
   return <main className={`account-shell${me ? " account-shell--dashboard" : ""}`}>
     <header className="account-header"><a href="/dashboard" className="account-brand">Whitebook</a><span>Personal study workspace</span></header>
     {loading ? <section className="account-card"><p>Opening your workspace…</p></section> : me ?
@@ -108,6 +110,7 @@ export function AccountApp() {
           <p className="dashboard-welcome">Welcome, {me.account.nickname || me.account.displayName}</p>
           <p>Your private study space follows you across devices.</p>
         </section>
+        <SatWeekend onSessionEnded={handleSessionEnded} />
         <section className="dashboard-empty" aria-labelledby="activity-heading">
           <h2 id="activity-heading">Your study activity</h2>
           <p>Nothing to review yet. Your work will appear here as you study.</p>

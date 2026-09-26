@@ -32,6 +32,10 @@ it("shows account data, saves a nickname, renews and clears private state on sig
       account: { id: "account-1", email: "learner@example.test", displayName: "Learner", nickname: "", role: "learner" },
       session: { expiresAt: 100 },
     });
+    if (path === "/api/account/sat-dates" && (!init || !init.method)) return Response.json({
+      catalog: { source: "College Board SAT test dates and deadlines", sourceUrl: "https://satsuite.collegeboard.org/sat/dates-deadlines", lastCheckedAt: "2026-09-26", dates: [{ date: "2026-10-03", status: "confirmed" }] },
+      selection: { dates: [], primary: null, timeZone: null },
+    });
     if (path === "/api/account/profile") return Response.json({ nickname: "Sam" });
     if (path === "/api/auth/renew") return Response.json({ expiresAt: 200 });
     if (path === "/api/auth/signout") return new Response(null, { status: 204 });
@@ -40,6 +44,7 @@ it("shows account data, saves a nickname, renews and clears private state on sig
   render(<AccountApp />);
   expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Your study activity" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "SAT test date" })).toBeTruthy();
   expect(await screen.findByText("Welcome, Learner")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Nickname"), { target: { value: "Sam" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -49,6 +54,6 @@ it("shows account data, saves a nickname, renews and clears private state on sig
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
   expect(await screen.findByRole("link", { name: "Continue with Google" })).toBeTruthy();
   expect(screen.queryByText("Welcome, Sam")).toBeNull();
-  expect(calls.map((call) => call.path)).toEqual(["/api/account/me", "/api/account/profile", "/api/auth/renew", "/api/auth/signout"]);
-  await waitFor(() => expect(calls.slice(1).every((call) => call.init?.method === "POST" && call.init?.credentials === "same-origin")).toBe(true));
+  expect(calls.map((call) => call.path)).toEqual(["/api/account/me", "/api/account/sat-dates", "/api/account/profile", "/api/auth/renew", "/api/auth/signout"]);
+  await waitFor(() => expect(calls.filter((call) => call.init?.method).every((call) => call.init?.method === "POST" && call.init?.credentials === "same-origin")).toBe(true));
 });

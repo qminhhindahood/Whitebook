@@ -91,3 +91,11 @@ _Avoid_: Untimed, time count, stopwatch mode
 **Raw Accuracy**:
 The percentage calculated as correct answers divided by all questions in an Attempt; unanswered questions reduce the percentage.
 _Avoid_: SAT score, predicted score, scaled score
+
+**SAT Weekend Catalog**:
+The reviewed list of official SAT Weekend administrations with each date's confirmed or anticipated status, the College Board source, and the last-checked date; SAT School Day windows are absent by definition.
+_Avoid_: Test date list, School Day dates, College Board scrape
+
+**Primary SAT Target**:
+The one selected official SAT Weekend date a learner marks as their intended administration; the Dashboard counts calendar days to it in the learner's saved IANA time zone, showing Test day on the date and prompting for a later target after it passes.
+_Avoid_: Exam deadline, countdown timer, test time
