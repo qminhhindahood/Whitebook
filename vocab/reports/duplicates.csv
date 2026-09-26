@@ -1,0 +1,748 @@
+front_key,front,stable_id,source_deck,original_id,meaning_vi,definition_en,group_size,distinct_senses,within_source_dupes,proposed_action
+corroborate,corroborate,c172e76e8df8abe9,anki_starter,1788603784663,"xác nhận, chứng thực",,3,3,0,owner-review
+corroborate,corroborate,1511c982cb7ab4dc,c1c2_wic500,c1c2-002,"xác nhận, củng cố",to confirm or give support to a statement,3,3,0,owner-review
+corroborate,corroborate,829f9a3bd5c9c721,b2c1_1000,b2c1-0935,"chứng thực, xác nhận",to confirm or give support to a statement,3,3,0,owner-review
+substantiate,substantiate,f747d0ad9120f7f6,anki_starter,1788603784665,"chứng minh, xác thực",,2,2,0,owner-review
+substantiate,substantiate,c1ccd18a80db152c,c1c2_wic500,c1c2-006,"chứng minh, xác minh",to provide evidence to support or prove,2,2,0,owner-review
+equivocal,equivocal,ab7cbed77c392f59,anki_starter,1788603784667,"mập mờ, nước đôi",,2,2,0,owner-review
+equivocal,equivocal,bbfc576a62f593a5,c1c2_wic500,c1c2-003,"nhập nhằng, mơ hồ",open to more than one interpretation; ambiguous,2,2,0,owner-review
+disregard,disregard,f441ac0b9e9ad6bc,anki_starter,1788603784669,"ngó lơ, xem nhẹ, không bận tâm",,2,2,0,owner-review
+disregard,disregard,b83950cf377ec63f,c1c2_wic500,c1c2-064,"phớt lờ, không quan tâm",to pay no attention to; to ignore,2,2,0,owner-review
+disparity,disparity,306fe6af2c5daa51,anki_starter,1788603784671,"sự chênh lệch, sự khác biệt lớn",,2,2,0,owner-review
+disparity,disparity,123439d2bb5ced55,c1c2_wic500,c1c2-047,"sự chênh lệch, khác biệt lớn",a great difference,2,2,0,owner-review
+ubiquitous,ubiquitous,d6d951b4d950c7df,anki_starter,1788603784675,"ở đâu cũng có, phổ biến",,2,2,0,owner-review
+ubiquitous,ubiquitous,9eb7e2c096f5a4a9,c1c2_wic500,c1c2-058,có mặt ở khắp nơi,"present, appearing, or found everywhere",2,2,0,owner-review
+supplant,supplant,9ed3f55bf26a68a7,anki_starter,1788603784677,"thay thế, chiếm chỗ",,2,2,0,owner-review
+supplant,supplant,f73f9f3d0892c405,c1c2_wic500,c1c2-010,"thay thế, hất cẳng","to replace, especially by underhand means",2,2,0,owner-review
+illuminate,illuminate,c36a6e2e02f436e1,anki_starter,1788603784679,"làm sáng tỏ, giải thích rõ, soi sáng",,2,2,0,owner-review
+illuminate,illuminate,febacab6e9467370,c1c2_wic500,c1c2-337,làm sáng tỏ,to make clear or understandable,2,2,0,owner-review
+repudiate,repudiate,69f75a546598cd47,anki_starter,1788603784683,"khước từ, từ chối",,2,2,0,owner-review
+repudiate,repudiate,00b2e982b8d06ac6,c1c2_wic500,c1c2-001,"bác bỏ, từ chối",to refuse to accept; to reject formally,2,2,0,owner-review
+buttress,buttress,93217a761c3efcba,anki_starter,1788603784685,"củng cố, làm vững chắc",,2,2,0,owner-review
+buttress,buttress,22235e38d3b856d6,c1c2_wic500,c1c2-217,củng cố,to increase the strength of; to support,2,2,0,owner-review
+accentuate,accentuate,12229a1296294067,anki_starter,1788603784687,"nhấn mạnh, làm nổi bật",,2,2,0,owner-review
+accentuate,accentuate,ab1d1743d889d4f4,c1c2_wic500,c1c2-123,"nhấn mạnh, làm nổi bật",to make more noticeable or prominent,2,2,0,owner-review
+yield,yield,8d3207a2eb3ddcf0,anki_starter,1788603784695,"sinh ra, mang lại (kết quả, sản phẩm)",,3,3,0,owner-review
+yield,yield,b83fb304b1876f1a,c1c2_wic500,c1c2-261,sinh ra; nhượng bộ,to produce or provide; to surrender,3,3,0,owner-review
+yield,yield,86d8aa7e6bbdccf2,b2c1_1000,b2c1-0072,"tạo ra, mang lại; nhường",to produce or provide; to give way,3,3,0,owner-review
+vindicate,vindicate,77514a59670c814a,anki_starter,1788603784697,"minh oan, chứng minh (là đúng)",,2,2,0,owner-review
+vindicate,vindicate,d235099fcb25bff4,c1c2_wic500,c1c2-026,"minh oan, biện hộ",to clear of blame; to justify,2,2,0,owner-review
+unequivocal,unequivocal,555c64488ff43ba3,anki_starter,1788603784699,"rõ ràng, dứt khoát",,2,2,0,owner-review
+unequivocal,unequivocal,b995487c5acacb63,c1c2_wic500,c1c2-088,"rõ ràng, dứt khoát",leaving no doubt; unambiguous,2,2,0,owner-review
+favorably,favorably,2e88731825abbeed,anki_starter,1788603784701,"một cách thiện cảm, thuận lợi, tích cực",,2,2,0,owner-review
+favorably,favorably,b19603dc6a87d366,b2c1_1000,b2c1-0997,một cách thuận lợi,in a positive or approving manner,2,2,0,owner-review
+preclude,preclude,1a756aeaa6478e54,anki_starter,1788603784703,"ngăn chặn, loại trừ",,3,3,0,owner-review
+preclude,preclude,07e7d60d78dd6312,c1c2_wic500,c1c2-009,"ngăn cản, loại trừ",to prevent something from happening,3,3,0,owner-review
+preclude,preclude,77881d6436a56f29,b2c1_1000,b2c1-0677,"ngăn cản, loại trừ",to prevent from happening; to make impossible,3,3,0,owner-review
+meticulous,meticulous,dbfe5851231000f8,anki_starter,1788603784705,"tỉ mỉ, kỹ lưỡng",,2,2,0,owner-review
+meticulous,meticulous,f689d8461388e9f4,c1c2_wic500,c1c2-004,"tỉ mỉ, cẩn thận",showing great attention to detail,2,2,0,owner-review
+untenable,untenable,fa39fcd72a2c674a,anki_starter,1788603784707,"không thể bảo vệ được, không thể giữ vững được",,2,2,0,owner-review
+untenable,untenable,8a52204b91190145,c1c2_wic500,c1c2-028,không thể bảo vệ được,not able to be maintained or defended,2,2,0,owner-review
+contentious,contentious,c713ce6c67e7b4e5,anki_starter,1788603784709,"gây tranh cãi, hay cãi cọ",,2,2,0,owner-review
+contentious,contentious,5ac05f081c3de6f7,c1c2_wic500,c1c2-013,gây tranh cãi,causing or likely to cause an argument,2,2,0,owner-review
+examine,examine,f6002a9171fd5638,anki_starter,1788603784711,"khảo sát, xem xét kỹ lưỡng",,2,2,0,owner-review
+examine,examine,cb42c0814461243a,b2c1_1000,b2c1-0016,"xem xét, khảo sát",to inspect or scrutinize something in detail,2,2,0,owner-review
+counterfactual,counterfactual,2e43c7b58f7874c5,anki_starter,1788603784717,"phản thực tế, trái với sự thật",,2,2,0,owner-review
+counterfactual,counterfactual,0948d6b1a23d9bef,c1c2_wic500,c1c2-273,phản thực tế,relating to what did not happen,2,2,0,owner-review
+derive,derive,ceba82fcf05ff720,anki_starter,1788603784723,"bắt nguồn từ, xuất phát từ",,2,2,0,owner-review
+derive,derive,b8e01d3ce9760dae,b2c1_1000,b2c1-0098,"suy ra, bắt nguồn",to obtain something from a source; to deduce,2,2,0,owner-review
+foreground,foreground,35d83b8fb8d4fdc8,anki_starter,1788603784725,"làm nổi bật, đưa lên vị trí trọng tâm",,2,2,0,owner-review
+foreground,foreground,bca1c78b0a3ec476,c1c2_wic500,c1c2-131,đưa lên hàng đầu,to make a feature of; to emphasize,2,2,0,owner-review
+redundancy,redundancy,45e61ac0d6392db6,anki_starter,1788603784727,"tính dư thừa, sự trùng lặp có tính dự phòng",,2,2,0,owner-review
+redundancy,redundancy,1e1cb61210baf50b,c1c2_wic500,c1c2-237,sự dư thừa,the state of being not needed,2,2,0,owner-review
+perfunctory,perfunctory,39c54359e2c13911,anki_starter,1788603784729,"chiếu lệ, qua loa, làm cho có",,2,2,0,owner-review
+perfunctory,perfunctory,63c3927b5bc024c0,c1c2_wic500,c1c2-031,"qua loa, chiếu lệ",carried out without thought or care,2,2,0,owner-review
+anticipate,anticipate,36074365f4ada9e7,anki_starter,1788603784731,"lường trước, mong đợi, dự kiến",,3,3,0,owner-review
+anticipate,anticipate,64f1724ab1cf8945,c1c2_wic500,c1c2-024,"dự đoán, lường trước",to expect or predict,3,3,0,owner-review
+anticipate,anticipate,b16787a687d07486,b2c1_1000,b2c1-0348,"dự đoán, đón trước",to expect or predict; to act in advance of,3,3,0,owner-review
+transpose,transpose,dbacfc4946d823cb,anki_starter,1788603784733,"hoán đổi vị trí, thay đổi thứ tự",,2,2,0,owner-review
+transpose,transpose,fcdbfa02a5264dab,c1c2_wic500,c1c2-072,"hoán vị, đổi chỗ",to cause to exchange places,2,2,0,owner-review
+exorbitant,exorbitant,b87721e32e62ff75,anki_starter,1788603784735,"cao cắt cổ, quá mức",,2,2,0,owner-review
+exorbitant,exorbitant,f722a4bf118bf564,c1c2_wic500,c1c2-207,"quá đáng, cắt cổ",exceeding what is reasonable,2,2,0,owner-review
+rigor,rigor,5b96eb54f02fe5a6,anki_starter,1788603784737,"sự nghiêm ngặt, sự khắt khe",,2,2,0,owner-review
+rigor,rigor,369297080a957eb5,c1c2_wic500,c1c2-334,"sự nghiêm ngặt, kỹ lưỡng",the quality of being thorough,2,2,0,owner-review
+evident,evident,af7515e29f2c06e1,anki_starter,1788603784741,"rõ ràng, hiển nhiên",,2,2,0,owner-review
+evident,evident,4b6cfd7f1499ba65,b2c1_1000,b2c1-0291,"hiển nhiên, rõ ràng",clearly seen or understood; obvious,2,2,0,owner-review
+presuppose,presuppose,268201eb7ce6ab45,anki_starter,1788603784743,"giả định trước, coi như là đúng",,2,2,0,owner-review
+presuppose,presuppose,bb15972ba4aaaff2,c1c2_wic500,c1c2-017,giả định trước,to require as a precondition; to assume beforehand,2,2,0,owner-review
+ambivalent,ambivalent,09271734339a0181,anki_starter,1788603784745,"vừa yêu vừa ghét, mâu thuẫn",,2,2,0,owner-review
+ambivalent,ambivalent,447617360cb8bc91,c1c2_wic500,c1c2-050,"lưỡng lự, nước đôi",having mixed feelings about something,2,2,0,owner-review
+supersede,supersede,33ca75ede464eb99,anki_starter,1788603784749,"thay thế, thế chỗ",,2,2,0,owner-review
+supersede,supersede,ced0ac4afa0bb0d6,c1c2_wic500,c1c2-115,thay thế,to take the place of,2,2,0,owner-review
+estimate,estimate,66742ff949450244,anki_starter,1788603784751,"ước tính, đánh giá gần đúng",,3,3,0,owner-review
+estimate,estimate,e229a3d8b3d62bc7,c1c2_wic500,c1c2-243,ước tính,to roughly calculate the value,3,3,0,owner-review
+estimate,estimate,ae4f7baeeb085495,b2c1_1000,b2c1-0157,"ước tính, sự đánh giá",an approximate calculation or judgment,3,3,0,owner-review
+transcend,transcend,b3f5620eddd8a8c6,anki_starter,1788603784755,"vượt qua, siêu việt",,2,2,0,owner-review
+transcend,transcend,5e76e247a65081cf,c1c2_wic500,c1c2-367,vượt ra ngoài,to go beyond the limits of,2,2,0,owner-review
+novelty,novelty,004a36f153ff2c61,anki_starter,1788603784757,"tính mới lạ, sự mới mẻ",,2,2,0,owner-review
+novelty,novelty,1fa87f339bebdf0a,c1c2_wic500,c1c2-046,sự mới lạ,the quality of being new or original,2,2,0,owner-review
+amend,amend,afc1d88674a13ea6,anki_starter,1788603784759,"sửa đổi, điều chỉnh (văn bản, luật)",,2,2,0,owner-review
+amend,amend,7208f89cdbbec4dc,c1c2_wic500,c1c2-036,"sửa đổi, tu chỉnh",to make minor changes to improve,2,2,0,owner-review
+ambiguous,ambiguous,d8463b5862a3a36b,anki_starter,1788603784761,"mơ hồ, không rõ ràng",,2,2,0,owner-review
+ambiguous,ambiguous,d15b56b24a9d4a26,c1c2_wic500,c1c2-057,"mơ hồ, nhập nhằng",open to more than one interpretation,2,2,0,owner-review
+redundant,redundant,60c15223eead1fa0,anki_starter,1788603784763,"thừa thãi, dư thừa không cần thiết",,2,2,0,owner-review
+redundant,redundant,5bff301934102e84,c1c2_wic500,c1c2-063,"thừa, dư",not or no longer needed; superfluous,2,2,0,owner-review
+precarious,precarious,8a8da52fa9bd391f,anki_starter,1788603784765,"bấp bênh, bấp bênh không ổn định, nguy hiểm",,2,2,0,owner-review
+precarious,precarious,502a4fe395fe1ac3,c1c2_wic500,c1c2-113,"bấp bênh, nguy hiểm",not securely held; uncertain,2,2,0,owner-review
+speculative,speculative,33009ce43c8fd64f,anki_starter,1788603784767,"mang tính suy đoán, phỏng đoán, chưa có chứng cứ xác thực",,2,2,0,owner-review
+speculative,speculative,73634c4f4f09acd0,c1c2_wic500,c1c2-206,có tính suy đoán,based on conjecture rather than knowledge,2,2,0,owner-review
+encompass,encompass,f6b41923f9016513,anki_starter,1788603784769,"bao quát, bao gồm",,2,2,0,owner-review
+encompass,encompass,47ad32a2a2a9d0b1,b2c1_1000,b2c1-0701,"bao gồm, bao quanh",to surround or include comprehensively,2,2,0,owner-review
+proxy,proxy,5f4474ec3cc936ed,anki_starter,1788603784773,"vật thay thế, chỉ số đại diện, người ủy quyền",,3,3,0,owner-review
+proxy,proxy,cc60be943975d509,c1c2_wic500,c1c2-106,đại diện; phương tiện thay thế,a person authorized to act for another,3,3,0,owner-review
+proxy,proxy,2c531b720a14475f,b2c1_1000,b2c1-0397,"người đại diện, ủy quyền",a person authorized to act for another; a substitute,3,3,0,owner-review
+inconsolable,inconsolable,54a4658596c88663,anki_starter,1788603784775,"không thể an ủi được, đau buồn khôn nguôi",,2,2,0,owner-review
+inconsolable,inconsolable,3fbd6757794cfb40,c1c2_wic500,c1c2-493,không thể nguôi ngoai,not able to be comforted,2,2,0,owner-review
+aesthetic,aesthetic,0366c6a2a44dfd30,anki_starter,1788603784779,"có tính thẩm mỹ, thuộc về mỹ học",,3,3,0,owner-review
+aesthetic,aesthetic,8b0c4bd25e80dc37,c1c2_wic500,c1c2-219,thẩm mỹ,concerned with beauty,3,3,0,owner-review
+aesthetic,aesthetic,6f5558b2b3c5a18d,b2c1_1000,b2c1-0065,thẩm mỹ,concerned with beauty or the appreciation of beauty,3,3,0,owner-review
+conventional,conventional,172ed79f105dfc48,anki_starter,1788603784781,"theo tập quán, thông thường, cổ truyền",,2,2,0,owner-review
+conventional,conventional,370401df7e05c505,b2c1_1000,b2c1-0107,"thông thường, quy ước",based on or in accordance with what is generally accepted,2,2,0,owner-review
+analogical,analogical,bd9a0c4c69ba2749,anki_starter,1788603784783,"mang tính tương tự, theo phép loại suy",,2,2,0,owner-review
+analogical,analogical,25193179c9378851,c1c2_wic500,c1c2-365,"tương tự, loại suy",based on or relating to analogy,2,2,0,owner-review
+exhaustive,exhaustive,e057551214c3bdd4,anki_starter,1788603784787,"toàn diện, thấu đáo",,2,2,0,owner-review
+exhaustive,exhaustive,3d69037c89576cdf,c1c2_wic500,c1c2-044,"đầy đủ, toàn diện",examining all possible aspects,2,2,0,owner-review
+attenuate,attenuate,1d432686dae66255,anki_starter,1788603784789,"làm yếu đi, làm giảm hiệu lực",,2,2,0,owner-review
+attenuate,attenuate,b803f30719cbde08,c1c2_wic500,c1c2-039,"làm giảm, làm yếu đi",to reduce the force or value,2,2,0,owner-review
+ephemeral,ephemeral,fb78823da7d8849a,anki_starter,1788603784793,"phù du, chóng tàn",,2,2,0,owner-review
+ephemeral,ephemeral,c88f74504c5c1130,c1c2_wic500,c1c2-093,"phù du, ngắn ngủi",lasting for a very short time,2,2,0,owner-review
+warrant,warrant,6dff88edfd721742,anki_starter,1788603784799,"biện minh cho, đáng để làm gì",,2,2,0,owner-review
+warrant,warrant,9bca69e10d7d2873,c1c2_wic500,c1c2-208,biện minh; lệnh,to justify or necessitate; official authorization,2,2,0,owner-review
+categorize,categorize,d5f68bf0e7cbd947,anki_starter,1788603784801,"phân loại, chia thành từng nhóm",,3,3,0,owner-review
+categorize,categorize,cfb42ac6f3f79e67,c1c2_wic500,c1c2-038,phân loại,to place in a particular category,3,3,0,owner-review
+categorize,categorize,471690737ef1d169,b2c1_1000,b2c1-0478,"phân loại, phân nhóm",to place into classes or groups,3,3,0,owner-review
+obscurity,obscurity,7742708719aea0c5,anki_starter,1788603784803,sự mơ hồ khó hiểu; tình trạng vô danh,,2,2,0,owner-review
+obscurity,obscurity,863c785da552e5e4,c1c2_wic500,c1c2-335,"sự tối tăm, ít người biết",the state of being unknown,2,2,0,owner-review
+shallowness,shallowness,962d89d8e7a471d3,anki_starter,1788603784805,"sự nông cạn, tính thiếu chiều sâu",,2,2,0,owner-review
+shallowness,shallowness,78bfec93d8dfc6b2,c1c2_wic500,c1c2-336,sự nông cạn,lack of depth,2,2,0,owner-review
+preserve,preserve,8a8597c7ea94458c,anki_starter,1788603784811,"bảo tồn, giữ gìn nguyên vẹn",,2,2,0,owner-review
+preserve,preserve,c9c4f8413f13f242,b2c1_1000,b2c1-0078,"bảo tồn, gìn giữ",to maintain or keep in original condition,2,2,0,owner-review
+localize,localize,ae89cf30dbdf758a,anki_starter,1788603784823,"Địa phương hóa, giới hạn hoặc đặc thù theo từng khu vực.",,2,2,0,owner-review
+localize,localize,a6fa6e3c5c0ba4aa,c1c2_wic500,c1c2-330,"khu trú, hạn chế trong vùng",to restrict to a particular place,2,2,0,owner-review
+constraint,constraint,9d389d2617d49f08,anki_starter,1788603784827,"Sự kiềm chế, sự gò bó, điều hạn chế.",,3,3,0,owner-review
+constraint,constraint,c5e05e1b42adf9b5,c1c2_wic500,c1c2-431,"ràng buộc, hạn chế",a limitation or restriction,3,3,0,owner-review
+constraint,constraint,56745eff23386c73,b2c1_1000,b2c1-0426,"sự ràng buộc, hạn chế",a limitation or restriction,3,3,0,owner-review
+derivative,derivative,2f24aa49f6b1c8d4,anki_starter,1788603784829,"Bắt chước, thiếu tính sáng tạo gốc, phái sinh.",,2,2,0,owner-review
+derivative,derivative,6fa7f854544dd1f3,c1c2_wic500,c1c2-122,"phái sinh, không nguyên bản",imitative of work of another; not original,2,2,0,owner-review
+discrepancy,discrepancy,31a448d1897d6c1a,anki_starter,1788603784853,"Sự khác biệt, sự bất đồng, sai lệch giữa các số liệu.",,3,3,0,owner-review
+discrepancy,discrepancy,f1098a5278a6f89e,c1c2_wic500,c1c2-270,sự khác biệt,a lack of compatibility,3,3,0,owner-review
+discrepancy,discrepancy,a73173f6fab46c8a,b2c1_1000,b2c1-0293,"sự khác biệt, mâu thuẫn",a lack of consistency between facts or figures,3,3,0,owner-review
+designate,designate,59f3774013332564,anki_starter,1788603784861,"chỉ định, chỉ rõ",,3,3,0,owner-review
+designate,designate,82ea344f9c209700,c1c2_wic500,c1c2-104,"chỉ định, biểu thị",to officially appoint; to specify,3,3,0,owner-review
+designate,designate,634577227c9f95a8,b2c1_1000,b2c1-0492,"chỉ định, bổ nhiệm",to officially assign a name or role to,3,3,0,owner-review
+contrive,contrive,9b0666f4a73f6f97,anki_starter,1788603784867,"xoay sở, bày mưu",,2,2,0,owner-review
+contrive,contrive,2c8f0d9699c435b0,c1c2_wic500,c1c2-328,"tạo ra, sắp đặt",to create or bring about by deliberate skill,2,2,0,owner-review
+aggregation,aggregation,558b6e2123a02492,anki_starter,1788603784869,"sự tập hợp, sự tổng hợp",,2,2,0,owner-review
+aggregation,aggregation,5722ac92f042f880,c1c2_wic500,c1c2-351,sự tập hợp,a collection of things grouped together,2,2,0,owner-review
+overshadow,overshadow,32434ca53661126c,anki_starter,1788603784871,"làm lu mờ, che khuất",,2,2,0,owner-review
+overshadow,overshadow,d14313992fdcc0a4,c1c2_wic500,c1c2-078,"che mờ, làm lu mờ",to appear much more prominent than,2,2,0,owner-review
+replicate,replicate,4f5698e15a8076d2,anki_starter,1788603784881,"tái tạo, sao chép",,3,3,0,owner-review
+replicate,replicate,aab55ad8ae872bdb,c1c2_wic500,c1c2-022,"lặp lại, sao chép",to make an exact copy of; reproduce,3,3,0,owner-review
+replicate,replicate,e8e4180e6e01524d,b2c1_1000,b2c1-0449,"sao chép, nhân bản",to make an exact copy of; to reproduce,3,3,0,owner-review
+compel,compel,ae07782487edd955,anki_starter,1788603784885,"Bắt buộc, cưỡng ép, thúc ép.",,2,2,0,owner-review
+compel,compel,f53ce08fa3935cc0,c1c2_wic500,c1c2-276,ép buộc,to force or oblige to do,2,2,0,owner-review
+relinquish,relinquish,b4c3192de1a6dc93,anki_starter,1788603784887,"Từ bỏ, buông bỏ, nhượng lại.",,2,2,0,owner-review
+relinquish,relinquish,0318d2769e4b0d29,c1c2_wic500,c1c2-311,từ bỏ,to voluntarily cease to keep,2,2,0,owner-review
+proprietary,proprietary,357e8c94f7b97700,anki_starter,1788603784899,"Độc quyền, thuộc quyền sở hữu riêng",,2,2,0,owner-review
+proprietary,proprietary,7c249883d79caea5,c1c2_wic500,c1c2-329,thuộc sở hữu,relating to ownership; private,2,2,0,owner-review
+supplement,supplement,741a5b3675bd5f85,anki_starter,1788603784901,"bổ sung, thêm vào",,2,2,0,owner-review
+supplement,supplement,193741ddfaf75f09,c1c2_wic500,c1c2-101,"bổ sung, thêm vào",to add to in order to improve,2,2,0,owner-review
+impede,impede,bbc18bd2d8e6e85f,anki_starter,1788603784911,"cản trở, gây trở ngại",,3,3,0,owner-review
+impede,impede,e2221c77503b6c8c,c1c2_wic500,c1c2-359,cản trở,to delay or prevent by obstructing,3,3,0,owner-review
+impede,impede,e9ef911ad04865e4,b2c1_1000,b2c1-0773,"cản trở, ngăn cản",to delay or block the progress of,3,3,0,owner-review
+modify,modify,03556765a8103d2b,anki_starter,1788603784921,"sửa đổi, điều chỉnh",,2,2,0,owner-review
+modify,modify,b73a97ed73dfda66,b2c1_1000,b2c1-0322,"sửa đổi, điều chỉnh",to make partial changes to something,2,2,0,owner-review
+consternation,consternation,d89487c005b35a87,anki_starter,1788603784929,"Sự sửng sốt, bàng hoàng kèm lo âu",,2,2,0,owner-review
+consternation,consternation,33af998d65ae1001,c1c2_wic500,c1c2-174,"sự bàng hoàng, sửng sốt",a feeling of anxiety or dismay,2,2,0,owner-review
+absorb,absorb,707ee04a8928b4ba,anki_starter,1788603784931,"hấp thụ, thấm hút, tiếp thu trọn vẹn",,2,2,0,owner-review
+absorb,absorb,908725c12890df3f,b2c1_1000,b2c1-0220,"hấp thụ, thấm hút",to take in or soak up; to assimilate,2,2,0,owner-review
+entrench,entrench,9444d9cf982bc844,anki_starter,1788603784943,"Ăn sâu bám rễ, củng cố vững chắc",,2,2,0,owner-review
+entrench,entrench,70ecf6e699dd66d9,c1c2_wic500,c1c2-346,"cố thủ, củng cố",to establish firmly; to fortify,2,2,0,owner-review
+isolate,isolate,967f2b3474cee5d3,anki_starter,1788603784951,"cô lập, tách biệt",,2,2,0,owner-review
+isolate,isolate,27aac28c2b6ece92,b2c1_1000,b2c1-0015,"cô lập, tách biệt",to set apart or separate from others,2,2,0,owner-review
+cite,cite,5676f9c622921109,anki_starter,1788603784961,"trích dẫn, viện dẫn",,2,2,0,owner-review
+cite,cite,85df96685875164b,b2c1_1000,b2c1-0097,"trích dẫn, viện dẫn",to quote or refer to as evidence or authority,2,2,0,owner-review
+expand,expand,bfb38f5e9193b987,anki_starter,1788603784981,"mở rộng, phát triển thêm",,2,2,0,owner-review
+expand,expand,199d2d5731710f66,c1c2_wic500,c1c2-283,mở rộng,to become larger; develop in detail,2,2,0,owner-review
+interaction,interaction,c87491f473aafb3f,anki_starter,1788603784991,"sự tương tác, sự giao tiếp qua lại",,2,2,0,owner-review
+interaction,interaction,d4c3f29cd21bdc22,b2c1_1000,b2c1-0142,sự tương tác,reciprocal action or influence between things,2,2,0,owner-review
+inchoate,inchoate,7969acf6332d066e,anki_starter,1788603785005,"Mới bắt đầu, chưa hoàn thiện, còn phôi thai",,2,2,0,owner-review
+inchoate,inchoate,d3b7f0e928067aca,c1c2_wic500,c1c2-392,"mới chớm, sơ khai",just begun and so not fully formed,2,2,0,owner-review
+imitation,imitation,70cba972cea5f145,anki_starter,1788603785011,"sự bắt chước, bản sao chép",,2,2,0,owner-review
+imitation,imitation,17f3adb18c3fffca,c1c2_wic500,c1c2-451,sự bắt chước,the action of using something as a model,2,2,0,owner-review
+convert,convert,caf01ab187f85c74,anki_starter,1788603785029,"chuyển đổi, biến đổi dạng thức",,3,3,0,owner-review
+convert,convert,dce90b82c026d171,c1c2_wic500,c1c2-357,"biến đổi, chuyển đổi",to change the form or function of,3,3,0,owner-review
+convert,convert,3a7b6fb99484ef15,b2c1_1000,b2c1-0805,"chuyển đổi, biến đổi",to change from one form or use to another,3,3,0,owner-review
+interpret,interpret,ddee526371f7f673,anki_starter,1788603785033,"diễn giải, lý giải, hiểu theo một cách nào đó",,2,2,0,owner-review
+interpret,interpret,b42d42490e25531c,b2c1_1000,b2c1-0264,"giải thích, diễn giải",to explain the meaning of; to understand in a certain way,2,2,0,owner-review
+simulation,simulation,54177f9077f06f37,anki_starter,1788603785049,"Sự mô phỏng, cuộc thử nghiệm giả lập.",,2,2,0,owner-review
+simulation,simulation,bbe770c8e80867fc,b2c1_1000,b2c1-0363,sự mô phỏng,an imitation of a process or situation,2,2,0,owner-review
+collapse,collapse,2a11d201f180ded4,anki_starter,1788603785051,"Sụp đổ, sập xuống hoàn toàn.",,2,2,0,owner-review
+collapse,collapse,08931097092a9408,b2c1_1000,b2c1-0289,"sụp đổ, sự sụp đổ",to fall down or give way suddenly,2,2,0,owner-review
+evolve,evolve,d7e04c89c48de4d2,anki_starter,1788603785063,"Tiến hóa, không ngừng biến đổi và phát triển.",,2,2,0,owner-review
+evolve,evolve,a4a42e5c3d407766,b2c1_1000,b2c1-0100,"tiến hóa, phát triển",to develop gradually over time,2,2,0,owner-review
+cluster,cluster,1dbc232199fa23ed,anki_starter,1788603785075,"Tụ tập lại, tụm lại thành cụm.",,2,2,0,owner-review
+cluster,cluster,f54c5bd1032a7c3d,b2c1_1000,b2c1-0500,"cụm, chùm",a group of similar things close together,2,2,0,owner-review
+intend,intend,722325e68268e7fc,anki_starter,1788603785077,"Dự định, có ý định.",,2,2,0,owner-review
+intend,intend,1392eab8835ef5b8,b2c1_1000,b2c1-0179,"dự định, có ý định",to have as a plan or purpose,2,2,0,owner-review
+seasonal,seasonal,9268b67472c45b66,anki_starter,1788603785079,"Theo mùa, vụ mùa, thay đổi theo thời vụ.",,2,2,0,owner-review
+seasonal,seasonal,6b551d580543e59b,b2c1_1000,b2c1-0165,"theo mùa, thuộc mùa",relating to or characteristic of a particular season,2,2,0,owner-review
+compromise,compromise,264a646d04f03484,anki_starter,1788603785093,"Sự thỏa hiệp, sự nhượng bộ lẫn nhau",,2,2,0,owner-review
+compromise,compromise,943c5ca53e3c98a1,b2c1_1000,b2c1-0963,"sự thỏa hiệp, nhượng bộ",an agreement reached by mutual concession -,2,2,0,owner-review
+distinguish,distinguish,9465306426c7b02f,anki_starter,1788603785099,"Phân biệt, nhận ra sự khác nhau; làm cho nổi bật",,2,2,0,owner-review
+distinguish,distinguish,cb0554e63712c267,b2c1_1000,b2c1-0074,phân biệt,to recognize or point out a difference,2,2,0,owner-review
+allocate,allocate,09cc4b415e107c8d,anki_starter,1788603785109,"Phân bổ, chỉ định dành riêng cho",,2,2,0,owner-review
+allocate,allocate,e5b67b09acbf0f25,c1c2_wic500,c1c2-177,phân bổ,to distribute resources for a purpose,2,2,0,owner-review
+abundance,abundance,57a237a72bfb1412,anki_starter,1788603785135,"sự dồi dào, phong phú",,2,2,0,owner-review
+abundance,abundance,ab0dee487b115958,b2c1_1000,b2c1-0031,"sự dồi dào, phong phú",a very large quantity of something,2,2,0,owner-review
+complicate,complicate,e2783d1fb1878b4e,anki_starter,1788603785145,làm phức tạp hóa,,2,2,0,owner-review
+complicate,complicate,634f65eb4b9a5ef3,b2c1_1000,b2c1-0820,làm phức tạp,to make more complex or difficult,2,2,0,owner-review
+accommodate,accommodate,f43d651b1719f236,anki_starter,1788603785157,"chứa được; đáp ứng, điều chỉnh để hòa hợp",,2,2,0,owner-review
+accommodate,accommodate,a14bd51b40be4ab1,b2c1_1000,b2c1-0976,"chứa, đáp ứng; điều tiết",to provide space for; to adapt to needs,2,2,0,owner-review
+eschew,eschew,48d265ac2d7a68f4,anki_starter,1788603785177,"Tránh xa, kiêng cữ, từ bỏ",,2,2,0,owner-review
+eschew,eschew,7d7bbbceec90084a,c1c2_wic500,c1c2-023,tránh né,to deliberately avoid using,2,2,0,owner-review
+conspicuous,conspicuous,c100905d16278ede,anki_starter,1788603785185,"dễ thấy, nổi bật",,2,2,0,owner-review
+conspicuous,conspicuous,fe3ad0b2992c841d,c1c2_wic500,c1c2-098,"dễ thấy, nổi bật",clearly visible; attracting notice,2,2,0,owner-review
+impartiality,impartiality,f9e16488d379f8ba,anki_starter,1788603785189,"tính không thiên vị, sự công bằng",,2,2,0,owner-review
+impartiality,impartiality,3cc6e753479e0960,c1c2_wic500,c1c2-049,"sự công bằng, vô tư",the quality of being unbiased,2,2,0,owner-review
+renounce,renounce,f18ed6f3f1856edb,anki_starter,1788603785193,"từ bỏ, khước từ",,2,2,0,owner-review
+renounce,renounce,cd8d3738315bd115,c1c2_wic500,c1c2-048,từ bỏ,to formally declare abandonment,2,2,0,owner-review
+elusive,elusive,91b4a363310e6c46,anki_starter,1788603785199,"khó nắm bắt, khó tìm",,2,2,0,owner-review
+elusive,elusive,d6941d5cc71d714d,c1c2_wic500,c1c2-037,khó nắm bắt,"difficult to find, catch, or achieve",2,2,0,owner-review
+exploit,exploit,740aa33f50f12f8f,anki_starter,1788603785201,"Khai thác, tận dụng",,2,2,0,owner-review
+exploit,exploit,f722efa8c3cafe98,c1c2_wic500,c1c2-358,khai thác; lợi dụng,to make full use of; to take unfair advantage,2,2,0,owner-review
+rectify,rectify,e50789a2f9f3ec88,anki_starter,1788603785203,"sửa chữa, điều chỉnh cho đúng",,2,2,0,owner-review
+rectify,rectify,4f3922a5d83205cf,c1c2_wic500,c1c2-029,"sửa chữa, chỉnh lại",to put right; to correct,2,2,0,owner-review
+spurious,spurious,8c6a09110875fff4,anki_starter,1788603785205,"giả mạo, không xác thực",,2,2,0,owner-review
+spurious,spurious,f96e25ac1c159c6e,c1c2_wic500,c1c2-052,"giả mạo, không xác thực",not what it appears to be; false,2,2,0,owner-review
+engender,engender,b7c1fc62231ade9c,anki_starter,1788603785207,"gây ra, tạo ra",,2,2,0,owner-review
+engender,engender,3759391414b8d008,c1c2_wic500,c1c2-025,"gây ra, sinh ra",to cause or give rise to a feeling or situation,2,2,0,owner-review
+immutable,immutable,b2b1eeb21ac3112b,anki_starter,1788603785209,"bất biến, không thể thay đổi",,2,2,0,owner-review
+immutable,immutable,1b4b5961eb5be708,c1c2_wic500,c1c2-062,"không thay đổi, bất biến",unchanging over time; not subject to change,2,2,0,owner-review
+undermine,undermine,f0cf7eced568c516,anki_starter,1788603785211,"làm suy yếu, làm xói mòn",,3,3,0,owner-review
+undermine,undermine,85ef2651a9b3f16e,c1c2_wic500,c1c2-082,làm suy yếu,to weaken the basis of gradually,3,3,0,owner-review
+undermine,undermine,646a7f5200c83d40,b2c1_1000,b2c1-0222,"làm suy yếu, phá hoại ngầm",to weaken or damage gradually or secretly,3,3,0,owner-review
+monetize,monetize,259d3362f65bfecf,anki_starter,1788603785213,"Kiếm tiền từ, thương mại hóa",,2,2,0,owner-review
+monetize,monetize,44de306318ff478a,c1c2_wic500,c1c2-205,"kiếm tiền từ, biến thành tiền",to convert into money,2,2,0,owner-review
+expound,expound,3e6627a51a273b5f,anki_starter,1788603785215,"giải thích chi tiết, trình bày cặn kẽ",,2,2,0,owner-review
+expound,expound,8e3073459b5e0268,c1c2_wic500,c1c2-143,trình bày chi tiết,to present and explain in detail,2,2,0,owner-review
+caricature,caricature,3421f132574c3286,anki_starter,1788603785217,"tranh biếm họa, sự bóp méo phóng đại để chế giễu",,2,2,0,owner-review
+caricature,caricature,809b79a7649bd79e,c1c2_wic500,c1c2-405,tranh biếm họa,a description that exaggerates,2,2,0,owner-review
+neglect,neglect,c0c5604089964496,anki_starter,1788603785221,"Bỏ bê, bỏ qua, không chú ý tới",,2,2,0,owner-review
+neglect,neglect,65f0bf26a988b3f0,b2c1_1000,b2c1-0707,"bỏ bê, xao lãng",to fail to care for properly; disregard,2,2,0,owner-review
+palpable,palpable,582c6abc16fefd3d,anki_starter,1788603785223,"rõ ràng, có thể sờ thấy được",,2,2,0,owner-review
+palpable,palpable,c037a8dc39a7d0a6,c1c2_wic500,c1c2-056,có thể cảm nhận rõ,able to be touched or felt; obvious,2,2,0,owner-review
+augment,augment,09cd784e293f61d8,anki_starter,1788603785225,"gia tăng, làm tăng thêm",,2,2,0,owner-review
+augment,augment,f595a4047c28c13e,c1c2_wic500,c1c2-034,"tăng cường, bổ sung",to make greater by adding to it,2,2,0,owner-review
+ambivalence,ambivalence,b8088bcbd7b7d9c8,anki_starter,1788603785227,"sự mâu thuẫn trong tư tưởng, sự do dự",,2,2,0,owner-review
+ambivalence,ambivalence,b8f85d7f93aba0b0,c1c2_wic500,c1c2-069,sự lưỡng lự,the state of having mixed feelings,2,2,0,owner-review
+incongruity,incongruity,07c2fb714298a713,anki_starter,1788603785229,"sự không phù hợp, sự phi lý",,2,2,0,owner-review
+incongruity,incongruity,dfdf1e8761651692,c1c2_wic500,c1c2-051,sự không phù hợp,the state of being out of place,2,2,0,owner-review
+exaggerate,exaggerate,7dfa91458b4bba0f,anki_starter,1788603785231,"Thổi phồng, phóng đại",,2,2,0,owner-review
+exaggerate,exaggerate,79ae3400c4242fcf,b2c1_1000,b2c1-0598,"phóng đại, cường điệu",to represent as greater than reality,2,2,0,owner-review
+epitomize,epitomize,ea7545ba6fc50d09,anki_starter,1788603785233,"là hình mẫu hoàn hảo, tiêu biểu cho",,2,2,0,owner-review
+epitomize,epitomize,2487e0efd016fdd9,c1c2_wic500,c1c2-139,"tiêu biểu cho, là hiện thân của",to be a perfect example of,2,2,0,owner-review
+discount,discount,aa2021009210945c,anki_starter,1788603785239,"xem nhẹ, bỏ qua, coi là không đáng kể",,2,2,0,owner-review
+discount,discount,93a5f392d6106c75,c1c2_wic500,c1c2-312,"coi nhẹ, bỏ qua",to regard as not important,2,2,0,owner-review
+subordinate,subordinate,bbcfc78633c81a81,anki_starter,1788603785250,"ở cấp dưới, phụ thuộc vào",,2,2,0,owner-review
+subordinate,subordinate,cb22045e6a429db0,c1c2_wic500,c1c2-019,"phụ thuộc, thứ yếu",lower in rank or position; secondary,2,2,0,owner-review
+dynamic,dynamic,1c2fd3281e2dc5d5,anki_starter,1788603785251,"năng động, luôn thay đổi",,2,2,0,owner-review
+dynamic,dynamic,72f9b49c46fc46fb,c1c2_wic500,c1c2-222,"năng động, biến động",characterized by constant change,2,2,0,owner-review
+prescient,prescient,38b0a4b17e6b02a7,anki_starter,1788603785257,"biết trước, tiên tri",,2,2,0,owner-review
+prescient,prescient,86c2f85f5e02889e,c1c2_wic500,c1c2-138,tiên tri,having knowledge of events before they happen,2,2,0,owner-review
+insurmountable,insurmountable,a674bfec79c6a3b2,anki_starter,1788603785259,"không thể vượt qua, không thể khắc phục",,2,2,0,owner-review
+insurmountable,insurmountable,ac052786e8c29c52,c1c2_wic500,c1c2-400,không thể vượt qua,too great to be overcome,2,2,0,owner-review
+overlook,overlook,852edce4df862a71,anki_starter,1788603785261,"Bỏ sót, làm ngơ, không nhận thấy",,3,3,0,owner-review
+overlook,overlook,61c5a4ad3c2cc0ce,c1c2_wic500,c1c2-032,"bỏ qua, không để ý",to fail to notice; to ignore,3,3,0,owner-review
+overlook,overlook,4d96bd1657504679,b2c1_1000,b2c1-0300,"bỏ sót, xem nhẹ; nhìn ra",to fail to notice; to have a view over,3,3,0,owner-review
+misconstrue,misconstrue,a83e2ecf0e71bb6a,anki_starter,1788603785263,"hiểu sai, giải thích sai",,2,2,0,owner-review
+misconstrue,misconstrue,e20f6ebedcfa5b0d,c1c2_wic500,c1c2-085,hiểu sai,to interpret wrongly,2,2,0,owner-review
+idiosyncratic,idiosyncratic,990c5531b59fa982,anki_starter,1788603785265,"đặc trưng, lập dị",,2,2,0,owner-review
+idiosyncratic,idiosyncratic,38df4b098714e422,c1c2_wic500,c1c2-008,"đặc trưng riêng, khác lạ",peculiar to an individual,2,2,0,owner-review
+circumvent,circumvent,21bd78837568e0c2,anki_starter,1788603785269,"lách luật, né tránh",,2,2,0,owner-review
+circumvent,circumvent,bcf1438930cfadfd,c1c2_wic500,c1c2-043,"lách luật, đi đường vòng",to find a way around an obstacle,2,2,0,owner-review
+acclaim,acclaim,a4f5e56328d65b8e,anki_starter,1788603785271,"sự hoan nghênh, lời ca ngợi",,2,2,0,owner-review
+acclaim,acclaim,2df2fc7aad2d9dfd,b2c1_1000,b2c1-0295,"sự tan dương, hoan nghênh",enthusiastic public praise,2,2,0,owner-review
+incongruous,incongruous,a0c47ed79e349c96,anki_starter,1788603785273,"không phù hợp, lệch lạc",,2,2,0,owner-review
+incongruous,incongruous,92a0f33ced23cd36,c1c2_wic500,c1c2-018,"không phù hợp, lạc lõng",not in harmony or keeping with the surroundings,2,2,0,owner-review
+irrefutable,irrefutable,a036d3265b223357,anki_starter,1788603785275,"không thể chối cãi, không thể bác bỏ",,2,2,0,owner-review
+irrefutable,irrefutable,e5906d8282dbd7c6,c1c2_wic500,c1c2-124,không thể bác bỏ,impossible to deny or disprove,2,2,0,owner-review
+pretentiousness,pretentiousness,bf30cd55da1f59b9,anki_starter,1788603785277,"sự tự phụ, tính khoe mẽ",,2,2,0,owner-review
+pretentiousness,pretentiousness,399ae32997b1884c,c1c2_wic500,c1c2-213,sự khoa trương,the quality of trying to impress falsely,2,2,0,owner-review
+prolific,prolific,b0c9389cc7550eae,anki_starter,1788603785283,"sản xuất nhiều, phong phú",,2,2,0,owner-review
+prolific,prolific,8ebd7a413be9c661,c1c2_wic500,c1c2-200,có sức sáng tác dồi dào,producing much; abundant,2,2,0,owner-review
+circumspection,circumspection,f6a8b33098f123ff,anki_starter,1788603785285,"sự thận trọng, sự cẩn trọng",,2,2,0,owner-review
+circumspection,circumspection,4b1470f73825588a,c1c2_wic500,c1c2-168,sự thận trọng,caution; wariness,2,2,0,owner-review
+ubiquity,ubiquity,dc63966cead629e6,anki_starter,1788603785287,"sự có mặt khắp nơi, sự phổ biến",,2,2,0,owner-review
+ubiquity,ubiquity,e34e29ecc5cd3bb7,c1c2_wic500,c1c2-313,tính có mặt khắp nơi,the fact of being everywhere,2,2,0,owner-review
+endure,endure,77feaa5d3c671f54,anki_starter,1788603785291,"Chịu đựng, trải qua gian khổ",,3,3,0,owner-review
+endure,endure,21adcdd03fe897e5,c1c2_wic500,c1c2-354,"chịu đựng, kéo dài",to suffer patiently; to last,3,3,0,owner-review
+endure,endure,89c7f27fc6ed2d20,b2c1_1000,b2c1-0755,chịu đựng; tồn tại lâu,to suffer patiently; to last over time,3,3,0,owner-review
+preempt,preempt,bf38feaa311a5871,anki_starter,1788603785293,"hành động phủ đầu, giành trước",,2,2,0,owner-review
+preempt,preempt,82e1a2fe2b704e27,c1c2_wic500,c1c2-014,"phòng ngừa, ngăn trước",to take action to prevent something,2,2,0,owner-review
+delineate,delineate,67f2d19d4efafc1a,anki_starter,1788603785295,"phác họa, mô tả",,2,2,0,owner-review
+delineate,delineate,bbcb4edca8d2ce0e,c1c2_wic500,c1c2-151,"miêu tả chi tiết, vạch ra",to describe or portray precisely,2,2,0,owner-review
+partition,partition,4af8bfe5e6347c83,anki_starter,1788603785297,"chia cắt, phân chia thành từng phần",,2,2,0,owner-review
+partition,partition,1eb6501343201c6b,b2c1_1000,b2c1-0655,vách ngăn; sự phân chia,a structure dividing a space; a division,2,2,0,owner-review
+mitigate,mitigate,789b4587a864a220,anki_starter,1788603785311,"làm dịu đi, giảm nhẹ",,3,3,0,owner-review
+mitigate,mitigate,982c7ff3ecb75182,c1c2_wic500,c1c2-007,giảm nhẹ,to make less severe or painful,3,3,0,owner-review
+mitigate,mitigate,0ae3536b69dfc23e,b2c1_1000,b2c1-0326,"giảm nhẹ, làm dịu",to make less severe or serious,3,3,0,owner-review
+replicable,replicable,7aeda9bd040a77be,anki_starter,1788603785319,"có thể nhân rộng, có thể sao chép/tái lập được",,2,2,0,owner-review
+replicable,replicable,b3ddf94aedaddc39,c1c2_wic500,c1c2-408,có thể lặp lại,able to be copied exactly,2,2,0,owner-review
+counteract,counteract,91e28847851b1e87,anki_starter,1788603785321,"chống lại, làm trung hòa",,2,2,0,owner-review
+counteract,counteract,fae4e5b9b57ed9fc,c1c2_wic500,c1c2-240,"đối kháng, chống lại",to act against something to reduce force,2,2,0,owner-review
+denote,denote,e095c532e5fd8ca3,anki_starter,1788603785323,"biểu thị, chỉ ra, là biểu hiện của",,2,2,0,owner-review
+denote,denote,ec0e2e98455c0ad2,c1c2_wic500,c1c2-144,"biểu thị, chỉ ra",to be a sign of; to indicate,2,2,0,owner-review
+opaque,opaque,679e037b36bbd7b5,anki_starter,1788603785325,"mờ đục, khó hiểu, không minh bạch",,2,2,0,owner-review
+opaque,opaque,0a755421bd6f18ba,c1c2_wic500,c1c2-067,"mờ đục, khó hiểu",not transparent; hard to understand,2,2,0,owner-review
+inconsequential,inconsequential,c1c5365f43aae8ab,anki_starter,1788603785329,"không quan trọng, không đáng kể",,2,2,0,owner-review
+inconsequential,inconsequential,8c43bb444bdb7c14,c1c2_wic500,c1c2-460,không quan trọng,not important or significant,2,2,0,owner-review
+induce,induce,f43f795c9da2fcf4,anki_starter,1788603785331,"gây ra, thuyết phục",,3,3,0,owner-review
+induce,induce,f9bdaedfad528194,c1c2_wic500,c1c2-027,"dẫn đến, gây ra",to succeed in persuading or leading someone,3,3,0,owner-review
+induce,induce,7ad44074dc60746c,b2c1_1000,b2c1-0261,"gây ra, tạo ra; thuyết phục",to bring about or give rise to; to persuade,3,3,0,owner-review
+scrupulous,scrupulous,044446a74d24ff00,anki_starter,1788603785337,"tỉ mỉ và cẩn trọng, kỹ lưỡng về đạo đức",,2,2,0,owner-review
+scrupulous,scrupulous,25e0c0649c392638,c1c2_wic500,c1c2-236,"kỹ lưỡng, tỉ mỉ","diligent, thorough, extremely careful",2,2,0,owner-review
+insuperable,insuperable,6a73984544b89a51,anki_starter,1788603785339,"không thể vượt qua, không thể khắc phục",,2,2,0,owner-review
+insuperable,insuperable,79193dee1494d6aa,c1c2_wic500,c1c2-066,không thể vượt qua,impossible to overcome,2,2,0,owner-review
+underscore,underscore,76693d0ab56f17d5,anki_starter,1788603785341,"nhấn mạnh, gạch dưới",,2,2,0,owner-review
+underscore,underscore,27245d2f4444c799,c1c2_wic500,c1c2-146,nhấn mạnh,to emphasize the importance of,2,2,0,owner-review
+equivalence,equivalence,21b495ff793a81ef,anki_starter,1788603785343,"sự tương đương, sự bằng nhau",,2,2,0,owner-review
+equivalence,equivalence,4b40b788dd0e6e44,c1c2_wic500,c1c2-350,sự tương đương,the condition of being equal,2,2,0,owner-review
+tenuous,tenuous,13341d6d1ad8bdaf,anki_starter,1788603785345,"mỏng manh, không chắc chắn",,2,2,0,owner-review
+tenuous,tenuous,8803d0b04d1f256f,c1c2_wic500,c1c2-489,mỏng manh,very weak or slight,2,2,0,owner-review
+nebulous,nebulous,263609245337c35f,anki_starter,1788603785347,"mơ hồ, không rõ ràng",,2,2,0,owner-review
+nebulous,nebulous,6763ce22f80aa131,c1c2_wic500,c1c2-318,mơ hồ,hazy; vague or ill-defined,2,2,0,owner-review
+convey,convey,39c1c0187f9758c2,anki_starter,1788603785351,"Truyền tải, diễn đạt (thông điệp, cảm xúc)",,2,2,0,owner-review
+convey,convey,28d8d4199854628d,b2c1_1000,b2c1-0117,"truyền đạt, chuyển tải",to communicate or make an idea known; to transport,2,2,0,owner-review
+denounce,denounce,a8a45898ace41f1a,anki_starter,1788603785353,"tố cáo, lên án",,2,2,0,owner-review
+denounce,denounce,767deda3d780acd8,c1c2_wic500,c1c2-187,"tố cáo, lên án",to publicly declare to be wrong,2,2,0,owner-review
+nullify,nullify,c7eb581bd21b7d06,anki_starter,1788603785357,"vô hiệu hóa, hủy bỏ",,2,2,0,owner-review
+nullify,nullify,d915f5a5e16a4fed,c1c2_wic500,c1c2-368,vô hiệu hóa,to make legally null; to cancel out,2,2,0,owner-review
+assuage,assuage,52580647d23013c2,anki_starter,1788603785359,"làm dịu bớt, xoa dịu",,2,2,0,owner-review
+assuage,assuage,b71c9bece5166718,c1c2_wic500,c1c2-384,xoa dịu,to make an unpleasant feeling less,2,2,0,owner-review
+scrutinize,scrutinize,5807450bce8fac33,anki_starter,1788603785361,"xem xét kỹ lưỡng, kiểm tra cẩn thận",,2,2,0,owner-review
+scrutinize,scrutinize,3528f383cfcaf661,c1c2_wic500,c1c2-016,xem xét kỹ lưỡng,to examine or inspect closely,2,2,0,owner-review
+explicable,explicable,10aa32cc38caf211,anki_starter,1788603785363,"có thể giải thích được, có thể hiểu được",,2,2,0,owner-review
+explicable,explicable,fea0d31e60724f73,c1c2_wic500,c1c2-416,có thể giải thích,able to be accounted for,2,2,0,owner-review
+sanction,sanction,8020d8fab221976f,anki_starter,1788603785365,"sự cho phép, lệnh trừng phạt",,2,2,0,owner-review
+sanction,sanction,ff629d92a102ba78,c1c2_wic500,c1c2-081,chế tài hoặc cho phép,official permission or approval,2,2,0,owner-review
+extraneous,extraneous,eca55742406d9428,anki_starter,1788603785367,"không liên quan, không cần thiết",,2,2,0,owner-review
+extraneous,extraneous,7478a8c55a71ccb0,c1c2_wic500,c1c2-201,"không liên quan, lạc đề",irrelevant or unrelated,2,2,0,owner-review
+defunct,defunct,f0e544eea8703130,anki_starter,1788603785369,"không còn tồn tại, không còn hoạt động",,2,2,0,owner-review
+defunct,defunct,b001e99537c89a63,c1c2_wic500,c1c2-202,"không còn tồn tại, đã chết",no longer existing or functioning,2,2,0,owner-review
+innovative,innovative,f637c88a9bf45fc7,anki_starter,1788603785371,"sáng tạo, đổi mới",,2,2,0,owner-review
+innovative,innovative,7d75887ca491e630,b2c1_1000,b2c1-0544,"đối HH mới, sáng tao",featuring new methods or ideas,2,2,0,owner-review
+assent,assent,0bccb774b4bc0467,anki_starter,1788603785375,"tán thành, đồng ý",,2,2,0,owner-review
+assent,assent,11f0cb18db66f461,c1c2_wic500,c1c2-391,đồng ý,to express approval or agreement,2,2,0,owner-review
+bolster,bolster,5c79f81118c98574,anki_starter,1788603785379,"củng cố, ủng hộ",,2,2,0,owner-review
+bolster,bolster,2c88154f04ab4429,b2c1_1000,b2c1-0893,"củng cố, tăng cường",to support or strengthen,2,2,0,owner-review
+obscure,obscure,c53f4c569ca3f579,anki_starter,1788603785381,"không rõ ràng, che khuất",,2,2,0,owner-review
+obscure,obscure,a2d2dd5b24d6ed85,b2c1_1000,b2c1-0329,"mơ hồ, không rõ; che khuất",not clearly expressed or understood; to conceal,2,2,0,owner-review
+empirical,empirical,56ff7e04258d07f4,anki_starter,1788603785385,mang tính thực nghiệm; dựa trên quan sát và trải nghiệm thực tế thay vì lý thuyết thuần túy,,3,3,0,owner-review
+empirical,empirical,3c3568fb3f440d18,c1c2_wic500,c1c2-372,thực nghiệm,based on observation rather than theory,3,3,0,owner-review
+empirical,empirical,7d639e8710a260b2,b2c1_1000,b2c1-0621,dựa trên thực nghiệm,based on observation or experience rather than theory,3,3,0,owner-review
+anomaly,anomaly,1443ff19d0feb6de,anki_starter,1788603785389,"sự bất thường, điều dị thường",,2,2,0,owner-review
+anomaly,anomaly,0f624c897b158abf,c1c2_wic500,c1c2-492,sự bất thường,something different from the norm,2,2,0,owner-review
+feasible,feasible,ca2d6c564205f824,anki_starter,1788603785391,"khả thi, có thể thực hiện được",,2,2,0,owner-review
+feasible,feasible,6674b8da8aea3248,c1c2_wic500,c1c2-150,khả thi,possible to do easily or conveniently,2,2,0,owner-review
+alleviate,alleviate,eefd29096956afbe,anki_starter,1788603785395,"làm giảm bớt, làm dịu đi",,2,2,0,owner-review
+alleviate,alleviate,a15b9e7bf8f66cde,c1c2_wic500,c1c2-314,làm dịu,to make less severe,2,2,0,owner-review
+conflate,conflate,5933725a38d61c10,anki_starter,1788603785397,"kết hợp, đánh đồng",,2,2,0,owner-review
+conflate,conflate,da935e1a13a60d69,c1c2_wic500,c1c2-077,"gộp lại, hợp nhất sai",to combine two or more things into one,2,2,0,owner-review
+disparage,disparage,6e76c59f5b67adec,anki_starter,1788603785399,"gièm pha, chê bai",,2,2,0,owner-review
+disparage,disparage,1a74728ce72af4c0,c1c2_wic500,c1c2-203,"chê bai, hạ thấp",to regard as of little worth,2,2,0,owner-review
+sustainable,sustainable,377c9e5e015a0f9a,anki_starter,1788603785401,"bền vững, có thể duy trì",,2,2,0,owner-review
+sustainable,sustainable,83b93c44fe02fc81,c1c2_wic500,c1c2-096,bền vững,able to be maintained over time,2,2,0,owner-review
+postulate,postulate,e59b053f85f2b58e,anki_starter,1788603785403,"đưa ra giả thuyết, mặc nhận",,2,2,0,owner-review
+postulate,postulate,b844e0c79313df51,c1c2_wic500,c1c2-126,đặt giả thiết,to suggest or assume as true,2,2,0,owner-review
+confound,confound,9aab0358a15c8172,anki_starter,1788603785405,"làm bối rối, chứng minh là sai",,2,2,0,owner-review
+confound,confound,f69ca548f83aab7c,c1c2_wic500,c1c2-383,"làm bối rối, làm nhầm lẫn",to cause confusion; to mix up,2,2,0,owner-review
+antithetical,antithetical,2421eb2822111f08,anki_starter,1788603785407,"đối lập hoàn toàn, tương phản trực tiếp",,2,2,0,owner-review
+antithetical,antithetical,6d3a518af5dc3ea3,c1c2_wic500,c1c2-272,trái ngược hoàn toàn,directly opposed; mutually incompatible,2,2,0,owner-review
+irrelevant,irrelevant,e8b22df6e51ab09e,anki_starter,1788603785411,"không liên quan, không thích hợp",,2,2,0,owner-review
+irrelevant,irrelevant,69ee174f4e350703,c1c2_wic500,c1c2-285,không liên quan,not connected with what is being considered,2,2,0,owner-review
+heterogeneity,heterogeneity,21099538a4b3d269,anki_starter,1788603785417,"sự không đồng nhất, tính đa dạng",,2,2,0,owner-review
+heterogeneity,heterogeneity,a515cf7f793b7f82,c1c2_wic500,c1c2-287,"sự đa dạng, không đồng nhất",the quality of being diverse,2,2,0,owner-review
+homogeneity,homogeneity,5ff1393022b35277,anki_starter,1788603785419,"sự đồng nhất, sự đồng đều",,2,2,0,owner-review
+homogeneity,homogeneity,0f5c4b625abb43bd,c1c2_wic500,c1c2-165,tính đồng nhất,the quality of being all the same,2,2,0,owner-review
+abate,abate,36be59ba3bcb64af,anki_starter,1788603785421,"làm dịu đi, giảm bớt",,2,2,0,owner-review
+abate,abate,de6600a9c9f389e3,c1c2_wic500,c1c2-020,"giảm bớt, dịu đi",to become less intense or widespread,2,2,0,owner-review
+subvert,subvert,c694a67797ed0278,anki_starter,1788603785423,"lật đổ, phá hoại ngầm",,2,2,0,owner-review
+subvert,subvert,65c37d062e1e6344,c1c2_wic500,c1c2-005,"lật đổ, làm suy yếu",to undermine the power or authority of,2,2,0,owner-review
+replicability,replicability,2babce0797da9869,anki_starter,1788603785427,"khả năng sao chép, khả năng tái tạo",,2,2,0,owner-review
+replicability,replicability,b10d9f319209ac6f,c1c2_wic500,c1c2-167,khả năng lặp lại,the ability to be repeated,2,2,0,owner-review
+diminish,diminish,f547abe855645618,anki_starter,1788603785431,"Làm giảm bớt, thu hẹp, suy giảm",,2,2,0,owner-review
+diminish,diminish,02da9a9dd57513e0,c1c2_wic500,c1c2-161,giảm bớt,to make or become less,2,2,0,owner-review
+prosaic,prosaic,033a31b4dc4e3b32,anki_starter,1788603785443,"tầm thường, không lãng mạn; nhàm chán, thiếu sáng tạo",,2,2,0,owner-review
+prosaic,prosaic,cd589b8bb94437a6,c1c2_wic500,c1c2-238,"tầm thường, dung dị",lacking poetic beauty; commonplace,2,2,0,owner-review
+salient,salient,627ad7ca22bd28a0,anki_starter,1788603785449,"nổi bật nhất, quan trọng nhất",,2,2,0,owner-review
+salient,salient,a20d4112ed8a6a51,c1c2_wic500,c1c2-233,"nổi bật, quan trọng",most noticeable or important,2,2,0,owner-review
+anomalous,anomalous,e3c7265a5538bc3c,anki_starter,1788603785455,"bất thường, dị thường",,2,2,0,owner-review
+anomalous,anomalous,5739e9a8ad9bca9c,c1c2_wic500,c1c2-033,"bất thường, dị thường",deviating from what is standard,2,2,0,owner-review
+extrapolate,extrapolate,23c930d68030f16f,anki_starter,1788603785463,"suy luận, ngoại suy",,2,2,0,owner-review
+extrapolate,extrapolate,fdc9f9fa3c6ae03e,c1c2_wic500,c1c2-393,ngoại suy,to extend application by inference,2,2,0,owner-review
+immaterial,immaterial,9319523bd872a420,anki_starter,1788603785469,"không quan trọng, không liên quan",,2,2,0,owner-review
+immaterial,immaterial,1a73b9107b6c07fa,c1c2_wic500,c1c2-282,không quan trọng,unimportant under the circumstances,2,2,0,owner-review
+proliferate,proliferate,be120615ab2a6c92,anki_starter,1788603785479,"tăng nhanh, nảy nở",,2,2,0,owner-review
+proliferate,proliferate,36db72bafac1f1e0,c1c2_wic500,c1c2-344,"lan tràn, sinh sôi",to increase rapidly in numbers,2,2,0,owner-review
+attribute,attribute,bb074046119cd6e1,anki_starter,1788603785481,"quy cho, cho là do nguyên nhân nào đó",,2,2,0,owner-review
+attribute,attribute,172159606ce2eab2,b2c1_1000,b2c1-0064,thuộc tính; quy cho,a quality or feature regarded as characteristic; to ascribe,2,2,0,owner-review
+denigrate,denigrate,296638cc6ac7dc69,anki_starter,1788603785487,"phỉ báng, gièm pha",,2,2,0,owner-review
+denigrate,denigrate,7d2004dfa134578f,c1c2_wic500,c1c2-369,"phỉ báng, hạ thấp",to criticize unfairly; to disparage,2,2,0,owner-review
+profound,profound,921d50ff48d2e0f2,anki_starter,1788603785491,"sâu sắc, to lớn",,2,2,0,owner-review
+profound,profound,acd005a1dd26088a,c1c2_wic500,c1c2-112,sâu sắc,very great or intense; deep,2,2,0,owner-review
+disseminate,disseminate,1582aa96252db653,anki_starter,1788603785493,"phổ biến, lan truyền",,2,2,0,owner-review
+disseminate,disseminate,0041a88fa2c8f7d7,c1c2_wic500,c1c2-229,phổ biến,to spread widely,2,2,0,owner-review
+erratic,erratic,9ad0a2453a66b3c3,anki_starter,1788603785497,"thất thường, không đều",,2,2,0,owner-review
+erratic,erratic,9d5132601a3faae9,c1c2_wic500,c1c2-484,thất thường,not even or regular in pattern,2,2,0,owner-review
+manifestation,manifestation,a07924d7f3b26f2c,anki_starter,1788603785499,"sự biểu lộ, hiện thân",,2,2,0,owner-review
+manifestation,manifestation,99582c250fdaa60d,c1c2_wic500,c1c2-267,biểu hiện,a sign of the existence of something,2,2,0,owner-review
+refute,refute,7479e6aa9254c4b8,anki_starter,1788603785501,"bác bỏ, phản bác",,3,3,0,owner-review
+refute,refute,f86ea744e47c7168,c1c2_wic500,c1c2-130,bác bỏ,to prove something to be wrong,3,3,0,owner-review
+refute,refute,bb6ca6a6c089a504,b2c1_1000,b2c1-0782,"bác bỏ, phản bác",to prove a statement or theory to be wrong,3,3,0,owner-review
+paucity,paucity,d3f8ea2996abdb84,anki_starter,1788603785503,"sự khan hiếm, sự ít ỏi",,2,2,0,owner-review
+paucity,paucity,a5459d98df29f410,c1c2_wic500,c1c2-105,"sự ít ỏi, khan hiếm",the presence of something in small quantities,2,2,0,owner-review
+pristine,pristine,856540728c5395e4,anki_starter,1788603785505,"nguyên sơ, tinh khôi",,2,2,0,owner-review
+pristine,pristine,7aa078c0a3679854,c1c2_wic500,c1c2-182,"nguyên sơ, tinh khôi",in its original condition; untouched,2,2,0,owner-review
+venerate,venerate,a062bc11c768888d,anki_starter,1788603785507,"tôn kính, sùng bái",,2,2,0,owner-review
+venerate,venerate,1197ad5368dc3b39,c1c2_wic500,c1c2-196,tôn kính,to regard with great respect,2,2,0,owner-review
+affinity,affinity,5ae18f91f74c419f,anki_starter,1788603785509,"sự yêu thích tự nhiên, sự tương đồng",,2,2,0,owner-review
+affinity,affinity,36d6fae60c8a6266,c1c2_wic500,c1c2-114,sự đồng cảm; mối liên hệ,a spontaneous feeling of attraction; close similarity,2,2,0,owner-review
+indigenous,indigenous,ef4dc9d0d3c86bd7,anki_starter,1788603785513,"bản xứ, bản địa",,2,2,0,owner-review
+indigenous,indigenous,bc532209a2e40d4f,b2c1_1000,b2c1-0013,"bản địa, bản xứ",originating or occurring naturally in a particular place; native,2,2,0,owner-review
+inextricable,inextricable,0ef19576346617ed,anki_starter,1788603785515,"không thể gỡ ra được, không thể tách rời",,2,2,0,owner-review
+inextricable,inextricable,3f19955a1a519145,c1c2_wic500,c1c2-148,không thể tách rời,impossible to disentangle or separate,2,2,0,owner-review
+orthodox,orthodox,078526a7c9a17349,anki_starter,1788603785517,"chính thống, truyền thống",,2,2,0,owner-review
+orthodox,orthodox,6f3f5890676c92ec,c1c2_wic500,c1c2-190,"chính thống, truyền thống",following accepted ideas or beliefs,2,2,0,owner-review
+magnify,magnify,b060763d00bb7ab3,anki_starter,1788603785519,"phóng đại, làm trầm trọng thêm",,2,2,0,owner-review
+magnify,magnify,17a3d660ed3a73ad,c1c2_wic500,c1c2-035,"phóng đại, khuếch đại",to make appear larger or greater,2,2,0,owner-review
+capitalize,capitalize,b023e55374250a28,anki_starter,1788603785525,"tận dụng, lợi dụng",,2,2,0,owner-review
+capitalize,capitalize,4c1dbde3f94891ec,c1c2_wic500,c1c2-214,"tận dụng, khai thác",to take advantage of; to use,2,2,0,owner-review
+intricate,intricate,369d59413bba50fb,anki_starter,1788603785527,"phức tạp, rắc rối",,3,3,0,owner-review
+intricate,intricate,adfed1ee3a888dfe,c1c2_wic500,c1c2-198,"phức tạp, tinh xảo",very complicated or detailed,3,3,0,owner-review
+intricate,intricate,b8d57c4cdb97c2a9,b2c1_1000,b2c1-0808,"phức tạp, tinh vi",very complicated or detailed,3,3,0,owner-review
+constrain,constrain,1e92cc6c2c45296b,anki_starter,1788603785529,"hạn chế, ép buộc",,3,3,0,owner-review
+constrain,constrain,5aad3dd91d01d444,c1c2_wic500,c1c2-083,"ép buộc, hạn chế",to compel or force; to restrict,3,3,0,owner-review
+constrain,constrain,5c4afc2d12447ce8,b2c1_1000,b2c1-0398,"ràng buộc, hạn chế",to restrict or compel; to limit,3,3,0,owner-review
+idealize,idealize,a7d153cc240aeaa4,anki_starter,1788603785531,"lý tưởng hóa, hoàn hảo hóa",,2,2,0,owner-review
+idealize,idealize,e06c11eaaadc2436,c1c2_wic500,c1c2-065,lý tưởng hóa,to regard as perfect or better than reality,2,2,0,owner-review
+distort,distort,5b3b85b515695c8e,anki_starter,1788603785533,"bóp méo, xuyên tạc",,2,2,0,owner-review
+distort,distort,a6298184f97e0535,c1c2_wic500,c1c2-153,bóp méo,to twist out of shape; to misrepresent,2,2,0,owner-review
+ambiguity,ambiguity,d3dac80c7d1aa7b8,anki_starter,1788603785535,"sự mơ hồ, sự tối nghĩa",,2,2,0,owner-review
+ambiguity,ambiguity,cccb148efe1ee122,c1c2_wic500,c1c2-125,sự mơ hồ,the quality of being open to interpretation,2,2,0,owner-review
+hamper,hamper,64774f2aacfce8bc,anki_starter,1788603785537,"cản trở, gây vướng víu",,2,2,0,owner-review
+hamper,hamper,09fc0d0ee3420633,c1c2_wic500,c1c2-147,cản trở,to hinder or impede,2,2,0,owner-review
+conceal,conceal,1115dc2159031945,anki_starter,1788603785539,"che giấu, giấu kín",,2,2,0,owner-review
+conceal,conceal,d522f273e2a5d399,c1c2_wic500,c1c2-178,che giấu,to keep from being seen; to hide,2,2,0,owner-review
+neutral,neutral,161cfca6929efb95,anki_starter,1788603785541,"trung lập, không thiên vị",,3,3,0,owner-review
+neutral,neutral,761b66ad9b1a2cfe,c1c2_wic500,c1c2-189,trung lập,not supporting either side; impartial,3,3,0,owner-review
+neutral,neutral,2129a7cac48c648d,b2c1_1000,b2c1-0858,"trung lập, trung tính",not supporting either side; having no strong features,3,3,0,owner-review
+acquire,acquire,fd1eff3a0cd26a46,anki_starter,1788603785547,"thu được, có được, học được",,2,2,0,owner-review
+acquire,acquire,3cf5c4f3986b0fa8,b2c1_1000,b2c1-0273,"đạt được, giành được",to come to possess; to gain by effort,2,2,0,owner-review
+blend,blend,e0b8f3dcfe8ee1b9,anki_starter,1788603785549,"hòa trộn, kết hợp hài hòa",,2,2,0,owner-review
+blend,blend,acd25aa1996dd966,b2c1_1000,b2c1-0214,pha trộn; hỗn hợp,to mix thoroughly; a mixture,2,2,0,owner-review
+exceed,exceed,1687a8108e54bb83,anki_starter,1788603785557,"vượt quá, vượt trội hơn",,2,2,0,owner-review
+exceed,exceed,70568144c546d49c,b2c1_1000,b2c1-0339,"vượt quá, vượt trội",to be greater than; to surpass a limit,2,2,0,owner-review
+complement,complement,100da1b321b9ed6a,anki_starter,1788603785563,"bổ sung, kết hợp để hoàn thiện hơn",,2,2,0,owner-review
+complement,complement,9bec5a09a422ce03,c1c2_wic500,c1c2-199,"bổ sung, hoàn thiện",to add to in a way that improves,2,2,0,owner-review
+exhibit,exhibit,5f6afeb68abb0aef,anki_starter,1788603785565,"thể hiện, bộc lộ rõ (tính cách, đặc điểm)",,2,2,0,owner-review
+exhibit,exhibit,169268a3b5c0a3c1,b2c1_1000,b2c1-0039,trưng bày; biểu lộ,to display or show something publicly; evidence,2,2,0,owner-review
+constrict,constrict,cb3c3157431e1719,anki_starter,1788603785569,"làm hẹp lại, giới hạn",,2,2,0,owner-review
+constrict,constrict,ef77ccea8f88d5d8,c1c2_wic500,c1c2-092,"thắt chặt, hạn chế",to make narrower; to limit,2,2,0,owner-review
+customary,customary,bf89d69de10927ca,anki_starter,1788603785573,"thông thường, theo lệ",,2,2,0,owner-review
+customary,customary,9d0d3dee74b60a16,c1c2_wic500,c1c2-127,"theo lệ thường, thông lệ",according to the customs of a society,2,2,0,owner-review
+disperse,disperse,a11be121f90a2374,anki_starter,1788603785575,"phân tán, giải tán",,2,2,0,owner-review
+disperse,disperse,5221a49360f427d2,b2c1_1000,b2c1-0491,"phân tán, giải tán",to scatter or spread over a wide area,2,2,0,owner-review
+uncontroversial,uncontroversial,db8d8fc2fe636e8c,anki_starter,1788603785577,"không gây tranh cãi, được chấp nhận chung",,2,2,0,owner-review
+uncontroversial,uncontroversial,7919909cb52cfafd,c1c2_wic500,c1c2-474,không gây tranh cãi,not causing disagreement,2,2,0,owner-review
+discern,discern,8eec6c2333ae33f0,anki_starter,1788603785579,"nhận ra, phân biệt được",,2,2,0,owner-review
+discern,discern,190fc3082a9c456d,c1c2_wic500,c1c2-011,"phân biệt, nhận thấy",to recognize or perceive clearly,2,2,0,owner-review
+prioritize,prioritize,77d823908a776981,anki_starter,1788603785581,"ưu tiên, đặt lên hàng đầu",,3,3,0,owner-review
+prioritize,prioritize,953339c4ab39ef25,c1c2_wic500,c1c2-262,ưu tiên,to designate as more important,3,3,0,owner-review
+prioritize,prioritize,767098472b6b4ef3,b2c1_1000,b2c1-0635,"ưu tiên, sắp xếp ưu tiên",to treat as more important than others,3,3,0,owner-review
+variable,variable,4d3c94f03214570b,anki_starter,1788603785585,"hay thay đổi, không ổn định",,2,2,0,owner-review
+variable,variable,e079776c33803d04,b2c1_1000,b2c1-0545,biến A đối; biến hiểm số GẤ,liable to change; a factor that can vary,2,2,0,owner-review
+pretentious,pretentious,a2c0910009875b98,anki_starter,1788603785587,"tự phụ, khoe mẽ",,2,2,0,owner-review
+pretentious,pretentious,30c5366ab9d83a1a,c1c2_wic500,c1c2-076,"khoa trương, kiểu cách",attempting to impress by affecting importance,2,2,0,owner-review
+provocative,provocative,db93342c1976cceb,anki_starter,1788603785589,"khiêu khích, gây tranh cãi",,2,2,0,owner-review
+provocative,provocative,b3c1531a57f69b73,c1c2_wic500,c1c2-118,khiêu khích; gợi suy nghĩ,causing annoyance or anger; stimulating,2,2,0,owner-review
+thrive,thrive,315dc8bd8827de97,anki_starter,1788603785591,"phát triển mạnh mẽ, thịnh vượng",,3,3,0,owner-review
+thrive,thrive,6dffb2d2c327015f,c1c2_wic500,c1c2-455,phát triển mạnh,to grow vigorously; to prosper,3,3,0,owner-review
+thrive,thrive,a6d05ab540b5ca4b,b2c1_1000,b2c1-0472,"phát triển mạnh, thịnh vượng",to grow or develop vigorously; to flourish,3,3,0,owner-review
+tranquil,tranquil,eaf4ec6e47324058,anki_starter,1788603785595,"thanh bình, yên tĩnh",,2,2,0,owner-review
+tranquil,tranquil,8fb47153795b0700,c1c2_wic500,c1c2-304,yên bình,free from disturbance; calm,2,2,0,owner-review
+attrition,attrition,fb4a2cfa67b0f9b8,anki_starter,1788603785597,"sự hao mòn, sự tiêu hao nhân sự",,2,2,0,owner-review
+attrition,attrition,f75b21826c5242f4,c1c2_wic500,c1c2-166,"sự hao mòn, suy giảm dần",gradual reduction in workforce/strength,2,2,0,owner-review
+applicable,applicable,83f75e7ea49e3c9b,anki_starter,1788603785599,"có thể áp dụng được, thích hợp",,3,3,0,owner-review
+applicable,applicable,f25afc0524ccce48,c1c2_wic500,c1c2-286,có thể áp dụng,relevant or appropriate,3,3,0,owner-review
+applicable,applicable,37d1498e4849c570,b2c1_1000,b2c1-0761,"có thể áp dụng, thích hợp",relevant or appropriate to a situation,3,3,0,owner-review
+infer,infer,3ceeb9203ffce3a9,anki_starter,1788603785601,"suy luận, suy ra",,3,3,0,owner-review
+infer,infer,f08303d8578961d8,c1c2_wic500,c1c2-254,suy ra,to deduce from evidence and reasoning,3,3,0,owner-review
+infer,infer,09d7f54c1bdf20e9,b2c1_1000,b2c1-0597,"suy luận, suy ra",to deduce or conclude from evidence,3,3,0,owner-review
+assess,assess,1fcdb0fd41d29da9,anki_starter,1788603785611,"đánh giá, thẩm định",,2,2,0,owner-review
+assess,assess,f0b31474d58fbab1,b2c1_1000,b2c1-0226,"đánh giá, thẩm định",to evaluate or estimate the nature or quality of,2,2,0,owner-review
+evaluate,evaluate,1b24bfc1c9f5c17c,anki_starter,1788603785613,"đánh giá, ước lượng giá trị",,2,2,0,owner-review
+evaluate,evaluate,a658e5a03161eaf0,b2c1_1000,b2c1-0054,đánh giá,to assess or judge the value or quality of something,2,2,0,owner-review
+complexity,complexity,89f41b424fbceb32,anki_starter,1788603785617,"sự phức tạp, nét rắc rối",,2,2,0,owner-review
+complexity,complexity,dcfb712699e7157b,b2c1_1000,b2c1-0332,sự phức tạp,the state of being intricate or complicated,2,2,0,owner-review
+impose,impose,24d5ee16d5a20b2e,anki_starter,1788603785619,"áp đặt; (dạng imposing: gây ấn tượng sâu sắc, uy nghiêm)",,2,2,0,owner-review
+impose,impose,d2e71da8fa6e341f,b2c1_1000,b2c1-0561,"áp đặt, đặt ra",o force som Nhu,2,2,0,owner-review
+originality,originality,dff0ed7449a0c8c9,anki_starter,1788603785625,"tính độc đáo, tính nguyên bản, sự sáng tạo",,2,2,0,owner-review
+originality,originality,683805d9f183df2f,c1c2_wic500,c1c2-403,tính nguyên bản,the quality of being novel,2,2,0,owner-review
+bias,bias,8e9e2ef08865ab24,anki_starter,1788603785637,"sự thiên vị, định kiến, thiên lệch",,2,2,0,owner-review
+bias,bias,c16022051e211e68,b2c1_1000,b2c1-0344,"thanh kién, thién vi",an inclination or prejudice for or against something,2,2,0,owner-review
+accelerate,accelerate,29abb93a3954a588,anki_starter,1788603785639,"thúc đẩy, đẩy nhanh, tăng tốc",,3,3,0,owner-review
+accelerate,accelerate,d09b9650dbfdfa78,c1c2_wic500,c1c2-458,"đẩy nhanh, tăng tốc",to make faster,3,3,0,owner-review
+accelerate,accelerate,d6020d79a6c0d4d9,b2c1_1000,b2c1-0706,"tăng tốc, đẩy nhanh",to increase in speed or rate,3,3,0,owner-review
+solitary,solitary,9c2827ff259bdce3,anki_starter,1788603785641,"đơn độc, một mình, biệt lập",,3,3,0,owner-review
+solitary,solitary,f26ca31ff49b8353,c1c2_wic500,c1c2-132,đơn độc,done or existing alone,3,3,0,owner-review
+solitary,solitary,92abad09d06dc0bb,b2c1_1000,b2c1-0875,"đơn độc, cô đơn",done or existing alone; isolated,3,3,0,owner-review
+defy,defy,698a09beca1f18c1,anki_starter,1788603785647,"bất chấp, thách thức, cưỡng lại thành công",,2,2,0,owner-review
+defy,defy,2b6893a6c85ae3da,c1c2_wic500,c1c2-224,"thách thức, chống lại",to openly resist or refuse to obey,2,2,0,owner-review
+credible,credible,881ffef4160bf46f,anki_starter,1788603785651,"đáng tin, có thể tin được",,2,2,0,owner-review
+credible,credible,0cda50b20448fc56,c1c2_wic500,c1c2-343,đáng tin,able to be believed,2,2,0,owner-review
+reciprocate,reciprocate,8149dc908ff9d36c,anki_starter,1788603785653,"đáp lại, đền đáp",,2,2,0,owner-review
+reciprocate,reciprocate,da5f83f1b829798f,c1c2_wic500,c1c2-355,đáp lại tương xứng,to respond in kind,2,2,0,owner-review
+annotate,annotate,a0e4572df4443a9a,anki_starter,1788603785655,"chú thích, ghi chú",,2,2,0,owner-review
+annotate,annotate,0f4a4c6ae792d816,c1c2_wic500,c1c2-356,chú thích,to add notes giving explanation,2,2,0,owner-review
+imperative,imperative,75376f5b1c91c6b6,anki_starter,1788603785657,"cấp bách, bắt buộc",,2,2,0,owner-review
+imperative,imperative,d40b811bf4db0016,c1c2_wic500,c1c2-191,"cấp thiết, bắt buộc",of vital importance; crucial,2,2,0,owner-review
+substantial,substantial,35c21b2a7622db10,anki_starter,1788603785663,"đáng kể, quan trọng",,2,2,0,owner-review
+substantial,substantial,db95b72f5ff44792,c1c2_wic500,c1c2-250,đáng kể,of considerable importance or size,2,2,0,owner-review
+eclipse,eclipse,78c80acf6f9c8fee,anki_starter,1788603785667,"(n) sự che khuất, (v) làm lu mờ",,2,2,0,owner-review
+eclipse,eclipse,bd33f8a74ed01321,c1c2_wic500,c1c2-477,"che mờ, làm lu mờ",to surpass in importance; to obscure,2,2,0,owner-review
+consensus,consensus,fcf717ae5aaf046b,anki_starter,1788603785669,"sự đồng thuận, sự nhất trí",,2,2,0,owner-review
+consensus,consensus,13f00ad43bf00876,b2c1_1000,b2c1-0891,"sự đồng thuận, nhất trí",general agreement among a group,2,2,0,owner-review
+notional,notional,3f651a32c08df9bb,anki_starter,1788603785671,"chỉ có trong ý niệm, trừu tượng",,2,2,0,owner-review
+notional,notional,262b88d9ebae3895,c1c2_wic500,c1c2-327,có tính giả định,"existing as an idea, not real",2,2,0,owner-review
+trivial,trivial,9acb3a3ad2daa6a6,anki_starter,1788603785673,"tầm thường, không đáng kể",,2,2,0,owner-review
+trivial,trivial,7fd1288b50dbea15,c1c2_wic500,c1c2-179,"tầm thường, không quan trọng",of little value or importance,2,2,0,owner-review
+proponent,proponent,627d05319d6a1b22,anki_starter,1788603785675,"người đề xuất, người ủng hộ",,2,2,0,owner-review
+proponent,proponent,9f67b1ff672a3824,c1c2_wic500,c1c2-175,"người ủng hộ, đề xuất",a person who advocates a theory,2,2,0,owner-review
+nuance,nuance,f13d00feac8baf3b,anki_starter,1788603785679,"sắc thái, sự khác biệt tinh tế",,3,3,0,owner-review
+nuance,nuance,225acbe9f5f9934c,c1c2_wic500,c1c2-401,sự tinh tế,a subtle distinction,3,3,0,owner-review
+nuance,nuance,62f7ea9a9a77a70e,b2c1_1000,b2c1-0712,sắc thái tỉnh tế,a subtle difference in meaning or expression,3,3,0,owner-review
+contingent,contingent,baba3ef00e6d713f,anki_starter,1788603785681,"phụ thuộc vào, tùy thuộc vào",,2,2,0,owner-review
+contingent,contingent,6e9fd622c080d06b,c1c2_wic500,c1c2-324,"tùy thuộc, phụ thuộc",subject to chance; dependent on,2,2,0,owner-review
+validate,validate,a0240943b3dbf9a3,anki_starter,1788603785685,"xác nhận, chứng thực",,2,2,0,owner-review
+validate,validate,4ab4337b5efa30c3,c1c2_wic500,c1c2-128,xác nhận,to confirm or check the validity of,2,2,0,owner-review
+collaboration,collaboration,2a7d7228638c8350,anki_starter,1788603785687,"sự hợp tác, sự cộng tác",,2,2,0,owner-review
+collaboration,collaboration,707e4e9153030d89,b2c1_1000,b2c1-0885,"sự hợp tác, cộng tác",the action of working together,2,2,0,owner-review
+concede,concede,582c17c080b3f965,anki_starter,1788603785695,"thừa nhận, nhượng bộ",,3,3,0,owner-review
+concede,concede,dd7a808edd8e9530,c1c2_wic500,c1c2-226,"thừa nhận, nhượng bộ",to admit something is true,3,3,0,owner-review
+concede,concede,545ebdfdf3f6b97d,b2c1_1000,b2c1-0361,"thừa nhận, nhượng bộ",to admit reluctantly; to grant or yield,3,3,0,owner-review
+precursor,precursor,46f050f87cabfcc9,anki_starter,1788603785697,"vật báo hiệu, người tiền nhiệm",,2,2,0,owner-review
+precursor,precursor,2e3a242d848abcad,c1c2_wic500,c1c2-398,"tiền thân, dấu hiệu báo trước",a person or thing that comes before,2,2,0,owner-review
+galvanize,galvanize,dd6baa84a2839d68,anki_starter,1788603785707,"kích động, khích lệ hành động",,2,2,0,owner-review
+galvanize,galvanize,ff713c605902d045,c1c2_wic500,c1c2-235,"kích thích, thúc đẩy",to shock or excite into action,2,2,0,owner-review
+pragmatic,pragmatic,ae816fdfffab02cb,anki_starter,1788603785711,"thực tế, thực dụng",,2,2,0,owner-review
+pragmatic,pragmatic,52a24b364afe01fd,c1c2_wic500,c1c2-091,"thực tế, thực dụng",dealing with things sensibly and realistically,2,2,0,owner-review
+superficial,superficial,f993718b33597b43,anki_starter,1788603785721,"hời hợt, nông cạn",,2,2,0,owner-review
+superficial,superficial,2d3eed294b029006,c1c2_wic500,c1c2-339,hời hợt,existing only on the surface,2,2,0,owner-review
+copious,copious,1cf229c53f8893cb,anki_starter,1788603785725,"dồi dào, phong phú",,2,2,0,owner-review
+copious,copious,d1498412e5028853,c1c2_wic500,c1c2-071,"dồi dào, phong phú",abundant in supply or quantity,2,2,0,owner-review
+heterogeneous,heterogeneous,a008f6bd45081a6d,anki_starter,1788603785727,"không đồng nhất, đa dạng",,3,3,0,owner-review
+heterogeneous,heterogeneous,58bcb4cc1175bf02,c1c2_wic500,c1c2-319,không đồng nhất,diverse in character or content,3,3,0,owner-review
+heterogeneous,heterogeneous,530985c460d224cb,b2c1_1000,b2c1-0914,"không đồng nhất, đa dạng",consisting of diverse or dissimilar elements,3,3,0,owner-review
+efficacy,efficacy,f2db8749bb7d0ebb,anki_starter,1788603785729,"tính hiệu quả, công hiệu",,2,2,0,owner-review
+efficacy,efficacy,5bb6325088472cb3,b2c1_1000,b2c1-0883,"tính hiệu quả, công hiệu",the ability to produce a desired result,2,2,0,owner-review
+ameliorate,ameliorate,69a067c8ef5c9048,anki_starter,1788603785735,"cải thiện, làm tốt hơn",,2,2,0,owner-review
+ameliorate,ameliorate,2cc3951d52647529,c1c2_wic500,c1c2-015,"cải thiện, làm tốt hơn",to make something bad better,2,2,0,owner-review
+abridge,abridge,98ba79b0a55a68dc,anki_starter,1788603785737,"rút ngắn, tóm tắt",,2,2,0,owner-review
+abridge,abridge,9dd9f6ff10151ced,c1c2_wic500,c1c2-110,rút ngắn,to shorten without losing the sense,2,2,0,owner-review
+enumerate,enumerate,0caae6d877369f0c,anki_starter,1788603785739,"liệt kê, đếm từng cái",,2,2,0,owner-review
+enumerate,enumerate,4d4535963fad8f31,c1c2_wic500,c1c2-111,liệt kê,to mention separately as if in counting,2,2,0,owner-review
+sporadic,sporadic,9bd63c9e88ffd09b,anki_starter,1788603785741,"Lẻ tẻ, không đều đặn. Thỉnh thoảng xảy ra.",,2,2,0,owner-review
+sporadic,sporadic,730e4b21e33b94dd,c1c2_wic500,c1c2-070,"lẻ tẻ, không đều",occurring at irregular intervals,2,2,0,owner-review
+conjecture,conjecture,b0d2bc408c4db730,anki_starter,1788603785745,"sự phỏng đoán, sự ước đoán",,2,2,0,owner-review
+conjecture,conjecture,8db63d1f4a37216c,c1c2_wic500,c1c2-075,phỏng đoán,an opinion based on incomplete information,2,2,0,owner-review
+dispute,dispute,2106d598a6914e4d,anki_starter,1788603785751,"tranh cãi, bàn cãi",,3,3,0,owner-review
+dispute,dispute,0109c07167224bbb,c1c2_wic500,c1c2-193,"tranh chấp, phủ nhận",to question the truth of something,3,3,0,owner-review
+dispute,dispute,4af41c3a8a288fab,b2c1_1000,b2c1-0974,"tranh chấp, tranh luận",a disagreement or argument; to question the truth of,3,3,0,owner-review
+authoritative,authoritative,8f0d2f5e2e844575,anki_starter,1788603785753,"có thẩm quyền, đáng tin cậy, quyết đoán",,2,2,0,owner-review
+authoritative,authoritative,06c829ec254d5254,c1c2_wic500,c1c2-087,"có thẩm quyền, đáng tin cậy",able to be trusted as accurate,2,2,0,owner-review
+critique,critique,65e65d61878af272,anki_starter,1788603785755,"bài phê bình, sự đánh giá có phân tích",,2,2,0,owner-review
+critique,critique,8ef81e851da4b78a,b2c1_1000,b2c1-0265,"bài phê bình, đánh giá",a detailed analysis and assessment of something,2,2,0,owner-review
+register,register,9e56dc4ec5781daa,anki_starter,1788603785757,"ghi nhận, thể hiện, bộc lộ",,2,2,0,owner-review
+register,register,ef7d4eabcfff9f6c,c1c2_wic500,c1c2-218,"biểu lộ, thể hiện",to express or convey an opinion,2,2,0,owner-review
+prohibitive,prohibitive,dc37378f13e63a04,anki_starter,1788603785791,"đắt cắt cổ, ngăn cấm",,2,2,0,owner-review
+prohibitive,prohibitive,a538c773cb654c0b,c1c2_wic500,c1c2-353,"quá đắt, cấm đoán",(of price) excessively high; forbidding,2,2,0,owner-review
+continuity,continuity,0f628b4f569997f9,anki_starter,1788603785803,"tính liên tục, sự kế thừa liền mạch",,2,2,0,owner-review
+continuity,continuity,43c6cc6af3f5cbce,b2c1_1000,b2c1-0970,"tính liên tục, sự nối tiếp",the unbroken and consistent existence of something,2,2,0,owner-review
+genuine,genuine,1e0d08f4044508b9,anki_starter,1788603785811,"thật, chân thật, thành thật",,2,2,0,owner-review
+genuine,genuine,97fe3197218af880,c1c2_wic500,c1c2-195,chân thực,truly what something is said to be,2,2,0,owner-review
+perceptible,perceptible,600266ec7bea120b,anki_starter,1788603785817,"có thể nhận biết được, có thể thấy rõ",,2,2,0,owner-review
+perceptible,perceptible,161780eb6a575fb4,c1c2_wic500,c1c2-491,có thể cảm nhận được,able to be perceived,2,2,0,owner-review
+abandon,abandon,461bffa33a4dd3a3,anki_starter,1788603785821,"từ bỏ, ruồng bỏ",,2,2,0,owner-review
+abandon,abandon,f0eb947dcf52fa18,b2c1_1000,b2c1-0569,"từ bỏ, bỏ rơi",to give up completely; to leave behind,2,2,0,owner-review
+assert,assert,d42097aa61e0d722,anki_starter,1788603785831,"khẳng định, quả quyết",,2,2,0,owner-review
+assert,assert,e2400b0702224dd1,b2c1_1000,b2c1-0105,khẳng định,to state a fact or belief confidently and forcefully,2,2,0,owner-review
+embrace,embrace,8fae2e44de935ca6,anki_starter,1788603785841,"đón nhận, tiếp thu nhiệt tình, ôm",,2,2,0,owner-review
+embrace,embrace,54d61e38b94a9253,b2c1_1000,b2c1-0618,"đón nhận, ôm lấy",to accept willingly; to hold closely,2,2,0,owner-review
+outsize,outsize,89c172a2705722be,anki_starter,1788603785863,"Quá khổ, lớn khác thường, chiếm tỉ lệ vượt trội",,2,2,0,owner-review
+outsize,outsize,2a08706ebc12ddb0,c1c2_wic500,c1c2-216,"quá khổ, ngoại cỡ",exceptionally large,2,2,0,owner-review
+pervade,pervade,c79fdc843725373b,anki_starter,1788603785875,"lan tỏa khắp, tràn ngập, thấm nhuần",,2,2,0,owner-review
+pervade,pervade,3b585be2c32367c2,c1c2_wic500,c1c2-417,lan tỏa khắp,to spread through every part of,2,2,0,owner-review
+synthesis,synthesis,cf242e4ae226f66b,anki_starter,1788603785877,"sự tổng hợp, sự kết hợp",,2,2,0,owner-review
+synthesis,synthesis,993ee69c28fa21c7,b2c1_1000,b2c1-0971,sự tổng hợp,the combination of parts into a coherent whole,2,2,0,owner-review
+enact,enact,d9097c49c269076a,anki_starter,1788603785885,"ban hành (luật), thi hành, thực hiện",,2,2,0,owner-review
+enact,enact,e2665220c1ae27b2,b2c1_1000,b2c1-0480,ban hành; diễn xuất,to make into law; to perform or act out,2,2,0,owner-review
+juxtaposition,juxtaposition,79f801a95e9c0e3d,anki_starter,1788603785889,"sự đặt cạnh nhau, sự kề nhau",,2,2,0,owner-review
+juxtaposition,juxtaposition,c67c5bf50d4ba0a3,b2c1_1000,b2c1-0930,sự đặt cạnh nhau (đối chiếu),the placing of things side by side for contrast,2,2,0,owner-review
+evince,evince,75dbd62827494797,anki_starter,1788603785895,"bày tỏ, biểu lộ",,2,2,0,owner-review
+evince,evince,ce66b66062f8bb92,c1c2_wic500,c1c2-012,"biểu lộ, cho thấy",to show or reveal a quality clearly,2,2,0,owner-review
+thwart,thwart,43e51bf55c25d66a,anki_starter,1788603785897,"cản trở, làm thất bại",,2,2,0,owner-review
+thwart,thwart,a97afd3c5b8479fa,c1c2_wic500,c1c2-089,"ngăn cản, làm thất bại",to prevent from accomplishing,2,2,0,owner-review
+compulsory,compulsory,f9c9810b8b83cd4e,anki_starter,1788603785901,bắt buộc,,2,2,0,owner-review
+compulsory,compulsory,71c0f860970dd8c4,c1c2_wic500,c1c2-478,bắt buộc,required by law or rule,2,2,0,owner-review
+innocuous,innocuous,9a5bb20c96b48e1a,anki_starter,1788603785913,"vô hại, không có ác ý",,2,2,0,owner-review
+innocuous,innocuous,cec57eedb7549101,c1c2_wic500,c1c2-412,vô hại,not harmful or offensive,2,2,0,owner-review
+epitome,epitome,152d3a28084e579c,anki_starter,1788603785935,"hình mẫu hoàn hảo, ví dụ tiêu biểu",,2,2,0,owner-review
+epitome,epitome,192fe51b2e411504,c1c2_wic500,c1c2-476,hình ảnh tiêu biểu,a perfect example of a quality,2,2,0,owner-review
+esoteric,esoteric,b8e6c6d6bf151881,anki_starter,1788603785937,"chuyên sâu, bí truyền",,2,2,0,owner-review
+esoteric,esoteric,30a448db3a79638f,c1c2_wic500,c1c2-086,"huyền bí, kén người hiểu",intended for or understood by only a small group,2,2,0,owner-review
+tantamount,tantamount,0af9f4ca98d73512,anki_starter,1788603785943,"tương đương với, ngang với",,2,2,0,owner-review
+tantamount,tantamount,ff91edbb248cfda6,c1c2_wic500,c1c2-054,tương đương với,equivalent in seriousness or effect,2,2,0,owner-review
+deference,deference,9a7503946cfe595b,anki_starter,1788603785945,"sự tôn trọng, sự tuân theo",,2,2,0,owner-review
+deference,deference,e28ff27e7e5d8f47,c1c2_wic500,c1c2-099,"sự kính trọng, nhường nhịn",humble submission and respect,2,2,0,owner-review
+exemplar,exemplar,c6ac8663ca669a95,anki_starter,1788603785947,"mẫu mực, tấm gương điển hình",,2,2,0,owner-review
+exemplar,exemplar,6585a14b8cfa2166,c1c2_wic500,c1c2-342,"tấm gương, mẫu mực",a person serving as a typical example,2,2,0,owner-review
+harbinger,harbinger,1e3ba47aff32b767,anki_starter,1788603785949,"người báo hiệu, điềm báo",,2,2,0,owner-review
+harbinger,harbinger,bb6edecb919378d6,c1c2_wic500,c1c2-030,"điềm báo, kẻ báo hiệu",a person or thing that announces something coming,2,2,0,owner-review
+quintessential,quintessential,f417f55990744a24,anki_starter,1788603785955,"tinh túy nhất, điển hình nhất",,2,2,0,owner-review
+quintessential,quintessential,d6f33b5214979f3b,c1c2_wic500,c1c2-291,"tinh túy, điển hình nhất",representing the most perfect example,2,2,0,owner-review
+tangential,tangential,122c9fec9895c292,anki_starter,1788603785959,"lạc đề, ngoài lề",,2,2,0,owner-review
+tangential,tangential,6a690a1b4c1ea9b0,c1c2_wic500,c1c2-158,"tiếp tuyến, không liên quan trực tiếp",barely connected to a subject,2,2,0,owner-review
+vary,vary,a41a3636e9d0469a,anki_starter,1788603785961,"thay đổi, khác nhau, biến đổi",,2,2,0,owner-review
+vary,vary,2b0140754b6b1a9b,b2c1_1000,b2c1-0028,"thay đổi, biến đổi",to differ or change from one another or over time,2,2,0,owner-review
+austerity,austerity,3e62f4a3dd0f04a8,anki_starter,1788603785965,"sự khắc khổ, sự thắt lưng buộc bụng",,2,2,0,owner-review
+austerity,austerity,8c2014e1f7a8b7e8,c1c2_wic500,c1c2-220,"khắc khổ, đạm bạc",sternness or severity; harsh economy,2,2,0,owner-review
+adapt,adapt,a8a5954b22c2a099,anki_starter,1788603785991,"thích nghi, điều chỉnh cho phù hợp",,2,2,0,owner-review
+adapt,adapt,18a8a46f34d6330f,b2c1_1000,b2c1-0030,"thích nghi, điều chỉnh",to adjust to new conditions or make suitable,2,2,0,owner-review
+insular,insular,937ee1daea08c6cd,anki_starter,1788603785993,"hẹp hòi, thiển cận",,2,2,0,owner-review
+insular,insular,78afcce31316aae4,c1c2_wic500,c1c2-469,"cô lập, hẹp hòi",ignorant of or uninterested in cultures other than one's own,2,2,0,owner-review
+onerous,onerous,d1eaa383d4b34b3d,anki_starter,1788603786003,"nặng nề, khó nhọc; tốn nhiều công sức",,2,2,0,owner-review
+onerous,onerous,066698a0dddd2c3c,c1c2_wic500,c1c2-080,"nặng nề, phiền toái","involving a great deal of effort, trouble",2,2,0,owner-review
+placate,placate,85e630ba43b935ea,anki_starter,1788603786009,"làm nguôi giận, xoa dịu",,2,2,0,owner-review
+placate,placate,3704db46d92ed419,c1c2_wic500,c1c2-298,xoa dịu,to make less angry; to pacify,2,2,0,owner-review
+cursory,cursory,7b38a5a8a8f7a685,anki_starter,1788603786035,"vội vàng, sơ sài",,2,2,0,owner-review
+cursory,cursory,3bd64617c1cdac98,c1c2_wic500,c1c2-171,"qua loa, sơ sài",hasty and therefore not thorough,2,2,0,owner-review
+indeterminate,indeterminate,a64deca19b7211c5,anki_starter,1788603786065,"không xác định, mơ hồ",,2,2,0,owner-review
+indeterminate,indeterminate,b1bd96fea9a89166,c1c2_wic500,c1c2-192,không xác định,not exactly known or established,2,2,0,owner-review
+latitude,latitude,c48b302bd3959ebc,anki_starter,1788603786073,"sự tự do hành động, phạm vi rộng rãi",,3,3,0,owner-review
+latitude,latitude,ce52604a7e8bde93,c1c2_wic500,c1c2-348,phạm vi tự do,scope for freedom of action,3,3,0,owner-review
+latitude,latitude,1580442fc6d1a550,b2c1_1000,b2c1-0312,vĩ độ,the angular distance north or south of the equator,3,3,0,owner-review
+obviate,obviate,77c0ba3f99af3212,anki_starter,1788603786079,"loại bỏ, ngăn ngừa",,2,2,0,owner-review
+obviate,obviate,03bae8353a17c35e,c1c2_wic500,c1c2-119,"loại bỏ, ngăn ngừa",to remove the need for; to avert,2,2,0,owner-review
+pervasiveness,pervasiveness,e50943eb016a6d89,anki_starter,1788603786089,"sự lan tỏa, sự phổ biến rộng khắp",,2,2,0,owner-review
+pervasiveness,pervasiveness,e0dfdd6abee84ece,c1c2_wic500,c1c2-140,"tính lan tỏa, phổ biến",the quality of spreading widely,2,2,0,owner-review
+subsume,subsume,71a7d7dfc600c124,anki_starter,1788603786107,"bao gồm, gộp vào",,2,2,0,owner-review
+subsume,subsume,e3d58a7860a39ded,c1c2_wic500,c1c2-136,"bao gồm, gộp vào",to include or absorb in something larger,2,2,0,owner-review
+inspire,inspire,099fdd965e821f74,anki_starter,1788603786111,"truyền cảm hứng, khơi gợi",,2,2,0,owner-review
+inspire,inspire,f3519df892217177,b2c1_1000,b2c1-0124,truyền cảm hứng,to fill with the urge or ability to do something,2,2,0,owner-review
+succinctly,succinctly,8efa4d8f28ffc297,anki_starter,1788603786113,"ngắn gọn, súc tích",,2,2,0,owner-review
+succinctly,succinctly,85df7bb75df090e9,c1c2_wic500,c1c2-211,"ngắn gọn, súc tích",in a brief and clear manner,2,2,0,owner-review
+excessive,excessive,b27a5333676e9500,anki_starter,1788603786121,"quá mức, thái quá",,2,2,0,owner-review
+excessive,excessive,3edd1e3199f192bd,c1c2_wic500,c1c2-424,quá mức,more than necessary; immoderate,2,2,0,owner-review
+alter,alter,d1e7d3df3066c282,anki_starter,1788603786131,"thay đổi, biến đổi",,2,2,0,owner-review
+alter,alter,c89c811e01c70490,b2c1_1000,b2c1-0366,"thay đổi, biến đổi",to change in character or composition,2,2,0,owner-review
+preliminary,preliminary,29afe0fadd82da70,anki_starter,1788603786133,"sơ bộ, bước đầu",,2,2,0,owner-review
+preliminary,preliminary,bd9b427890c15dc0,c1c2_wic500,c1c2-059,"sơ bộ, mở đầu",denoting an action preceding more important,2,2,0,owner-review
+analyze,analyze,07ec6b7a14701601,anki_starter,1788603786155,Phân tích kỹ lưỡng,,2,2,0,owner-review
+analyze,analyze,e7721469d5147949,b2c1_1000,b2c1-0034,phân tích,to examine methodically and in detail,2,2,0,owner-review
+rejection,rejection,ae093de16c6fa0b8,anki_starter,1788603786157,"Sự từ chối, sự bác bỏ",,2,2,0,owner-review
+rejection,rejection,e8ad4fb77bb04101,b2c1_1000,b2c1-0758,"sự từ chối, bác bỏ",the act of refusing or dismissing,2,2,0,owner-review
+accumulate,accumulate,de1d71277f111105,anki_starter,1788603786165,"Tích tụ, tích lũy, gom lại nhiều dần theo thời gian",,2,2,0,owner-review
+accumulate,accumulate,d85fc6b7c4affac1,b2c1_1000,b2c1-0450,"tích lũy, gom góp",to gather or build up gradually,2,2,0,owner-review
+beneficial,beneficial,50c8be3791ff6cea,anki_starter,1788603786173,"Có lợi, mang lại điều tốt lành",,3,3,0,owner-review
+beneficial,beneficial,c50eb933bd93fcb6,c1c2_wic500,c1c2-109,có lợi,favorable or advantageous,3,3,0,owner-review
+beneficial,beneficial,84e212d321dcbf2a,b2c1_1000,b2c1-0390,"có lợi, hữu ích",favorable or advantageous; producing good,3,3,0,owner-review
+reliably,reliably,48326b31d22507f9,anki_starter,1788603786177,"Một cách đáng tin cậy, chuẩn xác và ổn định",,2,2,0,owner-review
+reliably,reliably,0f4dd1e649b098e6,b2c1_1000,b2c1-0644,một cách đáng tin cậy,in a dependable and consistent way,2,2,0,owner-review
+imply,imply,d7ebf773c4ba2d82,anki_starter,1788603786179,"ngụ ý, ám chỉ",,2,2,0,owner-review
+imply,imply,c693d6f4ac976707,b2c1_1000,b2c1-0246,"ngụ ý, hàm ý",to suggest indirectly rather than state directly,2,2,0,owner-review
+indecision,indecision,73ac672c35b57d50,anki_starter,1788603786181,"sự do dự, sự lưỡng lự, sự thiếu quyết đoán",,2,2,0,owner-review
+indecision,indecision,8918676a37912797,c1c2_wic500,c1c2-100,sự do dự,inability to decide quickly,2,2,0,owner-review
+reflection,reflection,a3d9caf168fe053f,anki_starter,1788603786183,"sự suy ngẫm, sự cân nhắc sâu sắc",,2,2,0,owner-review
+reflection,reflection,0b2053204750696d,b2c1_1000,b2c1-0870,sự phản chiếu; sự suy ngẫm,the throwing back of light; serious thought,2,2,0,owner-review
+persist,persist,c55b0255b1f1a2e1,anki_starter,1788603786187,"tiếp tục tồn tại, kiên trì, dai dẳng",,2,2,0,owner-review
+persist,persist,5d8f1ef3910e0117,b2c1_1000,b2c1-0260,"kiên trì, tồn tại dai dẳng",to continue firmly despite difficulty or opposition,2,2,0,owner-review
+compound,compound,97115fc26a474775,anki_starter,1788603786191,"làm trầm trọng thêm, nhân lên sự tồi tệ",,3,3,0,owner-review
+compound,compound,71742f39e78122ba,c1c2_wic500,c1c2-204,làm nặng thêm; hợp chất,to make worse by adding to,3,3,0,owner-review
+compound,compound,a09a461ae8026f82,b2c1_1000,b2c1-0091,hợp chất; phức hợp,a thing composed of two or more separate elements,3,3,0,owner-review
+amplify,amplify,465f88eaf8ff18b0,anki_starter,1788603786195,"khuếch đại, làm tăng lên",,2,2,0,owner-review
+amplify,amplify,5793fd5aef9f9c22,c1c2_wic500,c1c2-385,"khuếch đại, làm tăng",to increase the volume or significance,2,2,0,owner-review
+counterbalance,counterbalance,f1bf851a00f948e4,anki_starter,1788603786197,"làm đối trọng, cân bằng lại",,2,2,0,owner-review
+counterbalance,counterbalance,ad370ecad2336166,c1c2_wic500,c1c2-137,"đối trọng, cân bằng",to have an equal but opposite effect,2,2,0,owner-review
+intrinsic,intrinsic,0a5833017ba574cd,anki_starter,1788603786199,"cốt lõi của, bản chất của",,2,2,0,owner-review
+intrinsic,intrinsic,d1d638be90ab01cf,c1c2_wic500,c1c2-413,"vốn có, bản chất",belonging naturally; essential,2,2,0,owner-review
+peripheral,peripheral,895c7fd63632096f,anki_starter,1788603786201,"thuộc ngoại vi, thứ yếu",,2,2,0,owner-review
+peripheral,peripheral,8a74698d03520932,c1c2_wic500,c1c2-377,"ngoại biên, phụ",relating to the outer boundary; secondary,2,2,0,owner-review
+advantageous,advantageous,e3b5824fd96aa955,anki_starter,1788603786205,"có lợi, thuận lợi",,2,2,0,owner-review
+advantageous,advantageous,24683f30e9490a6a,b2c1_1000,b2c1-0842,"có lợi, thuận lợi",providing a benefit or favorable position,2,2,0,owner-review
+compensate,compensate,7fd5eeb0a29191c5,anki_starter,1788603786215,"bù đắp cho, đền bù cho",,2,2,0,owner-review
+compensate,compensate,f38dbca8e9547604,c1c2_wic500,c1c2-061,bù đắp,to make up for or offset,2,2,0,owner-review
+comprise,comprise,667fe76a6d7b4659,anki_starter,1788603786221,"bao gồm, tạo thành",,2,2,0,owner-review
+comprise,comprise,6d5fb655aa269fd2,b2c1_1000,b2c1-0847,"bao gồm, cấu thành",to consist of or be made up of,2,2,0,owner-review
+invasive,invasive,7afbb948eade8bfe,anki_starter,1788603786237,"xâm lấn, xâm phạm",,2,2,0,owner-review
+invasive,invasive,49ac0e9c0bd4c30f,b2c1_1000,b2c1-0145,"xâm lấn, xâm hại",tending to spread aggressively and harmfully,2,2,0,owner-review
+mediate,mediate,97cf16d4115eed43,c1c2_wic500,c1c2-041,làm trung gian,to intervene to bring about agreement,2,2,0,owner-review
+mediate,mediate,324bf9f275a00cfa,b2c1_1000,b2c1-0367,"làm trung gian, hòa giải",to intervene to settle a dispute; to bring about,2,2,0,owner-review
+persistent,persistent,e5486863485c1d8d,c1c2_wic500,c1c2-160,"kiên trì, dai dẳng",continuing firmly despite difficulty,2,2,0,owner-review
+persistent,persistent,256aa282372f4be2,b2c1_1000,b2c1-0966,"dai ding, kiên tì",firmly despite Continuing,2,2,0,owner-review
+diffusion,diffusion,1034176cb70475fe,c1c2_wic500,c1c2-169,sự lan tỏa,the spreading of something widely,2,2,0,owner-review
+diffusion,diffusion,40d23cb2834c40f3,b2c1_1000,b2c1-0614,"sự khuếch tán, lan truyền",the spreading of something more widely,2,2,0,owner-review
+advocate,advocate,4a1c6e756ef27e14,c1c2_wic500,c1c2-215,"ủng hộ, biện hộ",to publicly recommend or support,2,2,0,owner-review
+advocate,advocate,8af540668fd713a2,b2c1_1000,b2c1-0495,"ủng hộ, biện hộ; người bênh vực",to publicly support or recommend; a supporter,2,2,0,owner-review
+controversial,controversial,1ce7af06e5f64559,c1c2_wic500,c1c2-221,gây tranh cãi,giving rise to public disagreement,2,1,0,exclude-proposal
+controversial,controversial,b231dfbe4b7eafb6,b2c1_1000,b2c1-0862,gây tranh cãi,giving rise to public disagreement,2,1,0,exclude-proposal
+implement,implement,9f982b39092de94a,c1c2_wic500,c1c2-228,"thực hiện, thi hành",to put a decision or plan into effect,2,2,0,owner-review
+implement,implement,425525921386525d,b2c1_1000,b2c1-0391,"thực hiện, triển khai; dụng cụ",to put a plan into effect; a tool,2,2,0,owner-review
+populate,populate,017e696816b595a3,c1c2_wic500,c1c2-242,"định cư, tạo nên dân số",to inhabit; to form the population of,2,2,0,owner-review
+populate,populate,a5a880080f8579c4,b2c1_1000,b2c1-0682,"cư trú, làm cho có dân cư",to inhabit or fill with people or things,2,2,0,owner-review
+prompt,prompt,e713afef9f0c9b97,c1c2_wic500,c1c2-257,thúc đẩy; ngay lập tức,to cause to do something; immediate,2,2,0,owner-review
+prompt,prompt,f7562b756c38cd80,b2c1_1000,b2c1-0703,"kịp thời; thúc đẩy, gợi ý",done without delay; to cause or incite,2,2,0,owner-review
+prevalent,prevalent,ea8eb1aa71089a2e,c1c2_wic500,c1c2-265,phổ biến,widespread in a particular area,2,2,0,owner-review
+prevalent,prevalent,a62cc96a817af75a,b2c1_1000,b2c1-0382,"phổ biến, thịnh hành",widespread in a particular area or time,2,2,0,owner-review
+distinct,distinct,9428a0ed254e0ee0,c1c2_wic500,c1c2-271,"rõ ràng, khác biệt",clearly different; separate,2,2,0,owner-review
+distinct,distinct,c903b621f2e316b8,b2c1_1000,b2c1-0058,"khác biệt, riêng biệt",recognizably different in nature; clearly separate,2,2,0,owner-review
+indicative,indicative,e437fe69b2813f46,c1c2_wic500,c1c2-290,biểu thị,serving as a sign or indication,2,2,0,owner-review
+indicative,indicative,91b8fa850de0f4b2,b2c1_1000,b2c1-0452,"biểu thị, cho thấy",serving as a sign or indication of something,2,2,0,owner-review
+prevail,prevail,6219138dad6f59b8,c1c2_wic500,c1c2-341,"thắng thế, phổ biến",to prove more powerful; to predominate,2,2,0,owner-review
+prevail,prevail,a996f796be06fc53,b2c1_1000,b2c1-0992,"thing thé, thinh hanh",to prove more powerful; to be widespread,2,2,0,owner-review
+predictable,predictable,a9fdb1519783903a,c1c2_wic500,c1c2-345,có thể đoán trước,able to be foretold,2,2,0,owner-review
+predictable,predictable,d34d79bf1a835493,b2c1_1000,b2c1-0881,có thể dự đoán,able to be foreseen; behaving as expected,2,2,0,owner-review
+distinctive,distinctive,2870141a5637e4f8,c1c2_wic500,c1c2-352,đặc trưng,characteristic of one person/thing,2,2,0,owner-review
+distinctive,distinctive,326e903d6549a920,b2c1_1000,b2c1-0728,"đặc biệt, riêng biệt",having a quality that marks something as different,2,2,0,owner-review
+brood,brood,a14f215a48d8deeb,c1c2_wic500,c1c2-360,suy nghĩ ủ rũ,to think deeply about something unpleasant,2,2,0,owner-review
+brood,brood,5ec43c09d00fe8a4,b2c1_1000,b2c1-0932,"lứa, đàn con; ưu tư",the young of an animal; to think anxiously,2,2,0,owner-review
+dependent,dependent,c85fec412db93db9,c1c2_wic500,c1c2-361,phụ thuộc,requiring something to exist or succeed,2,2,0,owner-review
+dependent,dependent,066faa919c508f72,b2c1_1000,b2c1-0920,"phụ thuộc, lệ thuộc",relying on someone or something for support,2,2,0,owner-review
+expose,expose,78f83127f776ddaf,c1c2_wic500,c1c2-363,"phơi bày, tiết lộ",to reveal or make publicly known,2,2,0,owner-review
+expose,expose,acbe5522769f1dd1,b2c1_1000,b2c1-0114,"phơi bày, để lộ",to reveal or make visible; to subject to an influence,2,2,0,owner-review
+inattentive,inattentive,9be9bf95abc5b9c7,c1c2_wic500,c1c2-387,"lơ là, không chú ý",not paying close attention,2,2,0,owner-review
+inattentive,inattentive,c2f1e6f9b95a2122,b2c1_1000,b2c1-0532,"không chu ý, lơ đãng",not paying attention; negligent,2,2,0,owner-review
+robust,robust,842084f78ba389c7,c1c2_wic500,c1c2-394,"mạnh mẽ, vững chắc",strong and healthy,2,2,0,owner-review
+robust,robust,ef3ac413cd9e76b9,b2c1_1000,b2c1-0637,"mạnh mẽ, vững chắc",strong and healthy; sturdy,2,2,0,owner-review
+abstraction,abstraction,250bba16ceaa1db3,c1c2_wic500,c1c2-410,sự trừu tượng,the quality of dealing with ideas,2,2,0,owner-review
+abstraction,abstraction,efc1656d187e3a8b,b2c1_1000,b2c1-0774,sự trừu tượng,the quality of dealing with ideas rather than events,2,2,0,owner-review
+synthesize,synthesize,6fc53f1b9c7839d5,c1c2_wic500,c1c2-414,tổng hợp,to combine into a coherent whole,2,2,0,owner-review
+synthesize,synthesize,a7994072a6414f52,b2c1_1000,b2c1-0232,tổng hợp,to combine elements into a coherent whole,2,2,0,owner-review
+align,align,7899a657354cbcdb,c1c2_wic500,c1c2-415,sắp xếp; phù hợp với,to place in a straight line; agree with,2,2,0,owner-review
+align,align,501506b533bbfeb9,b2c1_1000,b2c1-0741,sắp thẳng hàng; điều chỉnh,to place in a straight line; to bring into agreement,2,2,0,owner-review
+underestimate,underestimate,ec1384274fd79663,c1c2_wic500,c1c2-426,đánh giá thấp,to estimate at too low a value,2,2,0,owner-review
+underestimate,underestimate,08864576c750626f,b2c1_1000,b2c1-0873,đánh giá thấp,to regard as smaller or less capable than reality,2,2,0,owner-review
+familiarity,familiarity,cf5b9a31afe04077,c1c2_wic500,c1c2-427,sự quen thuộc,close acquaintance with something,2,2,0,owner-review
+familiarity,familiarity,5c3a5614796b72f4,b2c1_1000,b2c1-0903,"sự quen thuộc, thông thạo",close acquaintance or knowledge of something,2,2,0,owner-review
+geothermal,geothermal,117d7e0f8d31a9d1,c1c2_wic500,c1c2-444,địa nhiệt,relating to internal heat of earth,2,2,0,owner-review
+geothermal,geothermal,17f56283707f1620,b2c1_1000,b2c1-0320,địa nhiệt,relating to heat from the earth's interior,2,2,0,owner-review
+perceive,perceive,fb511c157e38f815,c1c2_wic500,c1c2-453,"nhận thức, cảm nhận",to become aware of through senses,2,2,0,owner-review
+perceive,perceive,4c3db4784703636e,b2c1_1000,b2c1-0044,"nhận thức, cảm nhận",to become aware of or understand through the senses,2,2,0,owner-review
+illustrate,illustrate,af31e5215e643da9,c1c2_wic500,c1c2-456,minh họa,to provide an example of,2,2,0,owner-review
+illustrate,illustrate,7fd17e7f0822d0d6,b2c1_1000,b2c1-0005,"minh họa, làm rõ",to explain or make clear by using examples,2,2,0,owner-review
+resolve,resolve,213a875921eb678b,c1c2_wic500,c1c2-461,giải quyết; quyết tâm,to settle or find a solution to,2,2,0,owner-review
+resolve,resolve,dd6344f6e51c60b4,b2c1_1000,b2c1-0467,giải quyết; quyết tâm,to settle or find a solution; firm determination,2,2,0,owner-review
+pedestrian,pedestrian,0441ee597807bdb9,c1c2_wic500,c1c2-464,tầm thường,lacking inspiration; commonplace,2,2,0,owner-review
+pedestrian,pedestrian,9f2124d5625f9bb1,b2c1_1000,b2c1-0699,người đi bộ; tầm thường,"a person walking; lacking excitement, dull",2,2,0,owner-review
+contradict,contradict,958a0f9fb0a7920d,c1c2_wic500,c1c2-485,"mâu thuẫn, bác bỏ",to deny the truth of,2,2,0,owner-review
+contradict,contradict,0b8791b1f982b1d4,b2c1_1000,b2c1-0899,"mâu thuẫn, phản bác",to assert the opposite of a statement,2,2,0,owner-review

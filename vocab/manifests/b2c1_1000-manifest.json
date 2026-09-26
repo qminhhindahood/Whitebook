@@ -1,0 +1,18 @@
+{
+ "schema_version": 1,
+ "deck_id": "b2c1_1000",
+ "version": 2,
+ "status": "draft-pending-owner-review",
+ "created_at": "2026-09-26T14:46:13+00:00",
+ "card_count": 1000,
+ "approved_count": 0,
+ "source": {
+  "path": "D:\\Notion\\1000_tu_SAT_B2-C1_VietAccepted (1).pdf",
+  "sha256": "cec97c4c5c599b0f4bd2b741353859ad38fd7fd962440173d004a7b659bcaf01",
+  "extraction": "tesseract-eng+vie-300dpi-threshold",
+  "imported_at": "2026-09-26T09:43:13+00:00"
+ },
+ "cards_file": "b2c1_1000-v2-cards.json",
+ "cards_sha256": "a08e71627852b7d506fa8d2cad57c4683815aaae1b536cf88eba2280d4f7152a",
+ "manifest_sha256": "0d1ef46b07b00e4d684561d710323097dfdc485bcb5623ae1960639831aac163"
+}
