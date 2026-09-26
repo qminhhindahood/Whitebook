@@ -17,6 +17,13 @@ export function QuestionContent({
           <span className="question-content__text" key={index}>
             {block.text}
           </span>
+        ) : block.kind === "asset" ? (
+          <img
+            className="question-content__asset"
+            key={index}
+            src={block.src}
+            alt={block.alt}
+          />
         ) : (
           <RegionCrop
             key={index}

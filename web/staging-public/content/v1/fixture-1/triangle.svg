@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-label="Triangle with base 4 and height 3">
+  <rect width="480" height="300" fill="#f8faf7"/>
+  <path d="M72 244 L376 244 L224 56 Z" fill="#e0efe6" stroke="#1b6242" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M224 56 L224 244" stroke="#60766a" stroke-width="2" stroke-dasharray="7 6"/>
+  <path d="M224 226 L242 226 L242 244" fill="none" stroke="#60766a" stroke-width="2"/>
+  <text x="224" y="278" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#173c31">base = 4</text>
+  <text x="248" y="164" font-family="Arial, sans-serif" font-size="21" fill="#173c31">h = 3</text>
+</svg>

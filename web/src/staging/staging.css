@@ -1,0 +1,53 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #14251d;
+  background: #f5f4ed;
+  --ink: #14251d;
+  --rule: #d9dfd5;
+  --white: #fff;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+.staging-shell { min-height: 100dvh; }
+.staging-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 1.1rem max(1rem, calc((100vw - 1000px) / 2));
+  color: white;
+  background: #173c31;
+}
+.staging-header strong { font-size: 1.35rem; letter-spacing: -.04em; }
+.staging-header span { font-size: .82rem; opacity: .82; }
+.staging-card {
+  width: min(100% - 2rem, 760px);
+  margin: clamp(1rem, 5vw, 3rem) auto;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  background: white;
+  border: 1px solid #d9dfd5;
+  border-radius: 16px;
+  box-shadow: 0 12px 36px #10291b0d;
+}
+.staging-card h1 { margin: 0 0 1rem; font-size: clamp(1.7rem, 4vw, 2.4rem); }
+.staging-login { display: grid; gap: 1rem; max-width: 520px; }
+.staging-login p { margin: 0; line-height: 1.5; }
+.staging-login label { font-weight: 650; }
+.staging-login input { font: inherit; min-height: 44px; padding: .65rem; border: 1px solid #87958b; border-radius: 8px; }
+.staging-login button { font: inherit; min-height: 44px; border: 0; border-radius: 8px; color: white; background: #205b42; cursor: pointer; }
+.staging-question__eyebrow { color: #4d6b59; font-weight: 700; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; }
+.staging-question .question-content { margin-block: 1.5rem; }
+.staging-question .question-content__asset { width: min(100%, 480px); margin-inline: auto; }
+.staging-question .content-choice { display: flex; align-items: center; gap: .75rem; padding: .75rem; border: 1px solid #d9dfd5; border-radius: 10px; }
+.staging-question .choice-card { display: flex; align-items: center; gap: .75rem; flex: 1; cursor: pointer; }
+.staging-question .choice-letter { font-weight: 700; }
+.staging-question .choice-card .question-content { margin: 0; font: inherit; }
+.staging-question .choice-eliminate { border: 0; background: transparent; color: #466052; cursor: pointer; }
+.staging-note { margin-top: 2rem; color: #596a5d; font-size: .85rem; }
+.staging-error { margin: 1rem auto; width: min(100% - 2rem, 760px); color: #9f3025; }
+@media (max-width: 560px) {
+  .staging-header { align-items: flex-start; flex-direction: column; }
+  .staging-card { width: calc(100% - 1rem); padding: 1.25rem; }
+  .staging-question .content-choice { gap: .45rem; }
+}

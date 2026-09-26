@@ -1,0 +1,42 @@
+{
+  "mode": "local-workerd-and-D1",
+  "base": "http://127.0.0.1:8787",
+  "timestamp": "2026-09-26T09:55:08.489Z",
+  "concurrentClients": 30,
+  "workerRequests": 73,
+  "protectedAssetRequests": 39,
+  "d1RowsRead": 124,
+  "d1RowsWritten": 2,
+  "requestWallMsP95": 330.85,
+  "requestCpuMs": null,
+  "cpuNote": "Local Worker traces expose elapsed duration, not billed CPU. Read remote Workers analytics after staging deployment.",
+  "staticAssetFiles": 4,
+  "staticAssetBytes": 200481,
+  "largestAssetBytes": 194156,
+  "assets": [
+    {
+      "path": "assets/staging-CZyWiSCs.css",
+      "bytes": 5186
+    },
+    {
+      "path": "assets/staging-gIkxGY-7.js",
+      "bytes": 194156
+    },
+    {
+      "path": "content/v1/fixture-1/triangle.svg",
+      "bytes": 714
+    },
+    {
+      "path": "staging.html",
+      "bytes": 425
+    }
+  ],
+  "limits": {
+    "workerRequestsPerDay": 100000,
+    "workerCpuMsPerRequest": 10,
+    "d1RowsReadPerDay": 5000000,
+    "d1RowsWrittenPerDay": 100000,
+    "staticAssetFiles": 20000,
+    "staticAssetBytesPerFile": 26214400
+  }
+}

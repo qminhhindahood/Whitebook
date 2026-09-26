@@ -15,6 +15,13 @@ function validBlocks(blocks: ContentBlock[] | undefined): boolean {
     blocks.every((block) => {
       if (block?.kind === "text")
         return typeof block.text === "string" && !!block.text.trim();
+      if (block?.kind === "asset")
+        return (
+          typeof block.src === "string" &&
+          /^\/content\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+\.(?:svg|png|webp|jpe?g)$/.test(block.src) &&
+          typeof block.alt === "string" &&
+          !!block.alt.trim()
+        );
       if (block?.kind !== "region" || !block.region) return false;
       const { pageNumber, x, y, width, height, confirmed } = block.region;
       return (

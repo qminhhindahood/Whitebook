@@ -18,6 +18,7 @@ export type Region = {
 
 export type ContentBlock =
   | { kind: "text"; text: string }
+  | { kind: "asset"; src: string; alt: string }
   | { kind: "region"; region: Region; alt?: string };
 
 export type QuestionPresentation = {

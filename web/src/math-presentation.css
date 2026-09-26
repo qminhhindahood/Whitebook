@@ -79,6 +79,13 @@
   max-width: 100%;
 }
 
+.question-content__asset {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+}
+
 .content-choices {
   border: 0;
   padding: 0;
