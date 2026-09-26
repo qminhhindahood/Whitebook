@@ -63,6 +63,8 @@ function sameOrigin(request: Request, origin: string): boolean {
   return request.headers.get("Origin") === origin && new URL(request.url).origin === origin;
 }
 
+export type LearnerSession = Session;
+
 export async function currentSession(request: Request, env: AccountEnv): Promise<Session | null> {
   const token = cookie(request, "__Host-wb_session");
   if (!token) return null;

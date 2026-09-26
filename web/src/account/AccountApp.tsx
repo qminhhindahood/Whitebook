@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PersonalCards } from "./PersonalCards";
 import "./cards.css";
+import { ScoresSection } from "./ScoresSection";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
@@ -122,6 +123,7 @@ export function AccountApp() {
               <h2 id="activity-heading">Your study activity</h2>
               <p>Nothing to review yet. Your work will appear here as you study.</p>
             </section>
+            <ScoresSection />
             <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
               <h2 id="account-heading">Account</h2>
               <p>Signed in as {me.account.email}</p>
