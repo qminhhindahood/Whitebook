@@ -115,7 +115,9 @@ const result = {
   d1RowsWritten: rowsWritten,
   requestWallMsP95: durations[Math.ceil(durations.length * .95) - 1],
   requestCpuMs: null,
-  cpuNote: "Local Worker traces expose elapsed duration, not billed CPU. Read remote Workers analytics after staging deployment.",
+  cpuNote: base.startsWith("http://127.0.0.1")
+    ? "Local workerd traces expose elapsed duration, not billed CPU."
+    : "HTTP responses do not expose billed CPU. Query Cloudflare Workers invocation analytics after this probe.",
   staticAssetFiles: assets.length,
   staticAssetBytes: assets.reduce((sum, asset) => sum + asset.bytes, 0),
   largestAssetBytes: Math.max(...assets.map((asset) => asset.bytes)),

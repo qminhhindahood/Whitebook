@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "whitebook-ticket-02-staging",
-      "database_id": "00000000-0000-0000-0000-000000000002",
+      "database_id": "f3429093-d21d-4cf4-9774-c346eec951fc",
       "migrations_dir": "migrations"
     }
   ]
