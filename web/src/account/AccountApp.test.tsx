@@ -34,7 +34,7 @@ it("shows account data, saves a nickname, renews and clears private state on sig
     });
     if (path === "/api/account/sat-dates" && (!init || !init.method)) return Response.json({
       catalog: { source: "College Board SAT test dates and deadlines", sourceUrl: "https://satsuite.collegeboard.org/sat/dates-deadlines", lastCheckedAt: "2026-09-26", dates: [{ date: "2026-10-03", status: "confirmed" }] },
-      selection: { dates: [], primary: null, timeZone: null },
+      selection: { dates: [], primary: null },
     });
     if (path === "/api/account/profile") return Response.json({ nickname: "Sam" });
     if (path === "/api/auth/renew") return Response.json({ expiresAt: 200 });

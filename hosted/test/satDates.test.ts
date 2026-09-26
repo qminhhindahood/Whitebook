@@ -10,11 +10,14 @@ async function sha256(value: string): Promise<string> {
 }
 
 function dbFixture() {
-  const accounts = new Map<string, { time_zone: string }>();
   const sessions = new Map<string, { account_id: string; csrf_hash: string; expires_at: number }>();
   const selections = new Map<string, Map<string, number>>();
+  let failBatchAt: number | null = null;
+  let batchCalls = 0;
   return {
-    accounts, sessions, selections,
+    sessions, selections,
+    set failBatchAt(index: number | null) { failBatchAt = index; },
+    get batchCalls() { return batchCalls; },
     prepare(sql: string) {
       let args: unknown[] = [];
       return {
@@ -23,10 +26,6 @@ function dbFixture() {
           if (sql.startsWith("SELECT token_hash")) {
             const session = sessions.get(String(args[0]));
             return (session && session.expires_at > Number(args[1]) ? session : null) as T | null;
-          }
-          if (sql.startsWith("SELECT time_zone")) {
-            const account = accounts.get(String(args[0]));
-            return (account ? { time_zone: account.time_zone } : null) as T | null;
           }
           throw new Error(`Unexpected read: ${sql}`);
         },
@@ -50,15 +49,25 @@ function dbFixture() {
             selections.set(accountId, rows);
             return { success: true, meta: { rows_read: 0, rows_written: 1 } };
           }
-          if (sql.startsWith("UPDATE learner_accounts SET time_zone")) {
-            const account = accounts.get(String(args[1]));
-            if (!account) throw new Error("Unknown account");
-            account.time_zone = String(args[0]);
-            return { success: true, meta: { rows_read: 0, rows_written: 1 } };
-          }
           throw new Error(`Unexpected write: ${sql}`);
         },
       };
+    },
+    async batch(statements: { run(): Promise<unknown> }[]) {
+      batchCalls++;
+      const snapshot = new Map([...selections].map(([accountId, rows]) => [accountId, new Map(rows)]));
+      const results: unknown[] = [];
+      try {
+        for (const [index, statement] of statements.entries()) {
+          if (index === failBatchAt) throw new Error("synthetic D1 batch failure");
+          results.push(await statement.run());
+        }
+        return results;
+      } catch (error) {
+        selections.clear();
+        for (const [accountId, rows] of snapshot) selections.set(accountId, rows);
+        throw error;
+      }
     },
   };
 }
@@ -107,67 +116,79 @@ it("keeps a Saturday-only Weekend catalog with source, last-check and status; no
 it("requires a signed-in learner and shows the catalog with the account's saved selections", async () => {
   const { env, db } = environment();
   expect((await satDateRoute(request("/api/account/sat-dates"), env))!.status).toBe(401);
-  db.accounts.set("account-1", { time_zone: "Asia/Ho_Chi_Minh" });
   const jar = await signedInBrowser(env, db, "account-1");
   db.selections.set("account-1", new Map([["2026-10-03", 1], ["2026-12-05", 0]]));
   const response = await satDateRoute(request("/api/account/sat-dates", jar), env)!;
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toContain("no-store");
-  const body = await response.json() as { catalog: typeof SAT_CATALOG; selection: { dates: string[]; primary: string | null; timeZone: string | null } };
+  const body = await response.json() as { catalog: typeof SAT_CATALOG; selection: { dates: string[]; primary: string | null } };
   expect(body.catalog).toMatchObject({ source: SAT_CATALOG.source, lastCheckedAt: SAT_CATALOG.lastCheckedAt });
   expect(body.catalog.dates).toEqual(SAT_CATALOG.dates);
-  expect(body.selection).toEqual({ dates: ["2026-10-03", "2026-12-05"], primary: "2026-10-03", timeZone: "Asia/Ho_Chi_Minh" });
+  expect(body.selection).toEqual({ dates: ["2026-10-03", "2026-12-05"], primary: "2026-10-03" });
 });
 
 it("persists multiple dates and one primary so a second browser sees the same selections", async () => {
   const { env, db } = environment();
-  db.accounts.set("account-1", { time_zone: "" });
   const first = await signedInBrowser(env, db, "account-1");
   const save = await satDateRoute(request("/api/account/sat-dates", first, {
     method: "POST", headers: mutationHeaders(first), body: JSON.stringify({
-      dates: ["2026-12-05", "2026-10-03"], primary: "2026-10-03", timeZone: "Asia/Ho_Chi_Minh",
+      dates: ["2026-12-05", "2026-10-03"], primary: "2026-10-03",
     }),
   }), env)!;
   expect(save.status).toBe(200);
-  expect(await save.json()).toEqual({ selection: { dates: ["2026-10-03", "2026-12-05"], primary: "2026-10-03", timeZone: "Asia/Ho_Chi_Minh" } });
+  expect(await save.json()).toEqual({ selection: { dates: ["2026-10-03", "2026-12-05"], primary: "2026-10-03" } });
 
   const secondBrowser = await signedInBrowser(env, db, "account-1");
-  const synced = await (await satDateRoute(request("/api/account/sat-dates", secondBrowser), env)!).json() as { selection: { dates: string[]; primary: string | null; timeZone: string | null } };
-  expect(synced.selection).toEqual({ dates: ["2026-10-03", "2026-12-05"], primary: "2026-10-03", timeZone: "Asia/Ho_Chi_Minh" });
+  const synced = await (await satDateRoute(request("/api/account/sat-dates", secondBrowser), env)!).json() as { selection: { dates: string[]; primary: string | null } };
+  expect(synced.selection).toEqual({ dates: ["2026-10-03", "2026-12-05"], primary: "2026-10-03" });
 
   const other = await signedInBrowser(env, db, "account-2");
-  db.accounts.set("account-2", { time_zone: "" });
   const isolated = await (await satDateRoute(request("/api/account/sat-dates", other), env)!).json() as { selection: { dates: string[] } };
   expect(isolated.selection.dates).toEqual([]);
 
   const cleared = await satDateRoute(request("/api/account/sat-dates", first, {
-    method: "POST", headers: mutationHeaders(first), body: JSON.stringify({ dates: [], primary: null, timeZone: "Asia/Ho_Chi_Minh" }),
+    method: "POST", headers: mutationHeaders(first), body: JSON.stringify({ dates: [], primary: null }),
   }), env)!;
   expect(cleared.status).toBe(200);
   const afterClear = await (await satDateRoute(request("/api/account/sat-dates", secondBrowser), env)!).json() as { selection: { dates: string[]; primary: string | null } };
-  expect(afterClear.selection).toEqual({ dates: [], primary: null, timeZone: "Asia/Ho_Chi_Minh" });
+  expect(afterClear.selection).toEqual({ dates: [], primary: null });
+});
+
+it("replaces a selection in one atomic batch and retains the previous selection on failure", async () => {
+  const { env, db } = environment();
+  const jar = await signedInBrowser(env, db, "account-1");
+  const original = new Map([["2026-10-03", 1], ["2026-12-05", 0]]);
+  db.selections.set("account-1", original);
+  db.failBatchAt = 2;
+
+  await expect(satDateRoute(request("/api/account/sat-dates", jar, {
+    method: "POST", headers: mutationHeaders(jar), body: JSON.stringify({
+      dates: ["2026-11-07", "2027-03-06", "2027-05-01"], primary: "2027-03-06",
+    }),
+  }), env)).rejects.toThrow("synthetic D1 batch failure");
+
+  expect(db.batchCalls).toBe(1);
+  expect(db.selections.get("account-1")).toEqual(original);
 });
 
 it("guards the mutation with origin, CSRF, and strict selection validation", async () => {
   const { env, db } = environment();
-  db.accounts.set("account-1", { time_zone: "" });
   const jar = await signedInBrowser(env, db, "account-1");
-  const body = JSON.stringify({ dates: ["2026-10-03"], primary: "2026-10-03", timeZone: "Asia/Ho_Chi_Minh" });
+  const body = JSON.stringify({ dates: ["2026-10-03"], primary: "2026-10-03" });
   const post = { method: "POST", headers: mutationHeaders(jar), body };
 
   expect((await satDateRoute(request("/api/account/sat-dates", jar, { ...post, headers: { ...post.headers, Origin: "https://evil.test" } }), env))!.status).toBe(403);
   expect((await satDateRoute(request("/api/account/sat-dates", jar, { ...post, headers: { ...post.headers, "X-CSRF-Token": "f".repeat(64) } }), env))!.status).toBe(403);
 
   const rejects: [string, unknown][] = [
-    ["primary outside the selection", { dates: ["2026-10-03"], primary: "2026-12-05", timeZone: "Asia/Ho_Chi_Minh" }],
-    ["a date missing from the catalog", { dates: ["2026-10-04"], primary: null, timeZone: "Asia/Ho_Chi_Minh" }],
-    ["a malformed date", { dates: ["October 3"], primary: null, timeZone: "Asia/Ho_Chi_Minh" }],
-    ["an impossible calendar date", { dates: ["2026-02-30"], primary: null, timeZone: "Asia/Ho_Chi_Minh" }],
-    ["a duplicated date", { dates: ["2026-10-03", "2026-10-03"], primary: null, timeZone: "Asia/Ho_Chi_Minh" }],
-    ["an unknown time zone", { dates: ["2026-10-03"], primary: null, timeZone: "Mars/Olympus_Mons" }],
-    ["a missing time zone", { dates: ["2026-10-03"], primary: null }],
-    ["a non-array date list", { dates: "2026-10-03", primary: null, timeZone: "Asia/Ho_Chi_Minh" }],
-    ["a stray field", { dates: ["2026-10-03"], primary: null, timeZone: "Asia/Ho_Chi_Minh", reminder: true }],
+    ["primary outside the selection", { dates: ["2026-10-03"], primary: "2026-12-05" }],
+    ["a selected date without a primary", { dates: ["2026-10-03"], primary: null }],
+    ["a date missing from the catalog", { dates: ["2026-10-04"], primary: null }],
+    ["a malformed date", { dates: ["October 3"], primary: null }],
+    ["an impossible calendar date", { dates: ["2026-02-30"], primary: null }],
+    ["a duplicated date", { dates: ["2026-10-03", "2026-10-03"], primary: null }],
+    ["a non-array date list", { dates: "2026-10-03", primary: null }],
+    ["a stray field", { dates: ["2026-10-03"], primary: null, reminder: true }],
   ];
   for (const [label, payload] of rejects) {
     const response = await satDateRoute(request("/api/account/sat-dates", jar, {
@@ -182,10 +203,9 @@ it("guards the mutation with origin, CSRF, and strict selection validation", asy
 
 it("rejects an oversized body and unknown methods fall through as unavailability", async () => {
   const { env, db } = environment();
-  db.accounts.set("account-1", { time_zone: "" });
   const jar = await signedInBrowser(env, db, "account-1");
   const oversized = await satDateRoute(request("/api/account/sat-dates", jar, {
-    method: "POST", headers: mutationHeaders(jar), body: JSON.stringify({ dates: [], primary: null, timeZone: "Asia/Ho_Chi_Minh", pad: "x".repeat(2048) }),
+    method: "POST", headers: mutationHeaders(jar), body: JSON.stringify({ dates: [], primary: null, pad: "x".repeat(2048) }),
   }), env)!;
   expect(oversized.status).toBe(413);
   expect(await satDateRoute(request("/api/account/sat-dates", jar, { method: "DELETE", headers: mutationHeaders(jar) }), env)).toBeNull();

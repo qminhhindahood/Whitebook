@@ -1,5 +1,3 @@
-ALTER TABLE learner_accounts ADD COLUMN time_zone TEXT NOT NULL DEFAULT '';
-
 CREATE TABLE learner_sat_dates (
   account_id TEXT NOT NULL REFERENCES learner_accounts(id) ON DELETE CASCADE,
   test_date TEXT NOT NULL,

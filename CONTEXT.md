@@ -97,5 +97,5 @@ The reviewed list of official SAT Weekend administrations with each date's confi
 _Avoid_: Test date list, School Day dates, College Board scrape
 
 **Primary SAT Target**:
-The one selected official SAT Weekend date a learner marks as their intended administration; the Dashboard counts calendar days to it in the learner's saved IANA time zone, showing Test day on the date and prompting for a later target after it passes.
+The one selected official SAT Weekend date a learner marks as their intended administration; the Dashboard counts down to 8:00 a.m. in fixed GMT+7 (Asia/Bangkok) on that date, showing Test day at the cutoff and prompting for a later target after the date passes in that same zone.
 _Avoid_: Exam deadline, countdown timer, test time

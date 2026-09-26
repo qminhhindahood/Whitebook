@@ -1,16 +1,12 @@
 import { useEffect, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
-import { satCountdown, satDateLabel } from "./satCountdown";
+import { satCountdown, satDateLabel, satDateShortLabel } from "./satCountdown";
 
 type CatalogEntry = { date: string; status: "confirmed" | "anticipated" };
 type SatDatesData = {
   catalog: { source: string; sourceUrl: string; lastCheckedAt: string; dates: CatalogEntry[] };
-  selection: { dates: string[]; primary: string | null; timeZone: string | null };
+  selection: { dates: string[]; primary: string | null };
 };
-
-function browserTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
 
 export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) {
   const [data, setData] = useState<SatDatesData | null>(null);
@@ -39,18 +35,23 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
         if (!cancelled) setLoading(false);
       }
     })();
-    const tick = setInterval(() => setNow(new Date()), 60_000);
+    const tick = setInterval(() => setNow(new Date()), 1_000);
     return () => { cancelled = true; clearInterval(tick); };
   }, [onSessionEnded]);
 
   if (loading) return <section className="dashboard-sat" aria-labelledby="sat-heading"><h2 id="sat-heading">SAT test date</h2><p>Loading your SAT dates…</p></section>;
 
-  const zone = data?.selection.timeZone || browserTimeZone();
-  const countdown = satCountdown(primary, zone, now);
+  const countdown = satCountdown(primary, now);
 
   function toggle(date: string, checked: boolean) {
-    setSelected((current) => checked ? [...current, date].sort() : current.filter((item) => item !== date));
-    if (!checked && primary === date) setPrimary(null);
+    if (checked) {
+      setSelected((current) => current.includes(date) ? current : [...current, date].sort());
+      if (primary === null) setPrimary(date);
+      return;
+    }
+    const remaining = selected.filter((item) => item !== date);
+    setSelected(remaining);
+    if (primary === date) setPrimary(remaining[0] ?? null);
   }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -60,7 +61,7 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
       const response = await accountFetch("/api/account/sat-dates", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
-        body: JSON.stringify({ dates: selected, primary, timeZone: browserTimeZone() }),
+        body: JSON.stringify({ dates: selected, primary }),
       });
       if (response.status === 401) { setMessage("Your session ended. Sign in again."); onSessionEnded?.(); return; }
       if (!response.ok) throw new Error("Save failed");
@@ -74,15 +75,24 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
 
   return <section className="dashboard-sat" aria-labelledby="sat-heading">
     <h2 id="sat-heading">SAT test date</h2>
-    <p className="sat-countdown" role="status">
-      {countdown.kind === "none" && <span>Choose your SAT date below to see the days remaining.</span>}
-      {countdown.kind === "days" && <>
-        <strong className="sat-countdown-days">{countdown.days}</strong>
-        <span> calendar day{countdown.days === 1 ? "" : "s"} until {satDateLabel(countdown.target)}</span>
-      </>}
-      {countdown.kind === "test-day" && <><strong className="sat-countdown-testday">Test day</strong><span> — your SAT is today.</span></>}
-      {countdown.kind === "passed" && <span>Your SAT date, {satDateLabel(countdown.target)}, has passed. Choose a later date below.</span>}
-    </p>
+    {countdown.kind === "none" && <p className="sat-countdown-empty" role="status">Choose a primary SAT date below to start the countdown.</p>}
+    {countdown.kind !== "none" && <div className="sat-countdown-banner">
+      <div className="sat-countdown-meta">
+        <p className="sat-countdown-date">{satDateShortLabel(countdown.target)}</p>
+        <p className="sat-countdown-note">{countdown.kind === "countdown" ? "Until 8:00 a.m. GMT+7" : "Exam date · GMT+7"}</p>
+      </div>
+      {countdown.kind === "countdown" ? <div className="sat-countdown-units" role="timer" aria-live="off" aria-label="Time until 8:00 a.m. GMT+7 on the exam date">
+        {(["Days", "Hours", "Minutes", "Seconds"] as const).map((label) => {
+          const value = countdown[label.toLowerCase() as "days" | "hours" | "minutes" | "seconds"];
+          return <div className="sat-countdown-unit" key={label}>
+            <strong>{String(value).padStart(2, "0")}</strong><span>{label}</span>
+          </div>;
+        })}
+      </div> : <p className={`sat-countdown-state sat-countdown-state--${countdown.kind}`}>
+        {countdown.kind === "test-day" ? "Test day" : "Passed"}
+      </p>}
+    </div>}
+    {countdown.kind === "passed" && <p className="sat-countdown-prompt" role="status">Your SAT date has passed. Choose a later date below.</p>}
     {data && <form onSubmit={save}>
       <fieldset className="sat-list">
         <legend>Official SAT Weekend dates</legend>
@@ -100,7 +110,6 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
           </label>
         </div>)}
       </fieldset>
-      <p className="sat-zone">Countdown uses {data.selection.timeZone ? "your saved time zone" : "this device's time zone until you save"}: <code>{zone}</code></p>
       <p className="sat-source">Source: {data.catalog.source}. Last checked {data.catalog.lastCheckedAt}. <a href={data.catalog.sourceUrl} target="_blank" rel="noreferrer">Open the College Board schedule</a></p>
       <div className="account-actions"><button disabled={busy}>Save dates</button></div>
     </form>}

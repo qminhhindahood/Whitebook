@@ -22,6 +22,7 @@ function environment() {
     headers: { "content-type": "image/svg+xml" },
   }));
   const db = {
+    async batch() { throw new Error("Unexpected D1 batch"); },
     prepare(sql: string) {
       let args: unknown[] = [];
       return {

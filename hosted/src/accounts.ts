@@ -8,7 +8,10 @@ type Statement = {
 };
 
 export type AccountEnv = {
-  DB: { prepare(sql: string): Statement };
+  DB: {
+    prepare(sql: string): Statement;
+    batch(statements: Statement[]): Promise<unknown[]>;
+  };
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   APP_ORIGIN?: string;

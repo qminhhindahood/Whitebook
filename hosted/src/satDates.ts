@@ -2,7 +2,7 @@ import { currentSession, failure, noStore, requireMutation, type AccountEnv, typ
 
 export type SatDateStatus = "confirmed" | "anticipated";
 export type SatCatalogEntry = { date: string; status: SatDateStatus };
-export type SatSelection = { dates: string[]; primary: string | null; timeZone: string | null };
+export type SatSelection = { dates: string[]; primary: string | null };
 
 /**
  * Reviewed catalog of official SAT Weekend administrations, transcribed from
@@ -38,40 +38,23 @@ export const SAT_CATALOG: {
 };
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const ZONE_PATTERN = /^[A-Za-z0-9_+/+-]{1,64}$/;
-
 function catalogDates(): Set<string> {
   return new Set(SAT_CATALOG.dates.map((entry) => entry.date));
 }
 
-function isValidTimeZone(zone: string): boolean {
-  if (!ZONE_PATTERN.test(zone)) return false;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: zone });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function readSelection(rows: { test_date: string; is_primary: number }[], timeZone: string): SatSelection {
+function readSelection(rows: { test_date: string; is_primary: number }[]): SatSelection {
   const dates = rows.map((row) => row.test_date).sort();
   const primary = rows.find((row) => row.is_primary === 1);
-  return { dates, primary: primary?.test_date ?? null, timeZone: timeZone || null };
+  return { dates, primary: primary?.test_date ?? null };
 }
 
-async function savedTimeZone(env: AccountEnv, accountId: string): Promise<string> {
-  const row = await env.DB.prepare("SELECT time_zone FROM learner_accounts WHERE id = ?").bind(accountId).first<{ time_zone: string }>();
-  return row?.time_zone ?? "";
-}
-
-async function replaceSelection(env: AccountEnv, accountId: string, dates: string[], primary: string | null, timeZone: string): Promise<void> {
+async function replaceSelection(env: AccountEnv, accountId: string, dates: string[], primary: string | null): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
-  await env.DB.prepare("DELETE FROM learner_sat_dates WHERE account_id = ?").bind(accountId).run();
+  const statements = [env.DB.prepare("DELETE FROM learner_sat_dates WHERE account_id = ?").bind(accountId)];
   for (const date of dates)
-    await env.DB.prepare("INSERT INTO learner_sat_dates (account_id, test_date, is_primary, selected_at) VALUES (?, ?, ?, ?)")
-      .bind(accountId, date, date === primary ? 1 : 0, now).run();
-  await env.DB.prepare("UPDATE learner_accounts SET time_zone = ? WHERE id = ?").bind(timeZone, accountId).run();
+    statements.push(env.DB.prepare("INSERT INTO learner_sat_dates (account_id, test_date, is_primary, selected_at) VALUES (?, ?, ?, ?)")
+      .bind(accountId, date, date === primary ? 1 : 0, now));
+  await env.DB.batch(statements);
 }
 
 async function show(request: Request, env: AccountEnv): Promise<Response> {
@@ -82,7 +65,7 @@ async function show(request: Request, env: AccountEnv): Promise<Response> {
   return Response.json(
     {
       catalog: SAT_CATALOG,
-      selection: readSelection(rows.results as { test_date: string; is_primary: number }[], await savedTimeZone(env, session.account_id)),
+      selection: readSelection(rows.results as { test_date: string; is_primary: number }[]),
     },
     { headers: noStore },
   );
@@ -100,21 +83,22 @@ async function save(request: Request, env: AccountEnv, session: Session): Promis
     return failure(400, "invalid_sat_dates", "Choose your SAT dates and try again.");
   }
   if (!body || typeof body !== "object" || Array.isArray(body) ||
-      Object.keys(body).some((key) => key !== "dates" && key !== "primary" && key !== "timeZone"))
-    return failure(400, "invalid_sat_dates", "Only SAT dates, the primary target, and a time zone can be saved here.");
-  const { dates, primary, timeZone } = body as { dates?: unknown; primary?: unknown; timeZone?: unknown };
+      Object.keys(body).some((key) => key !== "dates" && key !== "primary"))
+    return failure(400, "invalid_sat_dates", "Only SAT dates and the primary target can be saved here.");
+  const { dates, primary } = body as { dates?: unknown; primary?: unknown };
   const allowed = catalogDates();
   if (!Array.isArray(dates) || dates.length > SAT_CATALOG.dates.length ||
       dates.some((date) => typeof date !== "string" || !DATE_PATTERN.test(date) || !allowed.has(date)) ||
       new Set(dates).size !== dates.length)
     return failure(400, "invalid_sat_dates", "Choose SAT Weekend dates from the official list.");
-  if (primary !== null && (typeof primary !== "string" || !dates.includes(primary)))
+  if (typeof primary !== "string" && primary !== null)
     return failure(400, "invalid_sat_dates", "Your primary SAT date must be one of your selected dates.");
-  if (typeof timeZone !== "string" || !isValidTimeZone(timeZone))
-    return failure(400, "invalid_sat_dates", "Save a valid time zone so your countdown matches your calendar.");
-  await replaceSelection(env, session.account_id, [...dates].sort(), primary, timeZone);
+  if ((dates.length === 0 && primary !== null) ||
+      (dates.length > 0 && (primary === null || !dates.includes(primary))))
+    return failure(400, "invalid_sat_dates", "Your primary SAT date must be one of your selected dates.");
+  await replaceSelection(env, session.account_id, [...dates].sort(), primary);
   return Response.json(
-    { selection: { dates: [...dates].sort(), primary, timeZone } satisfies SatSelection },
+    { selection: { dates: [...dates].sort(), primary } satisfies SatSelection },
     { headers: noStore },
   );
 }

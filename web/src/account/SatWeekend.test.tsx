@@ -2,7 +2,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { SatWeekend } from "./SatWeekend";
-import { localDateInZone, satDateLabel } from "./satCountdown";
 
 const CATALOG = {
   source: "College Board SAT test dates and deadlines",
@@ -26,34 +25,11 @@ const CATALOG = {
   ],
 };
 
-function satDatesResponse(selection = { dates: [] as string[], primary: null as string | null, timeZone: null as string | null }) {
+function satDatesResponse(selection = { dates: [] as string[], primary: null as string | null }) {
   return Response.json({ catalog: CATALOG, selection });
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
-
-/**
- * The machine running these tests has its own time zone, so each zone-boundary
- * test first finds a saved zone and instant whose calendar date differs from
- * this machine's date. Asserting the saved-zone outcome then proves the
- * countdown used the saved zone rather than the device zone.
- */
-function zoneThatDiffersFromDevice(): { zone: string; instant: Date; localDate: string } {
-  const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  for (const zone of ["Pacific/Kiritimati", "Pacific/Pago_Pago", "Etc/GMT+12", "Asia/Ho_Chi_Minh", "America/New_York"])
-    for (const day of [2, 5])
-      for (let hour = 0; hour < 24; hour++) {
-        const instant = new Date(Date.UTC(2026, 9, day, hour));
-        const localDate = localDateInZone(instant, zone);
-        if (localDate !== localDateInZone(instant, deviceZone)) return { zone, instant, localDate };
-      }
-  throw new Error(`No saved zone separates from the device zone ${deviceZone}`);
-}
-
-function shiftDate(ymd: string, days: number): string {
-  const [year, month, day] = ymd.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
-}
 
 async function renderAt(instant: Date, props?: Parameters<typeof SatWeekend>[0]) {
   vi.useFakeTimers();
@@ -62,7 +38,7 @@ async function renderAt(instant: Date, props?: Parameters<typeof SatWeekend>[0])
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 }
 
-it("lists official Weekend dates with status, source and last-checked; School Day and times of day are absent", async () => {
+it("lists the official Weekend dates with their source and status", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse()));
   await renderAt(new Date("2026-09-26T03:00:00Z"));
   expect(screen.getByRole("heading", { name: "SAT test date" })).toBeTruthy();
@@ -73,33 +49,43 @@ it("lists official Weekend dates with status, source and last-checked; School Da
   expect(screen.getByRole("link", { name: "Open the College Board schedule" }).getAttribute("href"))
     .toBe("https://satsuite.collegeboard.org/sat/dates-deadlines");
   expect(screen.queryByText(/school day/i)).toBeNull();
-  expect(document.querySelector(".dashboard-sat")!.textContent).not.toMatch(/8\s*a\.m\.|a\.m\.|p\.m\./);
 });
 
-it("shows the days remaining in the saved IANA time zone", async () => {
-  const { zone, instant, localDate } = zoneThatDiffersFromDevice();
-  const target = shiftDate(localDate, 3);
-  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target, timeZone: zone })));
-  await renderAt(instant);
-  expect(document.querySelector(".sat-countdown-days")!.textContent).toBe("3");
-  expect(screen.getByText(new RegExp(`calendar days? until ${satDateLabel(target)}`))).toBeTruthy();
-  expect(screen.getByText(/your saved time zone/)).toBeTruthy();
-  expect(screen.getByText(new RegExp(zone.replace("/", "\\/")))).toBeTruthy();
+it("shows the selected exam date and a live countdown to 8:00 a.m. GMT+7", async () => {
+  const target = "2026-10-03";
+  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target })));
+  await renderAt(new Date("2026-10-02T16:17:29Z"));
+  expect(screen.getByText("Sat, Oct 3, 2026")).toBeTruthy();
+  const timer = screen.getByRole("timer");
+  const actual = [...timer.querySelectorAll(".sat-countdown-unit strong")].map((unit) => Number(unit.textContent));
+  expect(actual).toEqual([0, 8, 42, 31]);
+  expect(screen.getByText(/Until 8:00 a\.m\. GMT\+7/)).toBeTruthy();
 });
 
-it("shows Test day on the date in the saved zone even when this device still has a day left", async () => {
-  const { zone, instant, localDate } = zoneThatDiffersFromDevice();
-  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [localDate], primary: localDate, timeZone: zone })));
-  await renderAt(instant);
+it("updates every second until 8:00 a.m. GMT+7, then shows Test day", async () => {
+  const target = "2026-10-03";
+  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target })));
+  await renderAt(new Date("2026-10-03T00:59:58Z"));
+  const timer = screen.getByRole("timer");
+  expect(timer.querySelector(".sat-countdown-unit:last-child strong")!.textContent).toBe("02");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(screen.getByRole("timer").querySelector(".sat-countdown-unit:last-child strong")!.textContent).toBe("01");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(screen.getByText(/Test day/)).toBeTruthy();
-  expect(screen.getByText(/your SAT is today/)).toBeTruthy();
+});
+
+it("shows Test day at 8:00 a.m. GMT+7", async () => {
+  const target = "2026-10-03";
+  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target })));
+  await renderAt(new Date("2026-10-03T01:00:00Z"));
+  expect(screen.getByText(/Test day/)).toBeTruthy();
+  expect(screen.getByText(/Exam date · GMT\+7/)).toBeTruthy();
 });
 
 it("prompts for a new target after the primary date passes", async () => {
-  const { zone, instant, localDate } = zoneThatDiffersFromDevice();
-  const laterInstant = new Date(instant.getTime() + 5 * 86400000);
-  const target = shiftDate(localDateInZone(laterInstant, zone), -1);
-  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target, timeZone: zone })));
+  const target = "2026-10-03";
+  const laterInstant = new Date("2026-10-03T17:00:00Z");
+  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target })));
   await renderAt(laterInstant);
   expect(screen.getByText(/has passed\. Choose a later date below\./)).toBeTruthy();
 });
@@ -107,10 +93,10 @@ it("prompts for a new target after the primary date passes", async () => {
 it("asks a learner without a primary target to choose a date", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse()));
   await renderAt(new Date("2026-09-26T03:00:00Z"));
-  expect(screen.getByText("Choose your SAT date below to see the days remaining.")).toBeTruthy();
+  expect(screen.getByText("Choose a primary SAT date below to start the countdown.")).toBeTruthy();
 });
 
-it("saves multiple selected dates, one primary target and this device's time zone to the account", async () => {
+it("saves multiple selected dates and one primary target to the account", async () => {
   document.cookie = "__Host-wb_csrf=" + "c".repeat(64) + "; Secure; Path=/";
   const calls: { path: string; init?: RequestInit }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
@@ -118,7 +104,7 @@ it("saves multiple selected dates, one primary target and this device's time zon
     if (path === "/api/account/sat-dates" && (!init || !init.method))
       return satDatesResponse();
     if (path === "/api/account/sat-dates")
-      return Response.json({ selection: { dates: ["2026-10-03", "2026-12-05"], primary: "2026-12-05", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } });
+      return Response.json({ selection: { dates: ["2026-10-03", "2026-12-05"], primary: "2026-12-05" } });
     throw new Error(`Unexpected route ${path}`);
   }));
   render(<SatWeekend />);
@@ -139,7 +125,6 @@ it("saves multiple selected dates, one primary target and this device's time zon
   expect(JSON.parse(String(saveCall.init!.body))).toEqual({
     dates: ["2026-10-03", "2026-12-05"],
     primary: "2026-12-05",
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
   expect(saveCall.init!.credentials).toBe("same-origin");
   expect((saveCall.init!.headers as Record<string, string>)["X-CSRF-Token"]).toMatch(/^[a-f0-9]{64}$/);
@@ -147,8 +132,8 @@ it("saves multiple selected dates, one primary target and this device's time zon
 
 it("clears the primary target when its date is unselected and refuses to mark an unselected date", async () => {
   vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) =>
-    init?.method ? Response.json({ selection: { dates: [], primary: null, timeZone: "" } })
-      : satDatesResponse({ dates: ["2026-10-03"], primary: "2026-10-03", timeZone: "Asia/Ho_Chi_Minh" })));
+    init?.method ? Response.json({ selection: { dates: [], primary: null } })
+      : satDatesResponse({ dates: ["2026-10-03"], primary: "2026-10-03" })));
   render(<SatWeekend />);
   const checkbox = await screen.findByRole("checkbox", { name: /Saturday, 3 October 2026/ }) as HTMLInputElement;
   expect(checkbox.checked).toBe(true);
@@ -161,6 +146,22 @@ it("clears the primary target when its date is unselected and refuses to mark an
   const anySelectedRadio = screen.getAllByRole("radio", { name: "Primary target" })
     .some((radio) => !(radio as HTMLInputElement).disabled);
   expect(anySelectedRadio).toBe(false);
+});
+
+it("chooses the first selected date as primary and promotes a remaining date when it is unchecked", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) =>
+    init?.method ? Response.json({ selection: { dates: [], primary: null } }) : satDatesResponse()));
+  render(<SatWeekend />);
+  const october = await screen.findByRole("checkbox", { name: /Saturday, 3 October 2026/ });
+  const december = screen.getByRole("checkbox", { name: /Saturday, 5 December 2026/ });
+  fireEvent.click(october);
+  const radios = screen.getAllByRole("radio", { name: "Primary target" });
+  const octoberRadio = radios.find((radio) => radio.closest(".sat-row")!.textContent!.includes("October")) as HTMLInputElement;
+  expect(octoberRadio.checked).toBe(true);
+  fireEvent.click(december);
+  fireEvent.click(october);
+  const decemberRadio = radios.find((radio) => radio.closest(".sat-row")!.textContent!.includes("December")) as HTMLInputElement;
+  expect(decemberRadio.checked).toBe(true);
 });
 
 it("returns to the sign-in view when the session has ended", async () => {
