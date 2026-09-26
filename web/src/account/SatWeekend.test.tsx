@@ -2,6 +2,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { SatWeekend } from "./SatWeekend";
+import { deviceZone, localDateInZone, satDateShortLabel } from "./satCountdown";
 
 const CATALOG = {
   source: "College Board SAT test dates and deadlines",
@@ -51,42 +52,39 @@ it("lists the official Weekend dates with their source and status", async () => 
   expect(screen.queryByText(/school day/i)).toBeNull();
 });
 
-it("shows the selected exam date and a live countdown to 8:00 a.m. GMT+7", async () => {
-  const target = "2026-10-03";
+function ymdOffset(base: string, days: number): string {
+  const [year, month, day] = base.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+it("shows the selected exam date and a calendar-day countdown", async () => {
+  const instant = new Date("2026-09-26T03:00:00Z");
+  const target = ymdOffset(localDateInZone(instant, deviceZone()), 7);
   vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target })));
-  await renderAt(new Date("2026-10-02T16:17:29Z"));
-  expect(screen.getByText("Sat, Oct 3, 2026")).toBeTruthy();
+  await renderAt(instant);
+  expect(screen.getByText(satDateShortLabel(target))).toBeTruthy();
   const timer = screen.getByRole("timer");
-  const actual = [...timer.querySelectorAll(".sat-countdown-unit strong")].map((unit) => Number(unit.textContent));
-  expect(actual).toEqual([0, 8, 42, 31]);
-  expect(screen.getByText(/Until 8:00 a\.m\. GMT\+7/)).toBeTruthy();
+  expect(timer.getAttribute("aria-label")).toBe("Calendar days until the exam date");
+  expect(Number(timer.querySelector("strong")!.textContent)).toBe(7);
+  expect(screen.getByText(/Calendar days to your exam date/)).toBeTruthy();
+  expect(screen.queryByText(/8:00|GMT\+7|a\.m\./i)).toBeNull();
 });
 
-it("updates every second until 8:00 a.m. GMT+7, then shows Test day", async () => {
-  const target = "2026-10-03";
+it("shows Test day on the date itself in the learner's zone", async () => {
+  const instant = new Date("2026-10-03T01:00:00Z");
+  const target = localDateInZone(instant, deviceZone());
   vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target })));
-  await renderAt(new Date("2026-10-03T00:59:58Z"));
-  const timer = screen.getByRole("timer");
-  expect(timer.querySelector(".sat-countdown-unit:last-child strong")!.textContent).toBe("02");
-  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-  expect(screen.getByRole("timer").querySelector(".sat-countdown-unit:last-child strong")!.textContent).toBe("01");
-  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  await renderAt(instant);
   expect(screen.getByText(/Test day/)).toBeTruthy();
+  expect(screen.getByText("Exam date")).toBeTruthy();
+  expect(screen.queryByText(/GMT\+7|8:00/)).toBeNull();
 });
 
-it("shows Test day at 8:00 a.m. GMT+7", async () => {
-  const target = "2026-10-03";
+it("prompts for a new target the day after the primary date passes", async () => {
+  const instant = new Date("2026-10-04T03:00:00Z");
+  const target = ymdOffset(localDateInZone(instant, deviceZone()), -1);
   vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target })));
-  await renderAt(new Date("2026-10-03T01:00:00Z"));
-  expect(screen.getByText(/Test day/)).toBeTruthy();
-  expect(screen.getByText(/Exam date · GMT\+7/)).toBeTruthy();
-});
-
-it("prompts for a new target after the primary date passes", async () => {
-  const target = "2026-10-03";
-  const laterInstant = new Date("2026-10-03T17:00:00Z");
-  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: [target], primary: target })));
-  await renderAt(laterInstant);
+  await renderAt(instant);
   expect(screen.getByText(/has passed\. Choose a later date below\./)).toBeTruthy();
 });
 

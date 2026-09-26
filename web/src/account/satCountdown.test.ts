@@ -6,18 +6,38 @@ it("formats the calendar date of an instant in an IANA time zone", () => {
   expect(localDateInZone(new Date("2026-10-02T23:30:00Z"), "Pacific/Pago_Pago")).toBe("2026-10-02");
 });
 
-it("counts down to 8:00 a.m. GMT+7 on the selected date", () => {
-  expect(satCountdown("2026-10-03", new Date("2026-10-02T16:17:29Z"))).toEqual({
-    kind: "countdown", days: 0, hours: 8, minutes: 42, seconds: 31, target: "2026-10-03",
+it("counts the calendar days to the selected date in the given zone", () => {
+  expect(satCountdown("2026-10-03", new Date("2026-10-02T16:17:29Z"), "Asia/Bangkok")).toEqual({
+    kind: "countdown", days: 1, target: "2026-10-03",
+  });
+  expect(satCountdown("2026-12-05", new Date("2026-10-02T16:17:29Z"), "Asia/Bangkok")).toEqual({
+    kind: "countdown", days: 64, target: "2026-12-05",
   });
 });
 
-it("shows Test day at 8:00 a.m. GMT+7 and prompts after the selected date passes", () => {
-  expect(satCountdown("2026-10-03", new Date("2026-10-03T00:59:59Z"))).toEqual({
-    kind: "countdown", days: 0, hours: 0, minutes: 0, seconds: 1, target: "2026-10-03",
+it("the zone decides which side of midnight today falls on", () => {
+  const instant = new Date("2026-10-02T23:30:00Z");
+  expect(satCountdown("2026-10-04", instant, "Asia/Bangkok")).toEqual({
+    kind: "countdown", days: 1, target: "2026-10-04",
   });
-  expect(satCountdown("2026-10-03", new Date("2026-10-03T01:00:00Z"))).toEqual({ kind: "test-day", target: "2026-10-03" });
-  expect(satCountdown("2026-10-03", new Date("2026-10-03T17:00:00Z"))).toEqual({ kind: "passed", target: "2026-10-03" });
+  expect(satCountdown("2026-10-04", instant, "Pacific/Pago_Pago")).toEqual({
+    kind: "countdown", days: 2, target: "2026-10-04",
+  });
+  expect(satCountdown("2026-10-03", instant, "Asia/Bangkok")).toEqual({
+    kind: "test-day", target: "2026-10-03",
+  });
+});
+
+it("shows Test day on the date itself and prompts after it passes", () => {
+  expect(satCountdown("2026-10-03", new Date("2026-10-02T17:00:00Z"), "Asia/Bangkok")).toEqual({
+    kind: "test-day", target: "2026-10-03",
+  });
+  expect(satCountdown("2026-10-03", new Date("2026-10-03T16:59:00Z"), "Asia/Bangkok")).toEqual({
+    kind: "test-day", target: "2026-10-03",
+  });
+  expect(satCountdown("2026-10-03", new Date("2026-10-03T17:00:00Z"), "Asia/Bangkok")).toEqual({
+    kind: "passed", target: "2026-10-03",
+  });
 });
 
 it("returns the no-target state", () => {

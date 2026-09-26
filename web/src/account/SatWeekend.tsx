@@ -35,7 +35,7 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
         if (!cancelled) setLoading(false);
       }
     })();
-    const tick = setInterval(() => setNow(new Date()), 1_000);
+    const tick = setInterval(() => setNow(new Date()), 60_000);
     return () => { cancelled = true; clearInterval(tick); };
   }, [onSessionEnded]);
 
@@ -79,16 +79,11 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
     {countdown.kind !== "none" && <div className="sat-countdown-banner">
       <div className="sat-countdown-meta">
         <p className="sat-countdown-date">{satDateShortLabel(countdown.target)}</p>
-        <p className="sat-countdown-note">{countdown.kind === "countdown" ? "Until 8:00 a.m. GMT+7" : "Exam date · GMT+7"}</p>
+        <p className="sat-countdown-note">{countdown.kind === "countdown" ? "Calendar days to your exam date" : "Exam date"}</p>
       </div>
-      {countdown.kind === "countdown" ? <div className="sat-countdown-units" role="timer" aria-live="off" aria-label="Time until 8:00 a.m. GMT+7 on the exam date">
-        {(["Days", "Hours", "Minutes", "Seconds"] as const).map((label) => {
-          const value = countdown[label.toLowerCase() as "days" | "hours" | "minutes" | "seconds"];
-          return <div className="sat-countdown-unit" key={label}>
-            <strong>{String(value).padStart(2, "0")}</strong><span>{label}</span>
-          </div>;
-        })}
-      </div> : <p className={`sat-countdown-state sat-countdown-state--${countdown.kind}`}>
+      {countdown.kind === "countdown" ? <p className="sat-countdown-days" role="timer" aria-live="off" aria-label="Calendar days until the exam date">
+        <strong>{countdown.days}</strong><span>{countdown.days === 1 ? "day" : "days"}</span>
+      </p> : <p className={`sat-countdown-state sat-countdown-state--${countdown.kind}`}>
         {countdown.kind === "test-day" ? "Test day" : "Passed"}
       </p>}
     </div>}

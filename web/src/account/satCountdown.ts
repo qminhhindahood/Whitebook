@@ -1,52 +1,43 @@
 export type CountdownState =
   | { kind: "none" }
-  | { kind: "countdown"; days: number; hours: number; minutes: number; seconds: number; target: string }
+  | { kind: "countdown"; days: number; target: string }
   | { kind: "test-day"; target: string }
   | { kind: "passed"; target: string };
 
-const DAY_MS = 86_400_000;
-const COUNTDOWN_ZONE = "Asia/Bangkok";
-const EXAM_HOUR_GMT7 = 8;
-const dateFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: COUNTDOWN_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
-});
+/** The device's IANA time zone. The learner's saved zone supersedes this once accounts store one. */
+export function deviceZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
 
 function partsDate(parts: Intl.DateTimeFormatPart[]): string {
-  const value = (type: string) => Number(parts.find((part) => part.type === type)!.value);
+  const value = (type: string) => Number(parts.find((part) => type === part.type)!.value);
   return String(value("year")).padStart(4, "0") + "-" + String(value("month")).padStart(2, "0") + "-" + String(value("day")).padStart(2, "0");
 }
 
 /** The calendar date (YYYY-MM-DD) at the given instant in an IANA time zone. */
 export function localDateInZone(instant: Date, zone: string): string {
-  const formatter = zone === COUNTDOWN_ZONE ? dateFormatter : new Intl.DateTimeFormat("en-CA", {
+  return partsDate(new Intl.DateTimeFormat("en-CA", {
     timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
-  });
-  return partsDate(formatter.formatToParts(instant));
+  }).formatToParts(instant));
 }
 
 /**
- * Counts down to 8:00 a.m. GMT+7 on the selected SAT date. The countdown uses
- * the same fixed Asia/Bangkok calendar on every device; on the date it changes
- * to Test day at the countdown cutoff and prompts for a later target afterward.
+ * Calendar-date difference in an IANA time zone: today's local date versus the
+ * selected date. Test day is the date itself in that zone; the day after it
+ * passes, the learner is prompted to choose a later target.
  */
-export function satCountdown(target: string | null, now: Date): CountdownState {
+export function satCountdown(target: string | null, now: Date, zone: string = deviceZone()): CountdownState {
   if (!target) return { kind: "none" };
-  const today = localDateInZone(now, COUNTDOWN_ZONE);
+  const today = localDateInZone(now, zone);
   if (today > target) return { kind: "passed", target };
+  if (today === target) return { kind: "test-day", target };
 
-  const [year, month, day] = target.split("-").map(Number);
-  // Bangkok stays at UTC+7 year-round, so 08:00 local is 01:00 UTC.
-  const deadline = Date.UTC(year, month - 1, day, EXAM_HOUR_GMT7 - 7);
-  if (now.getTime() >= deadline) return { kind: "test-day", target };
-
-  const secondsRemaining = Math.max(0, Math.ceil((deadline - now.getTime()) / 1_000));
-  const days = Math.floor(secondsRemaining / (DAY_MS / 1_000));
-  const remainderAfterDays = secondsRemaining % (DAY_MS / 1_000);
-  const hours = Math.floor(remainderAfterDays / 3_600);
-  const remainderAfterHours = remainderAfterDays % 3_600;
-  const minutes = Math.floor(remainderAfterHours / 60);
-  const seconds = remainderAfterHours % 60;
-  return { kind: "countdown", days, hours, minutes, seconds, target };
+  const [targetYear, targetMonth, targetDay] = target.split("-").map(Number);
+  const [todayYear, todayMonth, todayDay] = today.split("-").map(Number);
+  const days = Math.round(
+    (Date.UTC(targetYear, targetMonth - 1, targetDay) - Date.UTC(todayYear, todayMonth - 1, todayDay)) / 86_400_000,
+  );
+  return { kind: "countdown", days, target };
 }
 
 /** Saturday-aware long label for a date-only value, e.g. "Saturday, 3 October 2026". */
