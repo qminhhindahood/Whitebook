@@ -15,10 +15,12 @@ Date: 2026-09-26 · Local only; no deployment or production data was used.
 
 ## Local API and persistence check
 
-The local Worker ran on port 8810 with migrations 0001–0003 applied to an
-isolated local D1 database at `hosted/.wrangler/state-sat07-qa`. A synthetic
-learner account and session were inserted into that database; Google OAuth was
-not involved.
+The merged local Worker ran on port 8811 with all five current migration files
+applied to an isolated local D1 database at
+`hosted/.wrangler/state-sat07-merge-qa`: 0001 staging, 0002 learner accounts,
+and the three 0003 migrations for official results, personal cards, and SAT
+dates. A synthetic learner account and session were inserted into that
+database; Google OAuth was not involved.
 
 1. `GET /api/account/sat-dates` returned the 14-entry SAT Weekend catalog and
    an empty selection for the synthetic learner.

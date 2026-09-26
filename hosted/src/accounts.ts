@@ -58,7 +58,7 @@ export function failure(status: number, code: string, message: string): Response
   return Response.json({ error: { code, message } }, { status, headers: noStore });
 }
 
-function json(value: unknown, status = 200): Response {
+export function json(value: unknown, status = 200): Response {
   return Response.json(value, { status, headers: noStore });
 }
 
@@ -66,6 +66,7 @@ function sameOrigin(request: Request, origin: string): boolean {
   return request.headers.get("Origin") === origin && new URL(request.url).origin === origin;
 }
 
+export type LearnerSession = Session;
 export async function currentSession(request: Request, env: AccountEnv): Promise<Session | null> {
   const token = cookie(request, "__Host-wb_session");
   if (!token) return null;

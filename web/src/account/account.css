@@ -65,6 +65,54 @@ body { margin: 0; }
 .account-brand:focus-visible, .account-card button:focus-visible, .dashboard-account button:focus-visible, .dashboard-sat button:focus-visible, .account-button:focus-visible, .account-row input:focus-visible { outline: 3px solid #edab3a; outline-offset: 2px; }
 .account-message { padding: 12px 16px; border-radius: 8px; background: #e6edf7; line-height: 1.5; margin-top: 20px; }
 
+.dashboard-scores { grid-column: 1 / -1; background: #fff; border: 1px solid #dce4ef; border-radius: 16px; padding: clamp(24px, 3vw, 32px); }
+.dashboard-scores h2 { font-size: 1.35rem; letter-spacing: -.02em; margin: 0 0 12px; }
+.scores-source-note { color: #52647a; line-height: 1.55; margin: 0; max-width: 65ch; }
+.scores-empty { color: #52647a; line-height: 1.55; margin: 16px 0 0; }
+.scores-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 16px; }
+.scores-item { border: 1px solid #dce4ef; border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+.scores-item-summary { display: grid; gap: 2px; }
+.scores-item-summary strong { font-size: 1.05rem; }
+.scores-item-summary span { color: #52647a; }
+.scores-entered-by { justify-self: start; font-size: .82rem; font-weight: 650; color: #2056aa; background: #e6edf7; border-radius: 999px; padding: 2px 10px; }
+.scores-bands { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 20px; margin: 0; }
+.scores-band { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed #e4ebf4; padding: 4px 0; }
+.scores-band dt { color: #52647a; }
+.scores-band dd { margin: 0; font-weight: 650; }
+.scores-item-actions { display: flex; gap: 10px; }
+.scores-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.scores-confirm span { font-weight: 650; }
+.scores-confirm button:last-child { background: #33465e; }
+.scores-form { margin-top: 24px; border-top: 2px solid #dce4ef; padding-top: 20px; }
+.scores-form h3 { margin: 0 0 16px; font-size: 1.1rem; }
+.scores-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 16px; max-width: 560px; }
+.scores-fields label { font-weight: 650; align-self: center; }
+.scores-fields input { padding: 10px 12px; border: 1px solid #a9b9ce; border-radius: 8px; font: inherit; min-width: 0; }
+.bands-fieldset { border: 1px solid #dce4ef; border-radius: 12px; margin: 20px 0 0; padding: 16px; }
+.bands-fieldset legend { font-weight: 650; padding: 0 8px; }
+.bands-note { font-weight: 400; color: #52647a; }
+.bands-heading { font-weight: 700; margin: 12px 0 8px; }
+.bands-heading + .band-group, .bands-heading + .band-group + .band-group + .band-group + .band-group + .bands-heading { clear: none; }
+.band-group { border: 0; margin: 0 0 12px; padding: 0; }
+.band-group legend { font-weight: 650; padding: 0; margin-bottom: 6px; }
+.band-selected { font-weight: 400; color: #52647a; }
+.band-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.band-option { position: relative; display: inline-flex; }
+.band-option input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; }
+.band-option span { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border: 1px solid #a9b9ce; border-radius: 8px; background: #fff; font-weight: 650; user-select: none; }
+.band-option input:checked + span { background: #2056aa; border-color: #2056aa; color: #fff; }
+.band-option input:focus-visible + span { outline: 3px solid #edab3a; outline-offset: 2px; }
+.band-option--none span { color: #52647a; }
+.band-option--none input:checked + span { background: #33465e; border-color: #33465e; color: #fff; }
+.scores-error { color: #a1230f; background: #fbeae6; padding: 10px 14px; border-radius: 8px; }
+.scores-form-actions { display: flex; gap: 10px; margin-top: 16px; }
+.scores-form-actions button:last-child { background: #33465e; }
+.scores-message { margin-top: 16px; }
+@media (max-width: 720px) {
+  .scores-fields { grid-template-columns: 1fr; }
+  .scores-fields label { margin-top: 6px; }
+}
+
 @media (max-width: 720px) {
   .account-header, .account-shell--dashboard .account-header { margin-bottom: 40px; }
   .dashboard-layout { grid-template-columns: 1fr; }

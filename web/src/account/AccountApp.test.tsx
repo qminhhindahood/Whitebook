@@ -39,6 +39,7 @@ it("shows account data, saves a nickname, renews and clears private state on sig
     if (path === "/api/account/profile") return Response.json({ nickname: "Sam" });
     if (path === "/api/auth/renew") return Response.json({ expiresAt: 200 });
     if (path === "/api/auth/signout") return new Response(null, { status: 204 });
+    if (path === "/api/account/scores") return Response.json({ results: [] });
     throw new Error(`Unexpected route ${path}`);
   }));
   render(<AccountApp />);
@@ -54,6 +55,34 @@ it("shows account data, saves a nickname, renews and clears private state on sig
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
   expect(await screen.findByRole("link", { name: "Continue with Google" })).toBeTruthy();
   expect(screen.queryByText("Welcome, Sam")).toBeNull();
-  expect(calls.map((call) => call.path)).toEqual(["/api/account/me", "/api/account/sat-dates", "/api/account/profile", "/api/auth/renew", "/api/auth/signout"]);
-  await waitFor(() => expect(calls.filter((call) => call.init?.method).every((call) => call.init?.method === "POST" && call.init?.credentials === "same-origin")).toBe(true));
+  expect(calls.map((call) => call.path)).toEqual(expect.arrayContaining([
+    "/api/account/me", "/api/account/sat-dates", "/api/account/scores",
+    "/api/account/profile", "/api/auth/renew", "/api/auth/signout",
+  ]));
+  await waitFor(() => {
+    const mutations = calls.filter((call) => call.init?.method);
+    expect(mutations.map((call) => call.path)).toEqual(["/api/account/profile", "/api/auth/renew", "/api/auth/signout"]);
+    expect(mutations.every((call) => call.init?.method === "POST" && call.init?.credentials === "same-origin")).toBe(true);
+  });
+});
+
+it("opens the Flashcards area from the dashboard navigation", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
+    if (path === "/api/account/me") return Response.json({
+      account: { id: "account-1", email: "learner@example.test", displayName: "Learner", nickname: "", role: "learner" },
+      session: { expiresAt: 100 },
+    });
+    if (path === "/api/account/sat-dates") return Response.json({
+      catalog: { source: "College Board SAT test dates and deadlines", sourceUrl: "https://satsuite.collegeboard.org/sat/dates-deadlines", lastCheckedAt: "2026-09-26", dates: [{ date: "2026-10-03", status: "confirmed" }] },
+      selection: { dates: [], primary: null },
+    });
+    if (path === "/api/account/scores") return Response.json({ results: [] });
+    if (path === "/api/cards") return Response.json({ decks: ["My words"], cards: [] });
+    if (path === "/api/cards?archived=1") return Response.json({ cards: [] });
+    throw new Error(`Unexpected route ${path} ${String(init?.method)}`);
+  }));
+  render(<AccountApp />);
+  fireEvent.click(await screen.findByRole("button", { name: "Flashcards" }));
+  expect(await screen.findByRole("heading", { name: "Flashcards" })).toBeTruthy();
+  expect(screen.getByText("You have no cards here yet. Add your first word.")).toBeTruthy();
 });
