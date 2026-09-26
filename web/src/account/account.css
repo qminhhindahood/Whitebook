@@ -132,3 +132,4 @@ body { margin: 0; }
   .account-row { flex-wrap: wrap; }
   .account-row input { flex-basis: 100%; }
 }
+.account-hint { color: #52647a; font-size: .92rem; line-height: 1.5; margin: 6px 0; }

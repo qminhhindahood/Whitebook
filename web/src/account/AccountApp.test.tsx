@@ -66,10 +66,10 @@ it("shows account data, saves a nickname, renews and clears private state on sig
   });
 });
 
-it("opens the Flashcards area from the dashboard navigation", async () => {
+it("opens the Flashcards area from the dashboard navigation and reaches the study day", async () => {
   vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
     if (path === "/api/account/me") return Response.json({
-      account: { id: "account-1", email: "learner@example.test", displayName: "Learner", nickname: "", role: "learner" },
+      account: { id: "account-1", email: "learner@example.test", displayName: "Learner", nickname: "", timeZone: "", role: "learner" },
       session: { expiresAt: 100 },
     });
     if (path === "/api/account/sat-dates") return Response.json({
@@ -79,10 +79,17 @@ it("opens the Flashcards area from the dashboard navigation", async () => {
     if (path === "/api/account/scores") return Response.json({ results: [] });
     if (path === "/api/cards") return Response.json({ decks: ["My words"], cards: [] });
     if (path === "/api/cards?archived=1") return Response.json({ cards: [] });
+    if (path.startsWith("/api/cards/study?")) return Response.json({
+      studyDate: "2026-10-02", zone: "UTC", zoneSource: "device", totalDue: 0, personal: [], starter: [],
+    });
     throw new Error(`Unexpected route ${path} ${String(init?.method)}`);
   }));
   render(<AccountApp />);
   fireEvent.click(await screen.findByRole("button", { name: "Flashcards" }));
+  expect(await screen.findByRole("heading", { name: "Study" })).toBeTruthy();
+  expect(screen.getByText("Nothing is due today. Come back tomorrow — new words and reviews will appear here.")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("tab", { name: "My cards" }));
   expect(await screen.findByRole("heading", { name: "Flashcards" })).toBeTruthy();
   expect(screen.getByText("You have no cards here yet. Add your first word.")).toBeTruthy();
 });

@@ -2,6 +2,7 @@ import { accountRoute, type AccountEnv } from "./accounts";
 import { satDateRoute } from "./satDates";
 import { cardRoute } from "./cards";
 import { scoresRoute } from "./scores";
+import { studyRoute } from "./study";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -155,6 +156,8 @@ export default {
       if (satResponse) return await satResponse;
       const accountResponse = accountRoute(request, env);
       if (accountResponse) return await accountResponse;
+      const studyResponse = studyRoute(request, env);
+      if (studyResponse) return await studyResponse;
       const cardsResponse = cardRoute(request, env);
       if (cardsResponse) return await cardsResponse;
       if (request.method === "POST" && path === "/api/staging/session")

@@ -1,0 +1,38 @@
+{
+  "totals": {
+    "records": 2339,
+    "duplicate_rows_listed": 747,
+    "duplicate_groups": 355
+  },
+  "per_source": {
+    "anki_starter": {
+      "expected_approx": 750,
+      "extracted": 839,
+      "accepted_draft": 839,
+      "quarantined": 0,
+      "ocr_unreviewed": 0,
+      "quarantine_ids": [],
+      "flag_counts": {}
+    },
+    "c1c2_wic500": {
+      "expected_approx": 500,
+      "extracted": 500,
+      "accepted_draft": 500,
+      "quarantined": 0,
+      "ocr_unreviewed": 0,
+      "quarantine_ids": [],
+      "flag_counts": {}
+    },
+    "b2c1_1000": {
+      "expected_approx": 1000,
+      "extracted": 1000,
+      "accepted_draft": 1000,
+      "quarantined": 0,
+      "ocr_unreviewed": 1000,
+      "quarantine_ids": [],
+      "flag_counts": {
+        "ocr_source_unreviewed": 1000
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+# Owner-local material that must not be versioned with the publication pipeline.
+# The versioned pipeline is: manifests/, staging/, scripts/, tests/, reports/
+# (REVIEW_PACK + audit + duplicates + healing report + preview), README, INVENTORY.
+.venv/
+__pycache__/
+# Regenerable third-party OCR language data (re-downloadable Tesseract traineddata)
+tessdata/
+# Raw owner sources stay in owner-controlled local storage; they are copied here
+# for extraction and are recorded by sha256 in manifests and INVENTORY.md.
+sources/
+# Source-derived extraction intermediates (regenerable from sources via scripts/)
+extracted/
+reports/ocr_tsv/
+reports/ocr_test/
+reports/b2c1_page_renders/
+reports/c1c2_page_renders/
+# Local draft import store (publish_decks.py import target)
+*.sqlite3

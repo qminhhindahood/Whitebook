@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import { isValidZone } from "./schedule";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -19,7 +20,7 @@ export type AccountEnv = {
 };
 
 type Identity = { sub: string; email: string; name: string };
-type Account = { id: string; provider_subject: string; email: string; display_name: string; nickname: string };
+type Account = { id: string; provider_subject: string; email: string; display_name: string; nickname: string; time_zone: string };
 export type Session = { token_hash: string; csrf_hash: string; expires_at: number; account_id: string };
 type Flow = { nonce: string; code_verifier: string; expires_at: number };
 
@@ -179,12 +180,13 @@ async function callback(request: Request, env: AccountEnv, provider: Provider): 
 async function me(request: Request, env: AccountEnv): Promise<Response> {
   const session = await currentSession(request, env);
   if (!session) return failure(401, "signed_out", "Sign in with Google to open your workspace.");
-  const account = await env.DB.prepare("SELECT id, provider_subject, email, display_name, nickname FROM learner_accounts WHERE id = ?")
+  const account = await env.DB.prepare("SELECT id, provider_subject, email, display_name, nickname, time_zone FROM learner_accounts WHERE id = ?")
     .bind(session.account_id).first<Account>();
   if (!account) return failure(401, "signed_out", "Sign in with Google to open your workspace.");
   return json({
     account: { id: account.id, email: account.email, displayName: account.display_name,
-      nickname: account.nickname, role: env.OWNER_GOOGLE_SUB === account.provider_subject ? "owner" : "learner" },
+      nickname: account.nickname, timeZone: account.time_zone,
+      role: env.OWNER_GOOGLE_SUB === account.provider_subject ? "owner" : "learner" },
     session: { expiresAt: session.expires_at },
   });
 }
@@ -221,13 +223,40 @@ async function mutate(request: Request, env: AccountEnv, action: "renew" | "sign
   } catch {
     return failure(400, "invalid_profile", "Enter a valid nickname.");
   }
-  if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "nickname"))
-    return failure(400, "invalid_profile", "Only your nickname can be changed here.");
-  const nickname = (body as { nickname?: unknown }).nickname;
-  if (typeof nickname !== "string" || nickname.length > 80)
-    return failure(400, "invalid_profile", "Nickname must be 80 characters or fewer.");
-  await env.DB.prepare("UPDATE learner_accounts SET nickname = ? WHERE id = ?").bind(nickname.trim(), session.account_id).run();
-  return json({ nickname: nickname.trim() });
+  if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "nickname" && key !== "timeZone"))
+    return failure(400, "invalid_profile", "Only your nickname and time zone can be changed here.");
+  let nickname: string | null = null;
+  let timeZone: string | null = null;
+  const rawNickname = (body as { nickname?: unknown }).nickname;
+  if (rawNickname !== undefined) {
+    if (typeof rawNickname !== "string" || rawNickname.length > 80)
+      return failure(400, "invalid_profile", "Nickname must be 80 characters or fewer.");
+    nickname = rawNickname.trim();
+  }
+  const rawZone = (body as { timeZone?: unknown }).timeZone;
+  if (rawZone !== undefined) {
+    if (typeof rawZone !== "string" || rawZone.length > 64 ||
+        (rawZone !== "" && !isValidZone(rawZone)))
+      return failure(400, "invalid_profile", "Enter a valid IANA time zone, or clear it to follow this device.");
+    timeZone = rawZone.trim();
+  }
+  // An omitted field keeps its stored value; an empty time zone clears the
+  // saved zone so study dates follow the learner's device again.
+  const sets = [
+    ...(nickname !== null ? ["nickname = ?" as const] : []),
+    ...(timeZone !== null ? ["time_zone = ?" as const] : []),
+  ];
+  if (sets.length) {
+    await env.DB.prepare(`UPDATE learner_accounts SET ${sets.join(", ")} WHERE id = ?`)
+      .bind(...[
+        ...(nickname !== null ? [nickname] : []),
+        ...(timeZone !== null ? [timeZone] : []),
+        session.account_id,
+      ]).run();
+  }
+  const stored = await env.DB.prepare("SELECT nickname, time_zone FROM learner_accounts WHERE id = ?")
+    .bind(session.account_id).first<{ nickname: string; time_zone: string }>();
+  return json({ nickname: stored?.nickname ?? "", timeZone: stored?.time_zone ?? "" });
 }
 
 export function accountRoute(request: Request, env: AccountEnv, provider: Provider = google): Promise<Response> | null {

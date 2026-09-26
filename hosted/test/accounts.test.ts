@@ -5,7 +5,7 @@ import { accountRoute, verifyGoogleIdToken, type AccountEnv } from "../src/accou
 const origin = "https://whitebook.example.test";
 
 function dbFixture() {
-  const accounts = new Map<string, { id: string; provider_subject: string; email: string; display_name: string; nickname: string }>();
+  const accounts = new Map<string, { id: string; provider_subject: string; email: string; display_name: string; nickname: string; time_zone: string }>();
   const sessions = new Map<string, { token_hash: string; account_id: string; csrf_hash: string; expires_at: number }>();
   const flows = new Map<string, { nonce: string; code_verifier: string; expires_at: number }>();
   return {
@@ -30,6 +30,10 @@ function dbFixture() {
             const session = sessions.get(String(args[0]));
             return (session && session.expires_at > Number(args[1]) ? session : null) as T | null;
           }
+          if (sql.startsWith("SELECT nickname, time_zone FROM learner_accounts")) {
+            const account = accounts.get(String(args[0]));
+            return (account ? { nickname: account.nickname, time_zone: account.time_zone } : null) as T | null;
+          }
           throw new Error(`Unexpected read: ${sql}`);
         },
         async run() {
@@ -39,7 +43,7 @@ function dbFixture() {
           else if (sql.startsWith("INSERT INTO learner_accounts")) {
             const existing = [...accounts.values()].find((item) => item.provider_subject === args[1]);
             if (existing) { existing.email = String(args[2]); existing.display_name = String(args[3]); }
-            else accounts.set(String(args[0]), { id: String(args[0]), provider_subject: String(args[1]), email: String(args[2]), display_name: String(args[3]), nickname: "" });
+            else accounts.set(String(args[0]), { id: String(args[0]), provider_subject: String(args[1]), email: String(args[2]), display_name: String(args[3]), nickname: "", time_zone: "" });
           } else if (sql.startsWith("INSERT INTO learner_sessions"))
             sessions.set(String(args[0]), { token_hash: String(args[0]), account_id: String(args[1]), csrf_hash: String(args[2]), expires_at: Number(args[3]) });
           else if (sql.startsWith("DELETE FROM learner_sessions")) changes = sessions.delete(String(args[0])) ? 1 : 0;
@@ -50,8 +54,11 @@ function dbFixture() {
               sessions.set(String(args[0]), { ...old, token_hash: String(args[0]), csrf_hash: String(args[1]), expires_at: Number(args[2]) });
             } else changes = 0;
           } else if (sql.startsWith("UPDATE learner_accounts")) {
-            const account = accounts.get(String(args[1]));
-            if (account) account.nickname = String(args[0]); else changes = 0;
+            const account = accounts.get(String(args[args.length - 1]));
+            let cursor = 0;
+            if (sql.includes("nickname = ?")) { if (account) account.nickname = String(args[cursor]); cursor++; }
+            if (sql.includes("time_zone = ?")) { if (account) account.time_zone = String(args[cursor]); cursor++; }
+            if (!account) changes = 0;
           } else throw new Error(`Unexpected write: ${sql}`);
           return { success: true, meta: { changes, rows_read: 0, rows_written: changes } };
         },
@@ -103,7 +110,7 @@ it("creates separate accounts by Google subject, returns to the same account, re
   }
   const first = await login("learner-sub");
   const firstMe = await call(request("/api/account/me", first));
-  const firstBody = await firstMe.json() as { account: { id: string; nickname: string; role: string } };
+  const firstBody = await firstMe.json() as { account: { id: string; nickname: string; timeZone: string; role: string } };
   expect(firstBody.account).toMatchObject({ nickname: "", role: "learner" });
   expect(firstMe.headers.get("cache-control")).toContain("no-store");
 
@@ -117,6 +124,18 @@ it("creates separate accounts by Google subject, returns to the same account, re
   const secondBrowser = await login("learner-sub");
   const returned = await (await call(request("/api/account/me", secondBrowser))).json() as typeof firstBody;
   expect(returned.account).toMatchObject({ id: firstBody.account.id, nickname: "My space", role: "learner" });
+
+  // Saved IANA time zone: validated on save, returned by /me, clearable.
+  const profileCall = (body: unknown) => call(request("/api/account/profile", first, { method: "POST", headers: { Origin: origin, "X-CSRF-Token": first["__Host-wb_csrf"] }, body: JSON.stringify(body) }));
+  expect((await profileCall({ timeZone: "Mars/Olympus" })).status).toBe(400);
+  expect((await profileCall({ timeZone: 42 })).status).toBe(400);
+  const zoneSaved = await profileCall({ timeZone: "Asia/Ho_Chi_Minh" });
+  expect(zoneSaved.status).toBe(200);
+  expect(await zoneSaved.json()).toEqual({ nickname: "My space", timeZone: "Asia/Ho_Chi_Minh" });
+  expect(((await (await call(request("/api/account/me", secondBrowser))).json()) as typeof firstBody).account.timeZone).toBe("Asia/Ho_Chi_Minh");
+  const cleared = await profileCall({ timeZone: "" });
+  expect(await cleared.json()).toEqual({ nickname: "My space", timeZone: "" });
+
   const other = await login("other-sub");
   const otherBody = await (await call(request("/api/account/me", other))).json() as typeof firstBody;
   expect(otherBody.account.id).not.toBe(firstBody.account.id);
