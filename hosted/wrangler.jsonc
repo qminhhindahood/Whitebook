@@ -1,0 +1,19 @@
+{
+  "name": "whitebook-ticket-02-staging",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-26",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "whitebook-ticket-02-staging",
+      "database_id": "f3429093-d21d-4cf4-9774-c346eec951fc",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

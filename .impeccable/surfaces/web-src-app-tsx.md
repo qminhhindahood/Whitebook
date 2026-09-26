@@ -18,34 +18,33 @@ related_targets: ["web/src/styles.css"]
 
 ## Chosen direction
 
-Approved comp: `.impeccable/mocks/shell-option-2.png`.
+User-pinned reference (2026-09-05): Bluebooky-style screenshots supplied in conversation; layout grammar and finish follow them, branding stays Whitebook.
 
-A calm, familiar exam-workspace shell built around a fixed pale-ice left rail and one broad Library canvas. The memorable moment is the immediate operational read: Whitebook is ready, the library is empty, and the next action is unambiguous.
+The "Indigo Exam Desk": a white sticky navbar (brand left; Library / Import / History as solid indigo pills plus the readiness chip right) over a pale lavender canvas. Library content is a package card grid with Total/RW/Math chips. The Practice Builder is a centered two-column modal dialog ("Create Practice Drill") over a dimmed backdrop. The player is a full-bleed split-pane exam surface framed by multicolor dashed accent strips, with a black footer position pill and a question navigator modal. Decisions locked with the user: builder is a modal (not a page), no countdown banner (no dated data), authored section directions.
 
 ## System reading
 
-- Component grammar: flat white and pale-ice regions, 1px cool-slate dividers, 4–6px corners, no decorative shadow stack.
-- Type: Segoe UI workhorse sans; 32px page title, 24px section title, 18px item title, 16px body/control, 14px metadata.
-- Palette: ink navy `#14233b`, cobalt `#2166d1`, pale ice `#edf3fa`, canvas `#f8fafc`, white, slate `#526176`, success `#168a52`.
-- States: a 4px cobalt active rail marker; cobalt primary action; visible amber/cobalt focus outline; green check plus text for ready state.
-- Motion: one short opacity/translate entrance for the workspace; controls use direct color/state changes; reduced motion removes the entrance.
+- Component grammar: white 14px-radius cards with soft two-layer shadows and 1px `#dfe3f0` borders on canvas `#f5f6fb`; segmented tiles that fill indigo `#3f51c5` with a 3px light-blue halo when selected; pill buttons; toggle switches; chip badges.
+- Type: Segoe UI workhorse sans; 34px page leads, 22px dialog titles, 19px card titles, 15px body, 14px labels, 13px metadata; tabular numerals for timers and counts.
+- Palette: indigo `#3f51c5` (deep `#3343ab`, bright `#637aec`), ink `#1b2337`, slate `#4c5a70`, muted `#6b7890`, success `#168a52`, warning `#9a5b00`, danger `#b03a30`.
+- States: indigo fill + halo for selection; amber 3px→indigo focus outline; green/amber/red status always with text; pill disabled = grey wash.
+- Motion: 420ms workspace entrance, 240ms dialog rise, 140ms control transitions; reduced motion removes all.
 
 ## Fidelity inventory
 
 | Ingredient | Commitment | Medium |
 | --- | --- | --- |
-| Left rail | 220px desktop rail with mark, three navigation items, bottom readiness block | Semantic HTML/CSS and authored SVG icons |
-| Whitebook mark | Independent two-page line mark, no borrowed trademark geometry | Authored SVG |
-| Workspace header | 64px white bar with Library title and Application ready status | Semantic HTML/CSS |
-| Library lead | Practical title, two-line local-storage copy, one Import package action | Semantic HTML/CSS |
-| Empty package table | Five-column header and one large empty row with document symbol | Semantic table plus authored SVG |
-| Before you begin | One full-width bordered region split into PDF, CSV, and local-storage checks | Semantic list, CSS grid, authored SVG |
-| Primary action | Solid cobalt rectangular control with compact upload icon | Native button and authored SVG |
+| Navbar | White sticky bar: authored two-page mark + wordmark left; indigo nav pills + readiness chip right | Semantic HTML/CSS, authored SVG |
+| Library | Page lead, tools row, package card grid with chips, Start Exam / Practice Drill actions, quiet archive/delete | Semantic HTML/CSS |
+| Drill dialog | "Create Practice Drill" modal: section/module/skill tiles with Select All + paging, question-limit chips, timing tiles, toggles, plan summary, Start Drill CTA | Semantic HTML/CSS |
+| Player | Section title + authored Directions disclosure, centered timer with Hide, icon-over-label tools, dashed accent strips, split panes, question banner with dark number square + bookmark mark control, 2px answer rows with letter circles, footer wordmark + black position pill + Back/Next/Submit pills | Semantic HTML/CSS, authored SVG, CSS-only accent strip |
+| Navigator | Centered modal: title, four-state legend, numbered grid (dashed/tinted/indigo-filled/red flag), backdrop and Escape-less close via button/backdrop | Semantic HTML/CSS |
+| Ready fallback | Loading gate, transitions, import, mapper, history, results share the token system | Semantic HTML/CSS |
 
 ## Literalization boundary
 
-The generated comp is the composition and finish reference, not a source of raster UI. All text, controls, table structure, icons, states, and layout remain semantic code. Generated blur, accidental rounded outer-frame chrome, and any imprecise image text are not literalized.
+The user's reference screenshots are the style and composition reference, not a source of raster UI or copy. No "bluebooky.com" watermarks, logos, or text are reproduced; all controls, strips, and icons remain semantic code or authored SVG.
 
 ## Unresolved
 
-Import, History, and package-list interactions are placeholders until their parent tickets implement behavior. They remain visibly unavailable instead of pretending to work.
+None blocking. The `.impeccable/design.json` sidecar predates this direction and is stale; refresh with the `document` command if tooling needs it.

@@ -5,14 +5,22 @@ description = "A private, local SAT-style practice application."
 requires-python = ">=3.11,<3.15"
 dependencies = [
   "fastapi>=0.115,<1",
+  "pypdf>=6.1,<7",
+  "python-dotenv>=1,<2",
+  "python-multipart>=0.0.20,<1",
   "uvicorn>=0.34,<1",
 ]
 
 [dependency-groups]
 dev = [
   "httpx>=0.28,<1",
+  "numpy>=2,<3",
+  "pillow>=11,<13",
+  "pymupdf>=1.28,<2",
   "pytest>=8.3,<10",
   "pytest-timeout>=2.3,<3",
+  "ruff>=0.12,<1",
+  "scipy>=1.15,<2",
 ]
 
 [project.scripts]
@@ -29,3 +37,7 @@ packages = ["src/whitebook"]
 addopts = "-ra --strict-markers"
 testpaths = ["tests"]
 timeout = 20
+filterwarnings = [
+  "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+  "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]

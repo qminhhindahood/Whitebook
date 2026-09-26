@@ -1,245 +1,322 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { api, postJson } from "./api";
+import { ErrorBanner } from "./ui";
+import { BookMark } from "./icons";
+import { attemptRoute } from "./attemptRoute";
+import { HistoryScreen } from "./screens/History";
+import { ImportScreen } from "./screens/Import";
+import { LibraryScreen } from "./screens/Library";
+import { LoadingGate } from "./screens/LoadingGate";
+import { Mapper } from "./screens/Mapper";
+import { Player } from "./screens/Player";
+import { PracticeBuilder } from "./screens/PracticeBuilder";
+import { ResultsScreen } from "./screens/Results";
+import type {
+  Attempt,
+  AttemptGate,
+  ImportDraft,
+  TestPackage,
+} from "./types";
 
 type Readiness = "checking" | "ready" | "unavailable";
-
-type IconProps = {
-  className?: string;
-};
-
-function BookMark({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 64 52" aria-hidden="true">
-      <path d="M4 5c11 0 20 3 28 10v33C24 41 15 38 4 38V5Z" />
-      <path d="M60 5c-11 0-20 3-28 10v33c8-7 17-10 28-10V5Z" />
-    </svg>
-  );
-}
-
-function LibraryIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 5.5h13.5A2.5 2.5 0 0 1 20 8v11H6.5A2.5 2.5 0 0 1 4 16.5v-11Z" />
-      <path d="M7 5.5v11h13M9.5 9h6M9.5 12h6" />
-    </svg>
-  );
-}
-
-function UploadIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" />
-      <path d="M5 13v6h14v-6" />
-    </svg>
-  );
-}
-
-function HistoryIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5.2 7.1A8 8 0 1 1 4 13" />
-      <path d="M4 5v5h5M12 8v5l3 2" />
-    </svg>
-  );
-}
-
-function ShieldIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 28 32" aria-hidden="true">
-      <path d="M14 2 25 6v8c0 7.1-4.4 12.8-11 16C7.4 26.8 3 21.1 3 14V6l11-4Z" />
-      <path d="m9.5 15 3 3 6-7" />
-    </svg>
-  );
-}
-
-function EmptyDocumentIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 90 110" aria-hidden="true">
-      <path d="M18 3h37l22 22v82H18V3Z" />
-      <path d="M55 3v24h22M30 48h35M30 62h35M30 76h25" />
-    </svg>
-  );
-}
-
-function FileIcon({ kind }: { kind: "PDF" | "CSV" }) {
-  return (
-    <svg className="prep-icon" viewBox="0 0 54 64" aria-hidden="true">
-      <path d="M8 2h25l13 13v47H8V2Z" />
-      <path d="M33 2v14h13" />
-      <rect x="2" y="33" width="38" height="22" rx="3" />
-      <text x="21" y="48" textAnchor="middle">
-        {kind}
-      </text>
-    </svg>
-  );
-}
-
-function LaptopIcon() {
-  return (
-    <svg className="prep-icon prep-icon--laptop" viewBox="0 0 64 64" aria-hidden="true">
-      <rect x="11" y="7" width="42" height="36" rx="2" />
-      <path d="M5 52h54l3 6H2l3-6ZM27 53h10" />
-    </svg>
-  );
-}
+type Screen =
+  | "library"
+  | "import"
+  | "history"
+  | "mapping"
+  | "builder"
+  | "loading"
+  | "player"
+  | "results";
 
 export function App() {
   const [readiness, setReadiness] = useState<Readiness>("checking");
-  const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/health", {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Health check failed");
-        return response.json() as Promise<{ status?: string }>;
-      })
-      .then((payload) => setReadiness(payload.status === "ready" ? "ready" : "unavailable"))
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setReadiness("unavailable");
-        }
-      });
-    return () => controller.abort();
+  const [screen, setScreen] = useState<Screen>("library");
+  const [packages, setPackages] = useState<TestPackage[]>([]);
+  const [packagesLoading, setPackagesLoading] = useState(true);
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [draft, setDraft] = useState<ImportDraft | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<TestPackage | null>(
+    null,
+  );
+  const [builderBase, setBuilderBase] = useState<"library" | "results">(
+    "library",
+  );
+  const [gate, setGate] = useState<AttemptGate | null>(null);
+  const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [questionPoolIds, setQuestionPoolIds] = useState<
+    string[] | undefined
+  >();
+  const [startingPackageId, setStartingPackageId] = useState<string | null>(
+    null,
+  );
+  const [error, setError] = useState("");
+  const refresh = useCallback(async () => {
+    setPackagesLoading(true);
+    try {
+      const [packageList, attemptList] = await Promise.all([
+        api<TestPackage[]>("/api/test-packages?include_archived=true"),
+        api<Attempt[]>("/api/attempts"),
+      ]);
+      setPackages(packageList);
+      setAttempts(attemptList);
+    } catch (caught) {
+      // List screens keep showing their last data; surface why refresh
+      // instead of failing silently.
+      setError(
+        caught instanceof Error ? caught.message : "Could not load lists.",
+      );
+    } finally {
+      setPackagesLoading(false);
+    }
   }, []);
-
-  const readyLabel =
-    readiness === "checking"
-      ? "Checking local application"
-      : readiness === "ready"
-        ? "Application ready"
-        : "Application unavailable";
-
-  const explainUnavailable = () => {
-    setNotice("This workflow will be enabled by its implementation ticket.");
+  useEffect(() => {
+    api<{ status: string }>("/api/health")
+      .then((payload) => {
+        setReadiness(payload.status === "ready" ? "ready" : "unavailable");
+        return refresh();
+      })
+      .catch(() => {
+        setReadiness("unavailable");
+        setPackagesLoading(false);
+      });
+  }, [refresh]);
+  const navigate = (next: "library" | "import" | "history") => {
+    setScreen(next);
+    setError("");
+    if (next !== "import") void refresh();
   };
-
+  const openGate = (next: AttemptGate) => {
+    setGate(next);
+    setScreen("loading");
+  };
+  const prepareSectionExam = (item: TestPackage) => {
+    if (startingPackageId) return;
+    setStartingPackageId(item.id);
+    setError("");
+    void postJson<AttemptGate>("/api/attempt-setups", {
+      packageId: item.id,
+      kind: "section_exam",
+      selection: {},
+    })
+      .then(openGate)
+      .catch((caught: Error) => setError(caught.message))
+      .finally(() => setStartingPackageId(null));
+  };
+  const begin = async (currentGate: AttemptGate) => {
+    const next = await postJson<Attempt>(
+      `/api/attempt-setups/${currentGate.setupId}/begin`,
+    );
+    setAttempt(next);
+    setScreen(attemptRoute(next).screen === "results" ? "results" : "player");
+  };
+  const startRevision = (item: TestPackage) =>
+    void postJson<ImportDraft>(`/api/test-packages/${item.id}/revision`)
+      .then((draft) => {
+        setDraft(draft);
+        setScreen("mapping");
+      })
+      .catch((caught: Error) => setError(caught.message));
+  const prepareResume = (item: Attempt) => {
+    const route = attemptRoute(item);
+    if (route.screen === "loading") {
+      void (route.pauseFirst
+        ? postJson(`/api/attempts/${item.id}/pause`)
+        : Promise.resolve())
+        .then(() =>
+          postJson<AttemptGate>(`/api/attempts/${item.id}/prepare-resume`),
+        )
+        .then(openGate)
+        .catch((caught: Error) => setError(caught.message));
+      return;
+    }
+    setAttempt(item);
+    setScreen(route.screen);
+  };
+  const updateAttempt = useCallback(
+    (next: Attempt) => {
+      setAttempt(next);
+      if (next.status === "completed") setScreen("results");
+      if (next.status === "paused") {
+        void refresh();
+        setScreen("history");
+      }
+    },
+    [refresh],
+  );
+  if (screen === "loading" && gate)
+    return (
+      <>
+        <ErrorBanner message={error} onDismiss={() => setError("")} />
+        <LoadingGate
+          key={gate.setupId}
+          gate={gate}
+          onBegin={(current) =>
+            void begin(current).catch((caught: Error) =>
+              setError(caught.message),
+            )
+          }
+          onReturn={() => setScreen(selectedPackage ? builderBase : "library")}
+          onRetry={() => {
+            void postJson<AttemptGate>(
+              `/api/attempt-setups/${gate.setupId}/retry`,
+            )
+              .then(openGate)
+              .catch((caught: Error) => setError(caught.message));
+          }}
+          fail={setError}
+        />
+      </>
+    );
+  if (screen === "player" && attempt)
+    return (
+      <>
+        <ErrorBanner message={error} onDismiss={() => setError("")} />
+        <Player initial={attempt} onChange={updateAttempt} fail={setError} />
+      </>
+    );
+  const baseScreen = screen === "builder" ? builderBase : screen;
+  const navItem = (target: "library" | "import" | "history") => {
+    const active =
+      (target === "library" && baseScreen === "library") ||
+      (target === "import" &&
+        (baseScreen === "import" || baseScreen === "mapping")) ||
+      (target === "history" &&
+        (baseScreen === "history" || baseScreen === "results"));
+    return `nav-pill ${active ? "nav-pill--active" : ""}`;
+  };
   return (
     <div className="app-shell">
-      <aside className="rail" aria-label="Whitebook navigation">
+      <header className="app-header">
         <div className="brand">
           <BookMark className="brand__mark" />
           <span className="brand__name">Whitebook</span>
         </div>
-
-        <nav className="rail__nav" aria-label="Primary">
-          <a className="nav-item nav-item--active" href="/app/" aria-current="page">
-            <LibraryIcon className="nav-item__icon" />
+        <nav className="app-nav" aria-label="Primary">
+          <button className={navItem("library")} onClick={() => navigate("library")}>
             Library
-          </a>
-          <button className="nav-item" type="button" onClick={explainUnavailable}>
-            <UploadIcon className="nav-item__icon" />
+          </button>
+          <button className={navItem("import")} onClick={() => navigate("import")}>
             Import
           </button>
-          <button className="nav-item" type="button" onClick={explainUnavailable}>
-            <HistoryIcon className="nav-item__icon" />
+          <button className={navItem("history")} onClick={() => navigate("history")}>
             History
           </button>
-        </nav>
-
-        <div className="rail__status" aria-live="polite">
-          <ShieldIcon className="rail__shield" />
-          <div>
-            <strong>Local only</strong>
-            <span className={`status-line status-line--${readiness}`}>
-              <span className="status-line__dot" aria-hidden="true" />
-              {readiness === "checking"
-                ? "Checking"
-                : readiness === "ready"
-                  ? "Ready"
-                  : "Unavailable"}
-            </span>
-          </div>
-        </div>
-      </aside>
-
-      <main className="workspace">
-        <header className="workspace__header">
-          <h1>Library</h1>
-          <span className={`header-status header-status--${readiness}`} role="status">
-            <span className="header-status__dot" aria-hidden="true" />
-            {readyLabel}
+          <span
+            className={`header-status header-status--${readiness}`}
+            role="status"
+          >
+            <span className="header-status__dot" />
+            {readiness === "ready"
+              ? "Local · Ready"
+              : readiness === "checking"
+                ? "Checking local application"
+                : "Application unavailable"}
           </span>
-        </header>
-
-        <div className="workspace__body">
-          <section className="library-lead" aria-labelledby="packages-heading">
-            <div>
-              <h2 id="packages-heading">Your test packages</h2>
-              <p>
-                Import a PDF question file and its matching Answer CSV to build your practice.
-                <br />
-                Every file, answer, and result stays on this laptop.
-              </p>
-            </div>
-            <button className="primary-action" type="button" onClick={explainUnavailable}>
-              <UploadIcon className="primary-action__icon" />
-              Import package
-            </button>
-          </section>
-
-          {notice ? (
-            <p className="inline-notice" role="status">
-              {notice}
-            </p>
-          ) : null}
-
-          <div className="package-table-wrap">
-            <table className="package-table">
-              <thead>
-                <tr>
-                  <th scope="col">Package</th>
-                  <th scope="col">Sections</th>
-                  <th scope="col">Questions</th>
-                  <th scope="col">Eligibility</th>
-                  <th scope="col">Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={5}>
-                    <div className="empty-state">
-                      <EmptyDocumentIcon className="empty-state__icon" />
-                      <strong>No packages imported</strong>
-                      <span>Add one PDF with its matching Answer CSV.</span>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <section className="preparation" aria-labelledby="preparation-heading">
-            <h2 id="preparation-heading">Before you begin</h2>
-            <ol className="preparation__list">
-              <li>
-                <FileIcon kind="PDF" />
-                <div>
-                  <strong>1. PDF questions</strong>
-                  <span>Add the original test pages.</span>
-                </div>
-              </li>
-              <li>
-                <FileIcon kind="CSV" />
-                <div>
-                  <strong>2. CSV answer key</strong>
-                  <span>Include each question and accepted answer.</span>
-                </div>
-              </li>
-              <li>
-                <LaptopIcon />
-                <div>
-                  <strong>3. Local storage</strong>
-                  <span>Nothing is uploaded or shared.</span>
-                </div>
-              </li>
-            </ol>
-          </section>
+        </nav>
+      </header>
+      <main className="workspace">
+        <ErrorBanner message={error} onDismiss={() => setError("")} />
+        <div
+          className={`workspace__body ${baseScreen === "mapping" ? "workspace__body--wide" : ""}`}
+        >
+          {baseScreen === "library" && (
+            <LibraryScreen
+              packages={packages}
+              packagesLoading={packagesLoading}
+              attempts={attempts}
+              openImport={() => navigate("import")}
+              openBuilder={(item) => {
+                setQuestionPoolIds(undefined);
+                setSelectedPackage(item);
+                setBuilderBase("library");
+                setScreen("builder");
+              }}
+              startExam={prepareSectionExam}
+              startingPackageId={startingPackageId}
+            />
+          )}
+          {baseScreen === "import" && (
+            <ImportScreen
+              packages={packages}
+              packagesLoading={packagesLoading}
+              fail={setError}
+              refresh={refresh}
+              startRevision={startRevision}
+              onCreated={(created) => {
+                setDraft(created);
+                if (created.status === "published") {
+                  void refresh();
+                  setScreen("library");
+                } else setScreen("mapping");
+              }}
+            />
+          )}
+          {baseScreen === "mapping" && draft && (
+            <Mapper
+              draft={draft}
+              fail={setError}
+              onPublished={(item) => {
+                setSelectedPackage(item);
+                void refresh();
+                setScreen("library");
+              }}
+            />
+          )}
+          {baseScreen === "history" && (
+            <HistoryScreen
+              attempts={attempts}
+              onResume={prepareResume}
+              onResults={(item) => {
+                setAttempt(item);
+                setScreen("results");
+              }}
+              refresh={refresh}
+              fail={setError}
+            />
+          )}
+          {baseScreen === "results" && attempt?.result && (
+            <ResultsScreen
+              attempt={attempt}
+              openGate={openGate}
+              onMistakes={(completed) => {
+                const ids = completed
+                  .result!.questions.filter(
+                    (question) => question.status !== "correct",
+                  )
+                  .map((question) => question.id);
+                void api<TestPackage>(
+                  `/api/test-packages/${completed.packageId}`,
+                )
+                  .then((item) => {
+                    setQuestionPoolIds(ids);
+                    setSelectedPackage({
+                      ...item,
+                      questions: item.questions.filter((question) =>
+                        ids.includes(question.id),
+                      ),
+                    });
+                    setBuilderBase("results");
+                    setScreen("builder");
+                  })
+                  .catch((error: Error) => setError(error.message));
+              }}
+              fail={setError}
+            />
+          )}
         </div>
       </main>
+      {screen === "builder" && selectedPackage && (
+        <PracticeBuilder
+          key={`${selectedPackage.id}-${questionPoolIds?.join(",") ?? "all"}`}
+          item={selectedPackage}
+          questionPoolIds={questionPoolIds}
+          onGate={openGate}
+          onClose={() => setScreen(builderBase)}
+          fail={setError}
+        />
+      )}
     </div>
   );
 }

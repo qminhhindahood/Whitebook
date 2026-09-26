@@ -7,7 +7,6 @@ import json
 import os
 import secrets
 import socket
-import sqlite3
 import sys
 import uuid
 import webbrowser
@@ -20,6 +19,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 import uvicorn
 
 from whitebook.app import create_app
+from whitebook.storage import initialize_database
 
 LOOPBACK_HOST = "127.0.0.1"
 
@@ -39,23 +39,10 @@ class LauncherError(RuntimeError):
 
 def initialize_storage(data_dir: Path) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
-    for child in ("documents", "renders", "runtime"):
+    for child in ("assets", "backups", "documents", "logs", "renders", "runtime"):
         (data_dir / child).mkdir(exist_ok=True)
 
-    database_path = data_dir / "whitebook.sqlite3"
-    with sqlite3.connect(database_path) as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS app_metadata (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-            """
-        )
-        connection.execute(
-            "INSERT OR IGNORE INTO app_metadata (key, value) VALUES ('schema_version', '1')"
-        )
-        connection.commit()
+    initialize_database(data_dir)
 
 
 def reserve_loopback_socket() -> socket.socket:
@@ -182,6 +169,9 @@ async def serve(
 ) -> None:
     lock_path = data_dir / "runtime" / "instance.json"
     project_root = Path(__file__).resolve().parents[2]
+    from whitebook.attempts import AttemptEngine
+
+    AttemptEngine(data_dir).recover_interrupted()
     app = create_app(
         capability_token=record.token,
         instance_id=record.instance_id,
@@ -234,6 +224,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
     args = build_parser().parse_args()
     data_dir = args.data_dir.resolve()
     initialize_storage(data_dir)

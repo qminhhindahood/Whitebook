@@ -1,12 +1,89 @@
 from __future__ import annotations
 
+import os
 import secrets
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict, Field
+
+from whitebook.answer_csv import blank_answer_csv, example_answer_csv
+from whitebook.attempts import AttemptEngine, AttemptError
+from whitebook.authoring import AuthoringError, PackageAuthoring
+from whitebook.backups import BackupError, BackupManager
+from whitebook.diagnostics import DiagnosticLog
+from whitebook.question_presentation import QuestionPresentation
+
+
+class QuestionRegionInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    page_number: int = Field(alias="pageNumber")
+    x: float
+    y: float
+    width: float
+    height: float
+    confirmed: bool
+
+
+class QuestionRegionsInput(BaseModel):
+    regions: list[QuestionRegionInput]
+
+
+class AttemptSetupInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    package_id: str = Field(alias="packageId")
+    kind: str
+    selection: dict[str, object]
+
+
+class ResponseInput(BaseModel):
+    response: str | None
+
+
+class ReviewStateInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    marked: bool = False
+    eliminated_choices: list[str] = Field(
+        default_factory=list, alias="eliminatedChoices"
+    )
+
+
+class CurrentQuestionInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    question_id: str = Field(alias="questionId")
+
+
+class CalculatorReadinessInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    script_loaded: bool = Field(alias="scriptLoaded")
+    constructor_available: bool = Field(alias="constructorAvailable")
+    instance_created: bool = Field(alias="instanceCreated")
+    state_readable: bool = Field(alias="stateReadable")
+    usable_size: bool = Field(alias="usableSize")
+
+
+class CalculatorStateInput(BaseModel):
+    state: dict[str, object]
+
+
+class PermanentDeleteInput(BaseModel):
+    confirmation: str
 
 
 def create_app(
@@ -25,19 +102,36 @@ def create_app(
     )
     expected_host = f"127.0.0.1:{port}"
     expected_origin = f"http://{expected_host}"
+    authoring = PackageAuthoring(storage_root)
+    attempts = AttemptEngine(storage_root)
+    backups = BackupManager(storage_root)
+    diagnostics = DiagnosticLog(storage_root)
+    diagnostics.record("startup", stage="application_ready", resource_id=instance_id)
 
     def secured(response: Response) -> Response:
         response.headers["Cache-Control"] = "no-store"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
-            "form-action 'self'; img-src 'self' data:; object-src 'none'; "
-            "script-src 'self'; style-src 'self'"
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            (
+                "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
+                "form-action 'self'; img-src 'self' data: blob:; object-src 'none'; "
+                "script-src 'self'; frame-src 'self'; "
+                "connect-src 'self' https://www.desmos.com; "
+                "worker-src 'self' blob:; style-src 'self' 'unsafe-inline'"
+            ),
         )
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Frame-Options"] = (
+            "SAMEORIGIN"
+            if "sandbox allow-scripts" in response.headers["Content-Security-Policy"]
+            else "DENY"
+        )
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        )
         return response
 
     @app.middleware("http")
@@ -100,6 +194,476 @@ def create_app(
             if (storage_root / "whitebook.sqlite3").exists()
             else "missing",
         }
+
+    @app.get("/api/answer-csv-template")
+    async def answer_csv_template(variant: str = "blank") -> Response:
+        if variant == "blank":
+            content = blank_answer_csv()
+            filename = "whitebook-answer-key.csv"
+        elif variant == "example":
+            content = example_answer_csv()
+            filename = "whitebook-answer-key-example.csv"
+        else:
+            raise HTTPException(status_code=404, detail="Template variant not found.")
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/app/calculator-frame")
+    async def calculator_frame(request: Request) -> HTMLResponse:
+        from whitebook.calculator_frame import frame_html
+
+        request.state.calculator_nonce = secrets.token_urlsafe(24)
+        return HTMLResponse(
+            frame_html(request.state.calculator_nonce),
+            headers={
+                "Content-Security-Policy": (
+                    "default-src 'none'; sandbox allow-scripts; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; "
+                    f"script-src 'nonce-{request.state.calculator_nonce}' https://www.desmos.com 'unsafe-eval'; "
+                    "style-src 'unsafe-inline'; font-src data:; img-src data: blob:; connect-src https://www.desmos.com; worker-src blob:"
+                )
+            },
+        )
+
+    @app.post("/api/import-drafts", status_code=201)
+    async def create_import_draft(
+        source_pdf: Annotated[UploadFile, File()],
+        answer_csv: Annotated[UploadFile, File()],
+        title: Annotated[str | None, Form()] = None,
+    ) -> dict[str, object]:
+        filename = Path(source_pdf.filename or "Source PDF.pdf").name
+        upload_path = (
+            storage_root / "runtime" / f"{uuid.uuid4().hex}{Path(filename).suffix}"
+        )
+        try:
+            with upload_path.open("xb") as output:
+                total_bytes = 0
+                while chunk := await source_pdf.read(1024 * 1024):
+                    total_bytes += len(chunk)
+                    if total_bytes > 250 * 1024 * 1024:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Source PDF exceeds the 250 MB limit.",
+                        )
+                    output.write(chunk)
+            csv_bytes = await answer_csv.read(10 * 1024 * 1024 + 1)
+            draft = authoring.create_import_draft(
+                title=title,
+                original_filename=filename,
+                temporary_pdf=upload_path,
+                answer_csv=csv_bytes,
+            )
+            diagnostics.record(
+                "import_stage",
+                stage="draft_created",
+                error_code=(
+                    draft.diagnostics[0]["code"] if draft.diagnostics else None
+                ),
+                resource_id=draft.id,
+            )
+            return draft.as_payload()
+        finally:
+            upload_path.unlink(missing_ok=True)
+            await source_pdf.close()
+            await answer_csv.close()
+
+    @app.get("/api/import-drafts/{draft_id}")
+    async def get_import_draft(draft_id: str) -> dict[str, object]:
+        draft = authoring.get_import_draft(draft_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Import Draft not found.")
+        return draft.as_payload()
+
+    @app.get("/api/import-drafts")
+    async def list_import_drafts() -> list[dict[str, object]]:
+        return authoring.list_import_drafts()
+
+    @app.put("/api/import-drafts/{draft_id}/answer-csv")
+    async def replace_draft_answer_csv(
+        draft_id: str, answer_csv: Annotated[UploadFile, File()]
+    ) -> dict[str, object]:
+        try:
+            data = await answer_csv.read(10 * 1024 * 1024 + 1)
+            return authoring.replace_answer_csv(draft_id, data).as_payload()
+        except AuthoringError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+        finally:
+            await answer_csv.close()
+
+    @app.get("/api/import-drafts/{draft_id}/source.pdf")
+    async def get_import_draft_source(draft_id: str) -> FileResponse:
+        source = authoring.source_pdf(draft_id)
+        if source is None:
+            raise HTTPException(status_code=404, detail="Source PDF not found.")
+        return FileResponse(source, media_type="application/pdf")
+
+    @app.put("/api/import-drafts/{draft_id}/questions/{question_index}/regions")
+    async def set_question_regions(
+        draft_id: str,
+        question_index: int,
+        payload: QuestionRegionsInput,
+    ) -> dict[str, object]:
+        try:
+            draft = authoring.set_question_regions(
+                draft_id,
+                question_index,
+                [item.model_dump() for item in payload.regions],
+            )
+        except AuthoringError as error:
+            status_code = 404 if error.code.endswith("not_found") else 409
+            if error.code in {"invalid_region", "missing_regions"}:
+                status_code = 422
+            raise HTTPException(
+                status_code=status_code, detail=error.message
+            ) from error
+        return draft.as_payload()
+
+    @app.put("/api/import-drafts/{draft_id}/questions/{question_index}/presentation")
+    async def set_question_presentation(
+        draft_id: str, question_index: int, payload: QuestionPresentation
+    ) -> dict[str, object]:
+        try:
+            return authoring.set_question_presentation(
+                draft_id, question_index, payload
+            ).as_payload()
+        except AuthoringError as error:
+            status_code = 404 if error.code.endswith("not_found") else 409
+            if error.code == "invalid_presentation":
+                status_code = 422
+            raise HTTPException(
+                status_code=status_code, detail=error.message
+            ) from error
+
+    @app.post("/api/import-drafts/{draft_id}/publish", status_code=201)
+    async def publish_import_draft(draft_id: str) -> dict[str, object]:
+        try:
+            return authoring.publish(draft_id)
+        except AuthoringError as error:
+            status_code = 404 if error.code == "draft_not_found" else 409
+            raise HTTPException(
+                status_code=status_code, detail=error.message
+            ) from error
+
+    @app.get("/api/test-packages")
+    async def list_test_packages(
+        include_archived: bool = False,
+    ) -> list[dict[str, object]]:
+        return authoring.list_packages(include_archived=include_archived)
+
+    @app.get("/api/test-packages/{package_id}")
+    async def get_test_package(package_id: str) -> dict[str, object]:
+        package = authoring.get_package(package_id)
+        if package is None:
+            raise HTTPException(status_code=404, detail="Test Package not found.")
+        return package
+
+    @app.get("/api/test-packages/{package_id}/source.pdf")
+    async def get_test_package_source(package_id: str) -> FileResponse:
+        source = authoring.package_source_pdf(package_id)
+        if source is None:
+            raise HTTPException(status_code=404, detail="Source PDF not found.")
+        return FileResponse(source, media_type="application/pdf")
+
+    @app.get("/api/test-packages/{package_id}/practice-options")
+    async def get_practice_options(package_id: str) -> dict[str, object]:
+        try:
+            return attempts.practice_options(package_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=404, detail=error.message) from error
+
+    @app.post("/api/test-packages/{package_id}/archive")
+    async def archive_test_package(package_id: str) -> dict[str, object]:
+        try:
+            return authoring.set_archived(package_id, archived=True)
+        except AuthoringError as error:
+            raise HTTPException(status_code=404, detail=error.message) from error
+
+    @app.post("/api/test-packages/{package_id}/restore")
+    async def restore_test_package(package_id: str) -> dict[str, object]:
+        try:
+            return authoring.set_archived(package_id, archived=False)
+        except AuthoringError as error:
+            raise HTTPException(status_code=404, detail=error.message) from error
+
+    @app.delete("/api/test-packages/{package_id}")
+    async def permanently_delete_test_package(
+        package_id: str, payload: PermanentDeleteInput
+    ) -> dict[str, int]:
+        try:
+            return authoring.permanently_delete(package_id, payload.confirmation)
+        except AuthoringError as error:
+            status_code = 404 if error.code == "package_not_found" else 409
+            raise HTTPException(
+                status_code=status_code, detail=error.message
+            ) from error
+
+    @app.post("/api/test-packages/{package_id}/revision", status_code=201)
+    async def start_package_revision(package_id: str) -> dict[str, object]:
+        try:
+            return authoring.start_package_revision(package_id).as_payload()
+        except AuthoringError as error:
+            raise HTTPException(status_code=404, detail=error.message) from error
+
+    @app.post("/api/attempt-setups", status_code=201)
+    async def create_attempt_setup(payload: AttemptSetupInput) -> dict[str, object]:
+        try:
+            return attempts.prepare(
+                package_id=payload.package_id,
+                kind=payload.kind,
+                selection=payload.selection,
+            )
+        except AttemptError as error:
+            raise HTTPException(status_code=422, detail=error.message) from error
+
+    @app.post("/api/attempt-setups/{setup_id}/begin", status_code=201)
+    async def begin_attempt(setup_id: str) -> dict[str, object]:
+        try:
+            return attempts.begin(setup_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempt-setups/{setup_id}/use-scientific")
+    async def use_scientific_calculator(setup_id: str) -> dict[str, object]:
+        try:
+            return attempts.use_scientific(setup_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempt-setups/{setup_id}/retry", status_code=201)
+    async def retry_attempt_setup(setup_id: str) -> dict[str, object]:
+        try:
+            return attempts.retry_setup(setup_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempt-setups/{setup_id}/confirm-calculator")
+    async def confirm_calculator(
+        setup_id: str, payload: CalculatorReadinessInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.confirm_calculator(
+                setup_id,
+                {
+                    "scriptLoaded": payload.script_loaded,
+                    "constructorAvailable": payload.constructor_available,
+                    "instanceCreated": payload.instance_created,
+                    "stateReadable": payload.state_readable,
+                    "usableSize": payload.usable_size,
+                },
+            )
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.get("/api/attempts")
+    async def list_attempts() -> list[dict[str, object]]:
+        return attempts.list_attempts()
+
+    @app.get("/api/attempts/{attempt_id}")
+    async def get_attempt(attempt_id: str) -> dict[str, object]:
+        attempt = attempts.get_attempt(attempt_id)
+        if attempt is None:
+            raise HTTPException(status_code=404, detail="Attempt not found.")
+        return attempt
+
+    @app.delete("/api/attempts/{attempt_id}")
+    async def delete_unfinished_attempt(
+        attempt_id: str, confirmed: bool = False
+    ) -> dict[str, bool]:
+        try:
+            return attempts.delete_unfinished(attempt_id, confirmed=confirmed)
+        except AttemptError as error:
+            status_code = 404 if error.code == "attempt_not_found" else 409
+            raise HTTPException(
+                status_code=status_code, detail=error.message
+            ) from error
+
+    @app.put("/api/attempts/{attempt_id}/questions/{question_id}/response")
+    async def save_response(
+        attempt_id: str, question_id: str, payload: ResponseInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.save_response(attempt_id, question_id, payload.response)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.put("/api/attempts/{attempt_id}/questions/{question_id}/review-state")
+    async def save_review_state(
+        attempt_id: str, question_id: str, payload: ReviewStateInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.save_review_state(
+                attempt_id,
+                question_id,
+                marked=payload.marked,
+                eliminated_choices=payload.eliminated_choices,
+            )
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.put("/api/attempts/{attempt_id}/current-question")
+    async def set_current_question(
+        attempt_id: str, payload: CurrentQuestionInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.navigate(attempt_id, payload.question_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.put("/api/attempts/{attempt_id}/calculator-state")
+    async def save_calculator_state(
+        attempt_id: str, payload: CalculatorStateInput
+    ) -> dict[str, object]:
+        try:
+            return attempts.save_calculator_state(attempt_id, payload.state)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/pause")
+    async def pause_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.pause(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/prepare-resume")
+    async def prepare_attempt_resume(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.prepare_resume(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/resume")
+    async def resume_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.resume(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/submit")
+    async def submit_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.submit(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/finish-module")
+    async def finish_module(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.finish_module(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/tick")
+    async def tick_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.tick(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/continue")
+    async def continue_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.continue_after_transition(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/end-break")
+    async def end_attempt_break(
+        attempt_id: str, confirmed: bool = False
+    ) -> dict[str, object]:
+        try:
+            return attempts.end_break(attempt_id, confirmed=confirmed)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/retake", status_code=201)
+    async def retake_attempt(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.retake(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.post("/api/attempts/{attempt_id}/practice-mistakes", status_code=201)
+    async def practice_mistakes(attempt_id: str) -> dict[str, object]:
+        try:
+            return attempts.practice_mistakes(attempt_id)
+        except AttemptError as error:
+            raise HTTPException(status_code=409, detail=error.message) from error
+
+    @app.get("/api/math/reference-sheet.png")
+    async def get_reference_sheet() -> FileResponse:
+        from whitebook.math_config import reference_sheet_setting
+
+        reference = (storage_root / reference_sheet_setting(storage_root)).resolve()
+        assets_root = (storage_root / "assets").resolve()
+        if not reference.is_relative_to(assets_root) or not reference.is_file():
+            raise HTTPException(status_code=404, detail="Reference Sheet not found.")
+        with reference.open("rb") as handle:
+            signature = handle.read(8)
+        if signature != b"\x89PNG\r\n\x1a\n":
+            raise HTTPException(
+                status_code=422, detail="Reference Sheet image is invalid."
+            )
+        return FileResponse(reference, media_type="image/png")
+
+    @app.post("/api/backups/export", status_code=201)
+    async def export_backup() -> dict[str, object]:
+        try:
+            return backups.export()
+        except (BackupError, OSError) as error:
+            message = (
+                error.message
+                if isinstance(error, BackupError)
+                else "Backup export failed."
+            )
+            raise HTTPException(status_code=500, detail=message) from error
+
+    @app.get("/api/backups/{archive_name}")
+    async def download_backup(archive_name: str) -> FileResponse:
+        archive = backups.archive_path(archive_name)
+        if archive is None:
+            raise HTTPException(status_code=404, detail="Backup not found.")
+        return FileResponse(
+            archive,
+            media_type="application/zip",
+            filename=f"whitebook-backup-{archive.stem[:8]}.zip",
+        )
+
+    @app.post("/api/backups/restore")
+    async def restore_backup(
+        backup: Annotated[UploadFile, File()],
+    ) -> dict[str, int]:
+        temporary = storage_root / "runtime" / f"restore-upload-{uuid.uuid4().hex}.zip"
+        try:
+            with temporary.open("xb") as output:
+                total_bytes = 0
+                while chunk := await backup.read(1024 * 1024):
+                    total_bytes += len(chunk)
+                    if total_bytes > 1024**3:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Backup ZIP exceeds the 1 GB upload limit.",
+                        )
+                    output.write(chunk)
+            return backups.restore(temporary)
+        except BackupError as error:
+            raise HTTPException(status_code=422, detail=error.message) from error
+        finally:
+            temporary.unlink(missing_ok=True)
+            await backup.close()
+
+    @app.post("/api/diagnostics/open-logs")
+    async def open_logs_folder() -> dict[str, bool]:
+        opener = getattr(os, "startfile", None)
+        if opener is None:
+            raise HTTPException(
+                status_code=501,
+                detail="Open Logs Folder is available from the Windows launcher.",
+            )
+        opener(str(diagnostics.folder))
+        return {"opened": True}
 
     if static_root.is_dir():
         assets_root = static_root / "assets"
