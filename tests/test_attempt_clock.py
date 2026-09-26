@@ -174,13 +174,16 @@ def test_refreshing_reads_cannot_extend_remaining(tmp_path: Path):
     assert previous == COUNTDOWN_SECONDS - 60 - 75
 
 
-def test_representative_attempt_write_budget(tmp_path: Path):
-    """Writes per representative timed Attempt: durable state changes only on
-    learner actions and clock transitions, never on the passage of time."""
+def test_representative_attempt_write_budget(
+    tmp_path: Path, write_counter: list[str]
+):
+    """Requests and writes per representative timed Attempt scale with
+    learner actions and clock transitions, never with the passage of time."""
     package = publish_full_package(tmp_path)
     clock = FakeClock()
     engine = AttemptEngine(tmp_path, clock=clock)
     attempt = countdown_practice(engine, package)
+    write_counter.clear()
 
     actions: list[Callable[[], object]] = [
         lambda: engine.save_response(attempt["id"], attempt["questions"][0]["id"], "A"),
@@ -193,22 +196,25 @@ def test_representative_attempt_write_budget(tmp_path: Path):
         ),
         lambda: engine.pause(attempt["id"]),
     ]
-    for step, action in enumerate(actions):
+    idle_write_counts = []
+    for action in actions:
         clock.advance(30)
         action()
+        # Simulate the old one-second client cadence with pure reads.
+        before_idle = len(write_counter)
         for _ in range(30):
             clock.advance(1)
             engine.get_attempt(attempt["id"])
-
-    with attempts_module.connect(tmp_path) as connection:
-        updates = connection.execute(
-            "SELECT COUNT(*) FROM attempts WHERE id = ?", (attempt["id"],)
-        ).fetchone()[0]
+        idle_write_counts.append(len(write_counter) - before_idle)
 
     # Sanity: the attempt survived four actions plus four minutes of reads.
-    assert updates == 1
     final = engine.get_attempt(attempt["id"])
     assert final["status"] == "paused"
     # Three write checkpoints each absorb their preceding idle minute; the
     # final pause charges only its own 30-second wait.
     assert final["elapsedSeconds"] == 3 * 60 + 30
+    # Not one of the 120 one-second idle reads wrote to the database, and the
+    # whole session cost at most one durable write per learner action — versus
+    # one write per second under the tick era.
+    assert idle_write_counts == [0, 0, 0, 0]
+    assert len(write_counter) <= 5

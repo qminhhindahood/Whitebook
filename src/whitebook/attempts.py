@@ -429,6 +429,8 @@ class AttemptEngine:
             return self.get_attempt(attempt_id)
         now = self._clock.now()
         if row["status"] == "active":
+            # Charge before clearing the anchor; the checkpoint inside
+            # _save_state would otherwise see a zero delta.
             self._charge(state, now, mode="module")
         elif row["status"] == "break":
             self._charge(state, now, mode="break")
@@ -509,6 +511,11 @@ class AttemptEngine:
             state["breakDeadlineAt"] = (
                 now + break_remaining if break_remaining is not None else None
             )
+        elif state.get("pausedStatus") == "transition":
+            # continue_after_transition arms the next Module; a paused
+            # transition has no running module time to restore.
+            state["moduleDeadlineAt"] = None
+            state["breakDeadlineAt"] = None
         else:
             remaining = state.get("remainingSeconds")
             state["moduleDeadlineAt"] = (
@@ -777,7 +784,7 @@ class AttemptEngine:
                     "questionIds": [
                         question["id"]
                         for question in selected[
-                            (module_number - 1) * module_size : module_size * module_number
+                            (module_number - 1) * module_size : module_number * module_size
                         ]
                     ],
                     "durationSeconds": standard_module_seconds(section),

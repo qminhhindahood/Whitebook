@@ -28,3 +28,20 @@ Fixtures are original synthetic content under `.scratch/runtime-review/input/`. 
 Full Simulation's four timed Modules, break and locking have deterministic engine tests. Complete their visible-player acceptance with a full 98-question test fixture before closing ticket 15.
 
 The current browser upload connector rejects this workspace path. That tooling limitation is not evidence that application import fails, and it is not a completed browser acceptance check.
+
+## Attempt clock (server-enforced, 2026-09)
+
+The player no longer sends a per-second tick. The countdown renders locally
+from server-provided remaining seconds; the server stores absolute deadlines
+and enforces expiration on every relevant read and mutation. A single sync
+request fires when the local countdown reaches zero. Accepted evidence for
+ticket 01 of `whitebook-account-learning-update`:
+
+- Real-browser network trace (Chrome-family client, 3-minute Practice
+  countdown, no interaction): 1 POST `begin`, 0 API requests during 75 s of
+  idle countdown, 1 GET of the Attempt when the countdown reached zero, and
+  the server-graded Results screen afterwards (elapsed capped at exactly the
+  module duration).
+- Engine write budget (`tests/test_attempt_clock.py`): 120 one-second idle
+  reads produce zero database writes; durable writes occur only on learner
+  actions and clock transitions.
