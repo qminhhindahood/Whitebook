@@ -1,9 +1,10 @@
 # Whitebook vocabulary staging (Starter Deck preparation)
 
 All vocabulary source containers and the full extraction → review → publication
-pipeline live in this folder. Originals are untouched in `D:\Notion`. Nothing here
-is published to learners yet: every deck is a hash-checked **draft** awaiting
-owner review (see `reports/REVIEW_PACK.md` for the decision list).
+pipeline live in this folder. Originals are untouched in `D:\Notion`. Two decks
+carry the owner's 2026-09-26 review decision and are **published** (hash-checked
+manifests, `review_status: approved` on every row); the rest remain drafts (see
+`reports/REVIEW_PACK.md` for the reviewed decision list).
 
 ## Layout
 
@@ -36,13 +37,17 @@ Tesseract binary: `C:\Program Files\PDF24\tesseract\tesseract.exe` (5.5.2).
 
 ## Status
 
+- Owner review decision (2026-09-26): `anki_starter` (839) and `b2c1_1000` (1,000)
+  approved for publication — every row flipped to `review_status: approved` and the
+  manifests rebuilt as `published` (anki_starter v2, b2c1_1000 v3; the version bump
+  records the draft→approved content change in the hash-checked manifest).
+  `c1c2_wic500` (500) remains `draft-pending-owner-review`; the importer refuses it.
 - anki_starter 839/839, c1c2_wic500 500/500, b2c1_1000 1000/1000 — all rows staged
   with provenance; zero quarantines; 353 cross-source duplicate groups listed for
   owner decision (nothing merged or discarded).
-- b2c1_1000 rows are OCR-derived and marked `ocr` / `ocr-lowconf` until spot-checked
-  against `reports/b2c1_page_renders/`; its IPA column is flagged unreliable.
+- b2c1_1000 rows are OCR-derived; the owner's approval covers publication as
+  reviewed. The IPA column's unreliability flag is retained in row flags.
 - Quizlet (~4,000 words): export files were never supplied; not scraped. The owner
   explicitly excluded this source on 2026-09-26 — the consolidation is final with the
   three supplied containers.
-- Publication gate: the importer refuses any manifest not marked `published`; it
-  becomes `published` only after owner approval flips rows to `approved`.
+- Publication gate: the importer refuses any manifest not marked `published`.

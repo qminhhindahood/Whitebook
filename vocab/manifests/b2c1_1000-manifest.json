@@ -1,18 +1,18 @@
 {
  "schema_version": 1,
  "deck_id": "b2c1_1000",
- "version": 2,
- "status": "draft-pending-owner-review",
- "created_at": "2026-09-26T14:46:13+00:00",
+ "version": 3,
+ "status": "published",
+ "created_at": "2026-09-26T15:58:50+00:00",
  "card_count": 1000,
- "approved_count": 0,
+ "approved_count": 1000,
  "source": {
   "path": "D:\\Notion\\1000_tu_SAT_B2-C1_VietAccepted (1).pdf",
   "sha256": "cec97c4c5c599b0f4bd2b741353859ad38fd7fd962440173d004a7b659bcaf01",
   "extraction": "tesseract-eng+vie-300dpi-threshold",
   "imported_at": "2026-09-26T09:43:13+00:00"
  },
- "cards_file": "b2c1_1000-v2-cards.json",
- "cards_sha256": "a08e71627852b7d506fa8d2cad57c4683815aaae1b536cf88eba2280d4f7152a",
- "manifest_sha256": "0d1ef46b07b00e4d684561d710323097dfdc485bcb5623ae1960639831aac163"
+ "cards_file": "b2c1_1000-v3-cards.json",
+ "cards_sha256": "693b9321fd3d17ae4e891024e1416b48924791a599a524f5c590108d818c6639",
+ "manifest_sha256": "b28b37fe1d5ae0b8f32f02cd904636e2a8d5a0df1f4b3d97da42333d4d36d72d"
 }

@@ -3,7 +3,7 @@
  "deck_id": "c1c2_wic500",
  "version": 1,
  "status": "draft-pending-owner-review",
- "created_at": "2026-09-26T14:46:13+00:00",
+ "created_at": "2026-09-26T15:58:50+00:00",
  "card_count": 500,
  "approved_count": 0,
  "source": {
@@ -14,5 +14,5 @@
  },
  "cards_file": "c1c2_wic500-v1-cards.json",
  "cards_sha256": "97eead2a6addf366f7414ca1199b1c2723259e8d6ed2a50a4b0768f15c6caca4",
- "manifest_sha256": "aa3cccfde0d5a75c09515885b18c96b0854b9f580a266aa20588caa24d06e9c2"
+ "manifest_sha256": "d4e6f46ac99c1e96699bdc916813e7ff9ab7d7fb85db681595b8e5ecb0c71850"
 }

@@ -90,13 +90,18 @@ def _approved_copy(mdir: Path, deck: str) -> dict:
     return src
 
 
-def test_importer_refuses_unapproved_manifests(tmp_path):
+def test_importer_imports_owner_approved_and_refuses_draft_decks(tmp_path):
+    # anki_starter + b2c1_1000 carry the owner's 2026-09-26 approval decision;
+    # c1c2_wic500 is still a draft, so its 500 rows must never import.
     store = tmp_path / "store.sqlite3"
     publish_decks.import_manifests(store=store)
     con = sqlite3.connect(str(store))
-    assert con.execute("SELECT COUNT(*) FROM deck_cards").fetchone()[0] == 0
-    versions = con.execute("SELECT COUNT(*) FROM deck_versions").fetchone()[0]
-    assert versions == 0  # nothing published
+    counts = dict(con.execute(
+        "SELECT deck_id, COUNT(*) FROM deck_cards GROUP BY deck_id").fetchall())
+    assert counts == {"anki_starter": 839, "b2c1_1000": 1000}
+    drafts = con.execute(
+        "SELECT COUNT(*) FROM deck_versions WHERE deck_id='c1c2_wic500'").fetchone()[0]
+    assert drafts == 0
     con.close()
 
 
