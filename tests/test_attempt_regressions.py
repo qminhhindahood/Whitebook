@@ -87,7 +87,7 @@ def test_practice_navigation_keeps_one_total_countdown_across_modules(tmp_path: 
     assert moved["remainingSeconds"] == 110
     engine.save_response(attempt["id"], target, "A")
     clock.advance(200)
-    finished = engine.tick(attempt["id"])
+    finished = engine.get_attempt(attempt["id"])
     assert finished["result"]["correct"] == 1
     assert finished["elapsedSeconds"] == 120
     assert (
@@ -133,14 +133,18 @@ def test_recovery_freezes_the_last_checkpoint_instead_of_counting_downtime(
     )
     attempt = engine.begin(gate["setupId"])
     clock.advance(10)
-    engine.tick(attempt["id"])
+    # A durable write is the last persisted checkpoint; reads never write.
+    question_id = attempt["questions"][0]["id"]
+    engine.save_response(attempt["id"], question_id, "A")
     clock.advance(600)
     engine.recover_interrupted()
     recovered = engine.get_attempt(attempt["id"])
     assert recovered["status"] == "paused"
     assert recovered["remainingSeconds"] == 50
     gate = engine.prepare_resume(attempt["id"])
-    assert engine.begin(gate["setupId"])["remainingSeconds"] == 50
+    resumed = engine.begin(gate["setupId"])
+    assert resumed["remainingSeconds"] == 50
+    assert resumed["responses"] == {question_id: "A"}
 
 
 def test_break_can_be_paused_and_resumed_without_skipping_it(tmp_path: Path):
@@ -154,10 +158,10 @@ def test_break_can_be_paused_and_resumed_without_skipping_it(tmp_path: Path):
     )
     attempt = engine.begin(gate["setupId"])
     clock.advance(1920)
-    engine.tick(attempt["id"])
+    engine.get_attempt(attempt["id"])
     engine.continue_after_transition(attempt["id"])
     clock.advance(1920)
-    engine.tick(attempt["id"])
+    engine.get_attempt(attempt["id"])
     clock.advance(60)
     paused = engine.pause(attempt["id"])
     assert paused["status"] == "paused"
@@ -292,7 +296,7 @@ def test_legacy_off_contract_response_grades_incorrect_without_wedging(
         connection.commit()
 
     clock.advance(120)
-    expired = engine.tick(attempt["id"])
+    expired = engine.get_attempt(attempt["id"])
 
     assert expired["status"] == "completed"
     graded = expired["result"]["questions"][0]

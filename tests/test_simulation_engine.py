@@ -84,7 +84,7 @@ def test_simulation_uses_standard_modules_breaks_and_atomic_expiration(
     assert attempt["activeModuleIndex"] == 0
 
     clock.advance(32 * 60)
-    expired = engine.tick(attempt["id"])
+    expired = engine.get_attempt(attempt["id"])
     assert expired["status"] == "transition"
     assert expired["lockedModules"] == [0]
     with pytest.raises(AttemptError, match="not active"):
@@ -94,24 +94,24 @@ def test_simulation_uses_standard_modules_breaks_and_atomic_expiration(
     assert second_rw["activeModuleIndex"] == 1
     assert second_rw["remainingSeconds"] == 32 * 60
     clock.advance(32 * 60)
-    on_break = engine.tick(attempt["id"])
+    on_break = engine.get_attempt(attempt["id"])
     assert on_break["status"] == "break"
     assert on_break["breakRemainingSeconds"] == 10 * 60
     with pytest.raises(AttemptError, match="confirmation"):
         engine.end_break(attempt["id"], confirmed=False)
 
     clock.advance(10 * 60)
-    after_break = engine.tick(attempt["id"])
+    after_break = engine.get_attempt(attempt["id"])
     assert after_break["status"] == "transition"
     first_math = engine.continue_after_transition(attempt["id"])
     assert first_math["activeModuleIndex"] == 2
     assert first_math["remainingSeconds"] == 35 * 60
 
     clock.advance(35 * 60)
-    engine.tick(attempt["id"])
+    engine.get_attempt(attempt["id"])
     engine.continue_after_transition(attempt["id"])
     clock.advance(35 * 60)
-    completed = engine.tick(attempt["id"])
+    completed = engine.get_attempt(attempt["id"])
 
     assert completed["status"] == "completed"
     assert completed["lockedModules"] == [0, 1, 2, 3]
@@ -147,4 +147,4 @@ def test_paused_countdown_does_not_consume_recovery_time(tmp_path: Path) -> None
     resumed = engine.resume(attempt["id"])
     assert resumed["remainingSeconds"] == 50
     clock.advance(5)
-    assert engine.tick(attempt["id"])["remainingSeconds"] == 45
+    assert engine.get_attempt(attempt["id"])["remainingSeconds"] == 45

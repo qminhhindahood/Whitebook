@@ -180,7 +180,7 @@ export function Player({
     return (
       <main className="transition-screen">
         <span className="break-time">
-          {formatTime(attempt.breakRemainingSeconds)}
+          {formatTime(clock.breakRemaining ?? attempt.breakRemainingSeconds)}
         </span>
         <h1>Section break</h1>
         <p>
@@ -468,7 +468,7 @@ export function Player({
         <div className="player-header__timer">
           {!timerHidden && (
             <span className="player-timer">
-              {formatTime(clock.remaining ?? attempt.elapsedSeconds)}
+              {formatTime(clock.remaining ?? clock.elapsed)}
             </span>
           )}
           <button

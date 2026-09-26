@@ -186,6 +186,10 @@ export type Attempt = {
   questionSeconds: Record<string, number>;
   remainingSeconds: number | null;
   breakRemainingSeconds: number | null;
+  /** Server clock (epoch seconds) when this payload was built. */
+  serverNow: number;
+  /** Server-clock anchor of the running time segment; null when paused. */
+  lastAnchorAt: number | null;
   calculatorState: Record<string, unknown> | null;
   calculatorMode: "none" | "desmos" | "scientific";
   result: AttemptResult | null;

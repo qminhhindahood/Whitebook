@@ -333,7 +333,7 @@ def test_section_exam_expiry_locks_each_module_and_grades_unanswered_questions(
     engine.save_response(attempt["id"], attempt["currentQuestionId"], "A")
 
     clock.advance(35 * 60)
-    first_expired = engine.tick(attempt["id"])
+    first_expired = engine.get_attempt(attempt["id"])
 
     assert first_expired["status"] == "transition"
     assert first_expired["lockedModules"] == [0]
@@ -344,7 +344,7 @@ def test_section_exam_expiry_locks_each_module_and_grades_unanswered_questions(
     second = engine.continue_after_transition(attempt["id"])
     assert second["remainingSeconds"] == 35 * 60
     clock.advance(35 * 60)
-    completed = engine.tick(attempt["id"])
+    completed = engine.get_attempt(attempt["id"])
 
     assert completed["status"] == "completed"
     assert completed["lockedModules"] == [0, 1]
@@ -376,7 +376,7 @@ def test_section_exam_finish_is_single_use_and_expiry_race_cannot_skip_module(
 
     second = engine.continue_after_transition(attempt["id"])
     clock.advance(35 * 60)
-    expired = engine.tick(second["id"])
+    expired = engine.get_attempt(second["id"])
     assert expired["status"] == "completed"
     with pytest.raises(AttemptError, match="not active"):
         engine.finish_module(attempt["id"])
