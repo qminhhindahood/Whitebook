@@ -1,10 +1,12 @@
+import { accountRoute, type AccountEnv } from "./accounts";
+
 type Statement = {
   bind(...values: unknown[]): Statement;
   all(): Promise<{ results: unknown[]; meta: { rows_read: number; rows_written: number } }>;
   run(): Promise<{ success: boolean; meta: { rows_read: number; rows_written: number } }>;
 };
 
-type Env = {
+type Env = AccountEnv & {
   DB: { prepare(sql: string): Statement };
   ASSETS: { fetch(request: Request): Promise<Response> };
   STAGING_ACCESS_CODE: string;
@@ -132,10 +134,19 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (request.method === "GET" && path === "/") return Response.redirect(new URL("/staging", request.url), 302);
+    if (request.method === "GET" && (path === "/app" || path === "/app.html")) {
+      const asset = await env.ASSETS.fetch(new Request(new URL("/app", request.url), request));
+      const headers = new Headers(asset.headers);
+      headers.set("Cache-Control", "private, no-store");
+      headers.set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+      return new Response(asset.body, { status: asset.status, headers });
+    }
     if (request.method === "GET" && (path === "/staging" || path === "/staging.html" || PUBLIC_ASSET_PATH.test(path)))
       return env.ASSETS.fetch(request);
     const meter: Meter = { rowsRead: 0, rowsWritten: 0 };
     try {
+      const accountResponse = accountRoute(request, env);
+      if (accountResponse) return await accountResponse;
       if (request.method === "POST" && path === "/api/staging/session")
         return measured(await session(request, env, meter), meter);
       const questionMatch = request.method === "GET" && QUESTION_PATH.exec(path);
@@ -143,6 +154,9 @@ export default {
       const contentMatch = request.method === "GET" && CONTENT_PATH.exec(path);
       if (contentMatch) return measured(await content(request, env, meter, contentMatch[1], contentMatch[2], contentMatch[3]), meter);
     } catch {
+      if (path.startsWith("/api/account/") || path.startsWith("/api/auth/"))
+        return Response.json({ error: { code: "service_unavailable", message: "Whitebook could not reach your account. Try again." } },
+          { status: 503, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
       return closed(503);
     }
     return closed();

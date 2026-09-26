@@ -29,6 +29,7 @@ function environment() {
           args = value;
           return this;
         },
+        async first() { return null; },
         async all() {
           if (sql.includes("FROM staging_sessions"))
             return { results: sessions.has(String(args[0])) ? [{ token_hash: args[0] }] : [], meta: { rows_read: 1, rows_written: 0 } };
