@@ -55,8 +55,10 @@ Availability rules (spec; restated because they are acceptance gates):
 
 - Guided Reasoning (F2–F3) appears **after a completed Section Exam Attempt** and in
   **explicitly marked Assisted Practice**. It never appears during an active Section
-  Exam Attempt. A future Simulation Attempt follows the same restriction: its modules
-  close permanently, and only the completed review may offer AI help.
+  Exam Attempt. A future Simulation Attempt follows the same restriction — as the spec
+  itself requires ("The design should describe how a future Simulation Attempt follows
+  the same restriction"): its modules close permanently, and only the completed review
+  may offer AI help.
 - Help used during Practice marks that question **assisted**, stored separately from the
   Attempt score; Raw Accuracy never changes (stories 43, 56–57).
 - Opening History or Results never triggers a provider call. The Assistant exists only
@@ -153,17 +155,17 @@ segmented switch (the DESIGN.md segmented-tile pattern), defaulting to **Passage
 │  September Math · Revision 4 · Algebra                                       │
 ├──────────────────────────────────┬────────────────────────────────────────────┤
 │  QUESTION 6                      │  Assistant (future)                        │
-│  ┌────────────────────────────┐  │  Why C: one-paragraph answer.              │
+│  ┌────────────────────────────┐  │  Why A: one-paragraph answer.              │
 │  │ Source visual (region) —   │  │                                            │
 │  │ per ADR-0006 Math question │  │  ▸ Worked solution (standard, staged):     │
 │  │ content is a confirmed     │  │    1. Set up the equation from the         │
 │  │ region image, not text.    │  │       constraint.                          │
 │  └────────────────────────────┘  │    2. Solve for x. [Show step]             │
 │  Choices A–D: reviewed text /    │    3. Check against the accepted answer.   │
-│  reviewed LaTeX, your choice B   │  ▸ Desmos approach (only when it helps):   │
-│  marked wrong, accepted C.       │    y = 3.5x + 15  and  y = 71               │
+│  reviewed LaTeX, your choice C   │  ▸ Desmos approach (only when it helps):   │
+│  marked wrong, accepted A.       │    y = 3.5x + 15  and  y = 71               │
 │                                  │    → inspect the intersection; x = 16.     │
-│                                  │  ▸ Why B fails, why A and D fail.          │
+│                                  │  ▸ Why C fails, why B and D fail.          │
 │                                  │  ▸ Follow-up · Save note · Report          │
 └──────────────────────────────────┴────────────────────────────────────────────┘
 ```
@@ -230,9 +232,32 @@ A reply box at the bottom of the explanation panel, accepting English or Vietnam
 (§6). Language choice is per conversation, remembered for the visit, never persisted as
 an account default without a future explicit setting.
 
----
+### 1.7 Narrow-screen behavior for the remaining flows
 
-## 2. Worked examples
+The website's phone layout rule (spec: "Support a phone layout for Dashboard,
+Flashcards, Study Plan, Notes, and completed review") applies to every Assistant flow.
+Math, Flashcard drafting, and Study Plan suggestions are single-column surfaces, so
+their narrow-screen treatment is a stacking and overlay discipline, not a switch:
+
+- **Math help (F4) on a narrow screen.** The question region image, choices, and
+  Assistant panel stack vertically in review order. The worked solution's expressions
+  render in a horizontally scrollable block so LaTeX never wraps into nonsense; a
+  "Back to question" affordance anchors between solution steps and the region image,
+  since the visual is the question. The Desmos approach lists expressions as copyable
+  rows for pasting into the calculator (the calculator itself opens as today's overlay).
+- **Flashcard drafting (F5).** The proposal card is already a modal on desktop; on a
+  narrow screen it becomes a full-height sheet with the editable fields stacked, the
+  AI-derived marker pinned at top, and Save/Discard actions in a sticky footer — same
+  inspect-before-save rule, no content hidden below the fold without scrolling past it.
+- **Study Plan suggestions (F6).** The suggestion drawer opens as a bottom sheet over
+  the plan editor. Each proposed task card shows evidence, duration, and accept/edit
+  controls; the deterministic plan remains visible and editable beneath the sheet, so
+  rejecting AI help never blocks the manual or deterministic path.
+- **Consent and report previews (§3.1, §3.6) on a narrow screen** use the same
+  full-height sheet pattern: the content preview (or actual image, at transmit size)
+  and the consent actions are both reachable without scrolling the actions off-screen.
+
+### 2. Worked examples
 
 Both examples are original instructional content written for this design (no College
 Board material). Each shows the **complete Question Presentation context** the model
@@ -449,7 +474,9 @@ envelope for F1–F4:
     "questionRef": "stable question id + number",
     "category": "Transition",
     "presentation": { /* canonical Question Presentation v1, verbatim from the contract */ },
-    "acceptedAnswer": ["C"],                 // server-injected; never from the client
+    "acceptedAnswer": ["C"],                 // server-injected from the Answer Manifest
+                                             // at request assembly; never read from,
+                                             // or trusted from, any client input
     "learnerResponse": "B",
     "revealedState": "hidden | revealed"     // the review surface's current answer state
   },
@@ -498,9 +525,60 @@ metadata), Personal Cards (drafted content becomes an ordinary card), plan propo
 guided-review assistance fields, and explicitly submitted reports. Export and account
 deletion cover these exactly as they cover other account data (spec §Accounts).
 
----
+### 4.5 Preview, consent, and report contracts
 
-## 5. Provider selection, capabilities, quotas, and errors
+Spec line 179 asks the design to "Document future AI preview/consent/request/report
+contracts in the Assistant design only." The request envelope is §4.1; the other three
+are the following design-level payloads (field shapes, not an API implementation):
+
+**Preview payload** — rendered by `POST /assistant/preview` before a flow's first
+request; every field is display-oriented so the learner sees exactly what sharing means:
+
+```jsonc
+{
+  "flow": "question_explanation",
+  "content": [
+    { "kind": "question_text", "summary": "This question's text and answer choices", "approxWords": 250 },
+    { "kind": "response",      "summary": "Your response: B" },
+    { "kind": "question_image", "imageRef": "derived asset ref", "transmitSizePx": [640, 130] }  // only when a region is present
+  ],
+  "neverSent": ["Source PDF", "source paths", "account email", "API keys",
+                 "full Test Package", "full Attempt", "diagnostic logs"],
+  "retention": "visit-scoped unless a Study Note is saved"
+}
+```
+
+**Consent record** — created by `POST /assistant/consents`; one row per
+(provider, flow, scope), visit-scoped by default (§3.1):
+
+```jsonc
+{
+  "provider": "shared_gemini | shared_openrouter | personal",
+  "flow": "question_explanation",
+  "scope": "text | image",
+  "model": "…",                       // the model the consent was shown for
+  "termsShown": "provider data-use terms version id",
+  "grantedAt": "timestamp"
+}
+```
+
+**Report payload** — assembled by `GET /assistant/report-preview`, submitted by
+`POST /assistant/reports`; the submitted body is byte-for-byte the previewed one (§3.6):
+
+```jsonc
+{
+  "question": { "revisionRef": "…", "questionRef": "…", "category": "…" },
+  "provider": { "route": "…", "model": "…" },
+  "excerpts": [                       // learner-selected; each optional field can be deselected
+    { "role": "assistant", "text": "…" },
+    { "role": "learner", "text": "…" }
+  ],
+  "learnerDescription": "required free text",
+  "createdAt": "timestamp"
+}
+```
+
+---
 
 ### 5.1 Provider routes
 
@@ -588,10 +666,10 @@ fabricates content, and no fallback silently downgrades to another provider (§3
 
 | Ticket-14 criterion | Where satisfied |
 | --- | --- |
-| Annotated desktop + narrow-screen flows covering History explanation, Reasoning Steps, Reading Help, Math + optional Desmos, Flashcard drafting, Study Plan suggestions | §1.1–§1.6 (desktop and narrow screens; F1–F7 map 1:1 to the listed flows) |
+| Annotated desktop + narrow-screen flows covering History explanation, Reasoning Steps, Reading Help, Math + optional Desmos, Flashcard drafting, Study Plan suggestions | §1.1–§1.6 (desktop and narrow screens; F1–F7 map 1:1 to the listed flows) and §1.7 (narrow-screen treatment for Math help, Flashcard drafting, and Study Plan suggestions) |
 | One R&W + one Math example with complete Question Presentation context, progressive hints, evidence anchoring, answer reveal, why wrong choices fail | §2.1, §2.2 (both include the fallback/vision variants and the minimal envelope) |
 | Content preview, provider-specific consent, separate Image Fallback consent, Vietnamese response choice, Study Note saving, report-payload preview, no full-chat persistence | §3.1–§3.6, §6 |
-| Backend request/response boundaries, answer-key authority, redaction, model/vision capability checks, quota and error states, consented OpenRouter fallback | §4.1–§4.4, §5.1–§5.4 |
+| Backend request/response boundaries, answer-key authority, redaction, model/vision capability checks, quota and error states, consented OpenRouter fallback | §4.1–§4.5, §5.1–§5.4 |
 | No live provider call, secret storage, AI-generated content, or inactive Assistant button in this ticket | §0, §9 (explicit non-goals); nothing in this branch touches `web/src` or backend code |
 
 Spec stories covered: 32–33, 36–37, 46–70, 91, 98–99 (design sections above); stories
