@@ -555,13 +555,6 @@ def create_app(
         except AttemptError as error:
             raise HTTPException(status_code=409, detail=error.message) from error
 
-    @app.post("/api/attempts/{attempt_id}/tick")
-    async def tick_attempt(attempt_id: str) -> dict[str, object]:
-        try:
-            return attempts.tick(attempt_id)
-        except AttemptError as error:
-            raise HTTPException(status_code=409, detail=error.message) from error
-
     @app.post("/api/attempts/{attempt_id}/continue")
     async def continue_attempt(attempt_id: str) -> dict[str, object]:
         try:

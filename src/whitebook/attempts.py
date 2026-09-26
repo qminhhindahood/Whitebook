@@ -181,8 +181,13 @@ class AttemptEngine:
 
         plan = json.loads(setup["plan_json"])
         attempt_id = str(uuid.uuid4())
-        now = self._timestamp()
         questions = plan["questions"]
+        remaining = (
+            plan.get("durationSeconds")
+            if setup["kind"] == "practice"
+            else plan["modules"][0].get("durationSeconds")
+        )
+        started_at = self._clock.now()
         state = {
             "currentQuestionId": questions[0]["id"],
             "activeModuleIndex": 0,
@@ -191,17 +196,21 @@ class AttemptEngine:
             "lockedModules": [],
             "elapsedSeconds": 0,
             "questionSeconds": {question["id"]: 0 for question in questions},
-            "remainingSeconds": (
-                plan.get("durationSeconds")
-                if setup["kind"] == "practice"
-                else plan["modules"][0].get("durationSeconds")
+            "remainingSeconds": remaining,
+            # The stored deadline is the authoritative server anchor: the
+            # client renders it locally and enforcement compares it against
+            # the server clock on every relevant read or mutation.
+            "moduleDeadlineAt": (
+                started_at + remaining if remaining is not None else None
             ),
             "breakRemainingSeconds": None,
-            "lastTick": self._clock.now(),
+            "breakDeadlineAt": None,
+            "lastAnchorAt": started_at,
             "resumeReady": False,
             "calculatorState": None,
             "calculatorMode": plan["selection"].get("calculatorMode", "none"),
         }
+        now = self._timestamp()
         with connect(self._data_root) as connection:
             connection.execute(
                 """
@@ -222,7 +231,7 @@ class AttemptEngine:
             )
             connection.execute("DELETE FROM attempt_setups WHERE id = ?", (setup_id,))
             connection.commit()
-        attempt = self.get_attempt(attempt_id)
+        attempt = self.get_attempt(attempt_id, at=started_at)
         assert attempt is not None
         return attempt
 
@@ -295,57 +304,27 @@ class AttemptEngine:
             **readiness,
         }
 
-    def get_attempt(self, attempt_id: str) -> dict[str, object] | None:
+    def get_attempt(
+        self, attempt_id: str, *, at: float | None = None
+    ) -> dict[str, object] | None:
+        self._enforce_deadlines(attempt_id)
         with connect(self._data_root) as connection:
             row = connection.execute(
                 "SELECT * FROM attempts WHERE id = ?", (attempt_id,)
             ).fetchone()
-        return self._attempt_payload(row) if row else None
-
-    def tick(self, attempt_id: str) -> dict[str, object]:
-        row, plan, state = self._load_attempt(attempt_id)
-        status = row["status"]
-        if status not in {"active", "break"}:
-            attempt = self.get_attempt(attempt_id)
-            assert attempt is not None
-            return attempt
-        now = self._clock.now()
-        last_tick = float(state.get("lastTick") or now)
-        elapsed = max(0.0, now - last_tick)
-        state["lastTick"] = now
-        result = None
-        if status == "active":
-            if state["remainingSeconds"] is not None:
-                elapsed = min(elapsed, state["remainingSeconds"])
-            state["elapsedSeconds"] += elapsed
-            current = state["currentQuestionId"]
-            state["questionSeconds"][current] = (
-                state["questionSeconds"].get(current, 0) + elapsed
-            )
-            if state["remainingSeconds"] is not None:
-                state["remainingSeconds"] = max(
-                    0.0, state["remainingSeconds"] - elapsed
-                )
-                if state["remainingSeconds"] == 0:
-                    status, result = self._expire_active(row, plan, state)
-        else:
-            state["breakRemainingSeconds"] = max(
-                0.0, state["breakRemainingSeconds"] - elapsed
-            )
-            if state["breakRemainingSeconds"] == 0:
-                state["lastTick"] = None
-                status = "transition"
-        self._persist(row, state, status=status, result=result)
-        attempt = self.get_attempt(attempt_id)
-        assert attempt is not None
-        return attempt
+        return (
+            self._attempt_payload(row, self._clock.now() if at is None else at)
+            if row
+            else None
+        )
 
     def list_attempts(self) -> list[dict[str, object]]:
         with connect(self._data_root) as connection:
             rows = connection.execute(
-                "SELECT * FROM attempts ORDER BY updated_at DESC"
+                "SELECT id FROM attempts ORDER BY updated_at DESC"
             ).fetchall()
-        return [self._attempt_payload(row) for row in rows]
+        attempts = [self.get_attempt(row["id"]) for row in rows]
+        return [attempt for attempt in attempts if attempt is not None]
 
     def delete_unfinished(self, attempt_id: str, *, confirmed: bool) -> dict[str, bool]:
         attempt = self.get_attempt(attempt_id)
@@ -434,6 +413,9 @@ class AttemptEngine:
                     state["activeModuleIndex"] = index
                     break
         self._require_active_question(plan, state, question_id)
+        # Charge the anchored interval before switching questions so the
+        # coarse checkpoint lands on the question the learner actually left.
+        self._charge(state, self._clock.now(), mode="module")
         state["currentQuestionId"] = question_id
         self._save_state(row, state)
         attempt = self.get_attempt(attempt_id)
@@ -441,13 +423,20 @@ class AttemptEngine:
         return attempt
 
     def pause(self, attempt_id: str) -> dict[str, object]:
-        self.tick(attempt_id)
+        self._enforce_deadlines(attempt_id)
         row, _plan, state = self._load_attempt(attempt_id)
         if row["status"] == "completed":
             return self.get_attempt(attempt_id)
+        now = self._clock.now()
+        if row["status"] == "active":
+            self._charge(state, now, mode="module")
+        elif row["status"] == "break":
+            self._charge(state, now, mode="break")
         if row["status"] != "paused":
             state["pausedStatus"] = row["status"]
-        state["lastTick"] = None
+        state["lastAnchorAt"] = None
+        state["moduleDeadlineAt"] = None
+        state["breakDeadlineAt"] = None
         state["resumeReady"] = False
         self._save_state(row, state, status="paused")
         attempt = self.get_attempt(attempt_id)
@@ -461,9 +450,25 @@ class AttemptEngine:
                 "SELECT * FROM attempts WHERE status IN ('active', 'break', 'transition')"
             ).fetchall()
             for row in rows:
-                state = json.loads(row["state_json"])
+                state = self._normalize_state(json.loads(row["state_json"]))
+                # Freeze at the last persisted checkpoint: the downtime belongs
+                # to the launcher, not the Attempt.
+                anchor = state.get("lastAnchorAt")
+                if anchor is not None:
+                    deadline = state.get("moduleDeadlineAt")
+                    if deadline is not None:
+                        state["remainingSeconds"] = max(0.0, deadline - anchor)
+                    break_deadline = state.get("breakDeadlineAt")
+                    if break_deadline is not None:
+                        state["breakRemainingSeconds"] = max(
+                            0.0, break_deadline - anchor
+                        )
                 state.update(
-                    lastTick=None, resumeReady=False, pausedStatus=row["status"]
+                    lastAnchorAt=None,
+                    moduleDeadlineAt=None,
+                    breakDeadlineAt=None,
+                    resumeReady=False,
+                    pausedStatus=row["status"],
                 )
                 connection.execute(
                     "UPDATE attempts SET status='paused', state_json=? WHERE id=?",
@@ -496,10 +501,23 @@ class AttemptEngine:
             raise AttemptError(
                 "resume_not_ready", "Run the Attempt Loading Gate before resuming."
             )
-        state["lastTick"] = self._clock.now()
+        now = self._clock.now()
+        state["lastAnchorAt"] = now
+        if state.get("pausedStatus") == "break":
+            state["moduleDeadlineAt"] = None
+            break_remaining = state.get("breakRemainingSeconds")
+            state["breakDeadlineAt"] = (
+                now + break_remaining if break_remaining is not None else None
+            )
+        else:
+            remaining = state.get("remainingSeconds")
+            state["moduleDeadlineAt"] = (
+                now + remaining if remaining is not None else None
+            )
+            state["breakDeadlineAt"] = None
         state["resumeReady"] = False
         self._save_state(row, state, status=state.pop("pausedStatus", "active"))
-        attempt = self.get_attempt(attempt_id)
+        attempt = self.get_attempt(attempt_id, at=now)
         assert attempt is not None
         return attempt
 
@@ -515,8 +533,10 @@ class AttemptEngine:
                 "section_exam_finish_module_required",
                 "Section Exam Modules close with Finish Module or timer expiry.",
             )
+        self._charge(state, self._clock.now(), mode="module")
+        state["lastAnchorAt"] = None
+        state["moduleDeadlineAt"] = None
         result = self._grade(plan, state)
-        state["lastTick"] = None
         now = self._timestamp()
         with connect(self._data_root) as connection:
             connection.execute(
@@ -544,6 +564,7 @@ class AttemptEngine:
                 "finish_module_unavailable",
                 "Finish Module is available only for Section Exam Attempts.",
             )
+        self._charge(state, self._clock.now(), mode="module")
         status, result = self._close_section_exam_module(plan, state)
         self._persist(row, state, status=status, result=result)
         attempt = self.get_attempt(attempt_id)
@@ -561,16 +582,20 @@ class AttemptEngine:
             raise AttemptError("attempt_complete", "No future Module is available.")
         state["activeModuleIndex"] = next_index
         state["currentQuestionId"] = plan["modules"][next_index]["questionIds"][0]
-        state["remainingSeconds"] = plan["modules"][next_index].get("durationSeconds")
+        remaining = plan["modules"][next_index].get("durationSeconds")
+        state["remainingSeconds"] = remaining
         state["breakRemainingSeconds"] = None
-        state["lastTick"] = self._clock.now()
+        now = self._clock.now()
+        state["lastAnchorAt"] = now
+        state["moduleDeadlineAt"] = now + remaining if remaining is not None else None
+        state["breakDeadlineAt"] = None
         self._persist(row, state, status="active")
-        attempt = self.get_attempt(attempt_id)
+        attempt = self.get_attempt(attempt_id, at=now)
         assert attempt is not None
         return attempt
 
     def end_break(self, attempt_id: str, *, confirmed: bool) -> dict[str, object]:
-        self.tick(attempt_id)
+        self._enforce_deadlines(attempt_id)
         row, _plan, state = self._load_attempt(attempt_id)
         if row["status"] == "transition":
             attempt = self.get_attempt(attempt_id)
@@ -586,7 +611,8 @@ class AttemptEngine:
                 "Ending the break early requires confirmation.",
             )
         state["breakRemainingSeconds"] = 0
-        state["lastTick"] = None
+        state["breakDeadlineAt"] = None
+        state["lastAnchorAt"] = None
         self._persist(row, state, status="transition")
         attempt = self.get_attempt(attempt_id)
         assert attempt is not None
@@ -751,7 +777,7 @@ class AttemptEngine:
                     "questionIds": [
                         question["id"]
                         for question in selected[
-                            (module_number - 1) * module_size : module_number * module_size
+                            (module_number - 1) * module_size : module_size * module_number
                         ]
                     ],
                     "durationSeconds": standard_module_seconds(section),
@@ -1084,11 +1110,67 @@ class AttemptEngine:
         readiness["stages"] = stages
 
     def _active_attempt(self, attempt_id: str) -> tuple[object, dict, dict]:
-        self.tick(attempt_id)
+        self._enforce_deadlines(attempt_id)
         row, plan, state = self._load_attempt(attempt_id)
         if row["status"] != "active":
             raise AttemptError("attempt_not_active", "Attempt is not active.")
         return row, plan, state
+
+    def _enforce_deadlines(self, attempt_id: str) -> None:
+        """Compare stored deadlines against the server clock and persist the
+        resulting transition once. Runs on every relevant read and mutation,
+        so a sleeping tab, changed device clock, or takeover can never extend
+        time — and no per-second tick or write is needed to get there."""
+        with connect(self._data_root) as connection:
+            row = connection.execute(
+                "SELECT * FROM attempts WHERE id = ?", (attempt_id,)
+            ).fetchone()
+        if row is None:
+            return
+        plan, state = (
+            json.loads(row["plan_json"]),
+            self._normalize_state(json.loads(row["state_json"])),
+        )
+        status = row["status"]
+        now = self._clock.now()
+        if status == "active":
+            deadline = state.get("moduleDeadlineAt")
+            if deadline is not None and now >= deadline:
+                self._charge(state, now, mode="module")
+                status, result = self._expire_active(row, plan, state)
+                self._persist(row, state, status=status, result=result)
+        elif status == "break":
+            deadline = state.get("breakDeadlineAt")
+            if deadline is not None and now >= deadline:
+                self._charge(state, now, mode="break")
+                state["lastAnchorAt"] = None
+                self._persist(row, state, status="transition")
+
+    def _charge(self, state: dict, now: float, *, mode: str) -> None:
+        """Charge wall-clock time since the anchor into the durable counters
+        at a coarse checkpoint. The module charge is capped at the stored
+        remaining seconds so a late read can never overshoot the deadline."""
+        anchor = state.get("lastAnchorAt")
+        if anchor is None:
+            state["lastAnchorAt"] = now
+            return
+        delta = max(0.0, now - anchor)
+        if mode == "break":
+            break_remaining = state.get("breakRemainingSeconds")
+            if break_remaining is not None:
+                state["breakRemainingSeconds"] = max(0.0, break_remaining - delta)
+        else:
+            remaining = state.get("remainingSeconds")
+            if remaining is not None:
+                delta = min(delta, remaining)
+            state["elapsedSeconds"] = state.get("elapsedSeconds", 0) + delta
+            current = state.get("currentQuestionId")
+            if current is not None:
+                question_seconds = state.setdefault("questionSeconds", {})
+                question_seconds[current] = question_seconds.get(current, 0) + delta
+            if remaining is not None:
+                state["remainingSeconds"] = max(0.0, remaining - delta)
+        state["lastAnchorAt"] = now
 
     def _load_attempt(self, attempt_id: str) -> tuple[object, dict, dict]:
         with connect(self._data_root) as connection:
@@ -1097,7 +1179,26 @@ class AttemptEngine:
             ).fetchone()
         if row is None:
             raise AttemptError("attempt_not_found", "Attempt not found.")
-        return row, json.loads(row["plan_json"]), json.loads(row["state_json"])
+        return (
+            row,
+            json.loads(row["plan_json"]),
+            self._normalize_state(json.loads(row["state_json"])),
+        )
+
+    @staticmethod
+    def _normalize_state(state: dict) -> dict:
+        """Map pre-anchor durable state from the per-second tick era onto
+        deadline anchors so an upgrade can never extend a running Attempt."""
+        if "lastAnchorAt" in state:
+            return state
+        anchor = state.pop("lastTick", None)
+        state["lastAnchorAt"] = anchor
+        remaining = state.get("remainingSeconds")
+        state["moduleDeadlineAt"] = (
+            anchor + remaining if anchor is not None and remaining is not None else None
+        )
+        state["breakDeadlineAt"] = None
+        return state
 
     @staticmethod
     def _require_active_question(plan: dict, state: dict, question_id: str) -> None:
@@ -1111,6 +1212,11 @@ class AttemptEngine:
     def _save_state(
         self, row: object, state: dict, *, status: str | None = None
     ) -> None:
+        # Every durable write is a coarse timing checkpoint; reads never charge.
+        if row["status"] == "active":
+            self._charge(state, self._clock.now(), mode="module")
+        elif row["status"] == "break":
+            self._charge(state, self._clock.now(), mode="break")
         with connect(self._data_root) as connection:
             connection.execute(
                 """
@@ -1155,20 +1261,26 @@ class AttemptEngine:
         self, row: object, plan: dict, state: dict
     ) -> tuple[str, dict[str, object] | None]:
         if row["kind"] == "practice":
-            state["lastTick"] = None
+            state["lastAnchorAt"] = None
+            state["moduleDeadlineAt"] = None
             return "completed", self._grade(plan, state)
         if row["kind"] == "section_exam":
             return self._close_section_exam_module(plan, state)
         active_index = state["activeModuleIndex"]
         if active_index not in state["lockedModules"]:
             state["lockedModules"].append(active_index)
-        state["lastTick"] = None
         if active_index == len(plan["modules"]) - 1:
+            state["lastAnchorAt"] = None
+            state["moduleDeadlineAt"] = None
             return "completed", self._grade(plan, state)
         if active_index == 1:
+            now = self._clock.now()
             state["breakRemainingSeconds"] = BREAK_SECONDS
-            state["lastTick"] = self._clock.now()
+            state["breakDeadlineAt"] = now + BREAK_SECONDS
+            state["lastAnchorAt"] = now
             return "break", None
+        state["lastAnchorAt"] = None
+        state["moduleDeadlineAt"] = None
         return "transition", None
 
     def _close_section_exam_module(
@@ -1177,7 +1289,8 @@ class AttemptEngine:
         active_index = state["activeModuleIndex"]
         if active_index not in state["lockedModules"]:
             state["lockedModules"].append(active_index)
-        state["lastTick"] = None
+        state["lastAnchorAt"] = None
+        state["moduleDeadlineAt"] = None
         if active_index == len(plan["modules"]) - 1:
             return "completed", self._grade(plan, state)
         state["breakRemainingSeconds"] = None
@@ -1287,17 +1400,27 @@ class AttemptEngine:
         return attempt
 
     @staticmethod
-    def _attempt_payload(row: object) -> dict[str, object]:
+    def _attempt_payload(row: object, now: float) -> dict[str, object]:
         plan = json.loads(row["plan_json"])
-        state = json.loads(row["state_json"])
+        state = AttemptEngine._normalize_state(json.loads(row["state_json"]))
+        status = row["status"]
+        # Remaining time is derived from the stored server deadline at read
+        # time rather than accumulated by per-second writes.
+        if status == "active" and state.get("moduleDeadlineAt") is not None:
+            state["remainingSeconds"] = max(0.0, state["moduleDeadlineAt"] - now)
+        elif status == "break" and state.get("breakDeadlineAt") is not None:
+            state["breakRemainingSeconds"] = max(0.0, state["breakDeadlineAt"] - now)
         return {
             "id": row["id"],
             "packageId": row["package_id"],
             "kind": row["kind"],
-            "status": row["status"],
+            "status": status,
             "plan": plan,
             "questions": plan["questions"],
             **state,
+            # Lets the client detect skew while keeping the server clock
+            # authoritative for every deadline decision.
+            "serverNow": now,
             "result": json.loads(row["result_json"]) if row["result_json"] else None,
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
