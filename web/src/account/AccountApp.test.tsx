@@ -35,6 +35,7 @@ it("shows account data, saves a nickname, renews and clears private state on sig
     if (path === "/api/account/profile") return Response.json({ nickname: "Sam" });
     if (path === "/api/auth/renew") return Response.json({ expiresAt: 200 });
     if (path === "/api/auth/signout") return new Response(null, { status: 204 });
+    if (path === "/api/account/scores") return Response.json({ results: [] });
     throw new Error(`Unexpected route ${path}`);
   }));
   render(<AccountApp />);
@@ -49,6 +50,6 @@ it("shows account data, saves a nickname, renews and clears private state on sig
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
   expect(await screen.findByRole("link", { name: "Continue with Google" })).toBeTruthy();
   expect(screen.queryByText("Welcome, Sam")).toBeNull();
-  expect(calls.map((call) => call.path)).toEqual(["/api/account/me", "/api/account/profile", "/api/auth/renew", "/api/auth/signout"]);
-  await waitFor(() => expect(calls.slice(1).every((call) => call.init?.method === "POST" && call.init?.credentials === "same-origin")).toBe(true));
+  expect(calls.map((call) => call.path)).toEqual(["/api/account/me", "/api/account/scores", "/api/account/profile", "/api/auth/renew", "/api/auth/signout"]);
+  await waitFor(() => expect(calls.filter((call) => call.path !== "/api/account/scores").slice(1).every((call) => call.init?.method === "POST" && call.init?.credentials === "same-origin")).toBe(true));
 });
