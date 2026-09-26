@@ -14,7 +14,8 @@ CREATE TABLE official_sat_results (
   band_problem_solving_data_analysis INTEGER CHECK (band_problem_solving_data_analysis IS NULL OR (band_problem_solving_data_analysis BETWEEN 1 AND 7 AND band_problem_solving_data_analysis = CAST(band_problem_solving_data_analysis AS INTEGER))),
   band_geometry_trigonometry INTEGER CHECK (band_geometry_trigonometry IS NULL OR (band_geometry_trigonometry BETWEEN 1 AND 7 AND band_geometry_trigonometry = CAST(band_geometry_trigonometry AS INTEGER))),
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  CHECK (total_score = reading_writing_score + math_score)
 );
 
 CREATE INDEX official_sat_results_account ON official_sat_results(account_id, administration_date);

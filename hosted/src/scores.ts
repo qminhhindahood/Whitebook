@@ -74,7 +74,7 @@ function parseBands(value: unknown): Record<BandKey, number | null> | null {
   if (source === null || typeof source !== "object" || Array.isArray(source)) return null;
   const bands = Object.fromEntries(BAND_KEYS.map((key) => [key, null])) as Record<BandKey, number | null>;
   for (const [key, raw] of Object.entries(source)) {
-    if (!(key in bands)) return null;
+    if (!Object.prototype.hasOwnProperty.call(bands, key)) return null;
     if (raw === null) continue;
     if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > 7) return null;
     bands[key as BandKey] = raw;
