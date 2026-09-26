@@ -1,4 +1,5 @@
 import { accountRoute, type AccountEnv } from "./accounts";
+import { scoresRoute } from "./scores";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -146,6 +147,8 @@ export default {
       return env.ASSETS.fetch(request);
     const meter: Meter = { rowsRead: 0, rowsWritten: 0 };
     try {
+      const scoresResponse = scoresRoute(request, env);
+      if (scoresResponse) return await scoresResponse;
       const accountResponse = accountRoute(request, env);
       if (accountResponse) return await accountResponse;
       if (request.method === "POST" && path === "/api/staging/session")

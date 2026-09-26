@@ -51,11 +51,11 @@ function flowCookie(value: string, age = FLOW_SECONDS): string {
   return `__Host-wb_oauth=${value}; Path=/; Max-Age=${age}; HttpOnly; Secure; SameSite=Lax`;
 }
 
-function failure(status: number, code: string, message: string): Response {
+export function failure(status: number, code: string, message: string): Response {
   return Response.json({ error: { code, message } }, { status, headers: noStore });
 }
 
-function json(value: unknown, status = 200): Response {
+export function json(value: unknown, status = 200): Response {
   return Response.json(value, { status, headers: noStore });
 }
 
@@ -63,14 +63,16 @@ function sameOrigin(request: Request, origin: string): boolean {
   return request.headers.get("Origin") === origin && new URL(request.url).origin === origin;
 }
 
-async function currentSession(request: Request, env: AccountEnv): Promise<Session | null> {
+export type LearnerSession = Session;
+
+export async function currentSession(request: Request, env: AccountEnv): Promise<Session | null> {
   const token = cookie(request, "__Host-wb_session");
   if (!token) return null;
   return env.DB.prepare("SELECT token_hash, csrf_hash, expires_at, account_id FROM learner_sessions WHERE token_hash = ? AND expires_at > ?")
     .bind(await sha256(token), Math.floor(Date.now() / 1000)).first<Session>();
 }
 
-async function requireMutation(request: Request, env: AccountEnv, session: Session): Promise<Response | null> {
+export async function requireMutation(request: Request, env: AccountEnv, session: Session): Promise<Response | null> {
   if (!env.APP_ORIGIN || !sameOrigin(request, env.APP_ORIGIN))
     return failure(403, "invalid_origin", "Open Whitebook from its official address and try again.");
   const csrf = request.headers.get("X-CSRF-Token");
