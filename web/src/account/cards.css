@@ -1,0 +1,52 @@
+.cards { grid-column: 1 / -1; background: #fff; border: 1px solid #dce4ef; border-radius: 16px; padding: clamp(20px, 3vw, 32px); }
+
+.dashboard-nav { grid-column: 1 / -1; display: flex; gap: 8px; }
+.dashboard-nav-link { border: 1px solid #a9b9ce; border-radius: 999px; background: #fff; color: #33465e; padding: 8px 18px; font: inherit; font-weight: 650; cursor: pointer; }
+.dashboard-nav-link--active { background: #3f51c5; border-color: #3f51c5; color: #fff; }
+.dashboard-nav-link:focus-visible { outline: 3px solid #edab3a; outline-offset: 2px; }
+.cards h2 { font-size: 1.35rem; letter-spacing: -.02em; margin: 0 0 6px; }
+.cards-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.cards-toolbar p { color: #52647a; line-height: 1.5; margin: 0; max-width: 65ch; }
+.cards-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cards-toolbar-actions select { padding: 9px 10px; border: 1px solid #a9b9ce; border-radius: 8px; font: inherit; background: #fff; }
+.cards-filter { font-weight: 650; }
+
+.cards-notice { padding: 12px 16px; border-radius: 8px; background: #e6edf7; line-height: 1.5; }
+.cards-empty { color: #52647a; line-height: 1.55; padding: 18px 0; }
+
+.cards-form { border: 1px solid #dce4ef; border-radius: 12px; background: #f8fafd; padding: 18px; margin: 14px 0 20px; }
+.cards-form h3 { margin: 0 0 12px; font-size: 1.1rem; letter-spacing: -.01em; }
+.cards-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.cards-form-field label { display: block; font-weight: 650; margin-bottom: 6px; }
+.cards-form-field input, .cards-form-field textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #a9b9ce; border-radius: 8px; font: inherit; }
+.cards-form-field textarea { resize: vertical; }
+.cards-form-field--error input, .cards-form-field--error textarea { border-color: #b3261e; }
+.cards-field-error { color: #b3261e; font-size: .9rem; margin: 6px 0 0; }
+.cards-form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.cards-form button, .cards-add-button, .cards-item-actions button { border: 0; border-radius: 8px; background: #2056aa; color: white; padding: 10px 15px; font: inherit; font-weight: 650; cursor: pointer; }
+.cards-form-actions button:last-child, .cards-item-actions button { background: #33465e; }
+.cards-form button:disabled, .cards-add-button:disabled, .cards-item-actions button:disabled { opacity: .55; cursor: wait; }
+.cards-form button:focus-visible, .cards-add-button:focus-visible, .cards-item-actions button:focus-visible,
+.cards-toolbar-actions select:focus-visible, .cards-form-field input:focus-visible, .cards-form-field textarea:focus-visible { outline: 3px solid #edab3a; outline-offset: 2px; }
+
+.cards-warning { border: 1px solid #e2b53e; border-radius: 12px; background: #fdf6e3; padding: 16px 18px; margin: 0 0 20px; }
+.cards-warning p { margin: 0 0 8px; line-height: 1.5; }
+
+.cards-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.cards-item { border: 1px solid #dce4ef; border-radius: 12px; padding: 16px 18px; }
+.cards-item-main { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+.cards-front { margin: 0; font-size: 1.15rem; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.cards-chip { border-radius: 999px; background: #e6edf7; color: #33465e; font-size: .82rem; font-weight: 650; padding: 4px 12px; white-space: nowrap; }
+.cards-fields { display: grid; gap: 6px; margin: 12px 0 0; }
+.cards-field { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 10px; }
+.cards-field dt { color: #52647a; font-weight: 650; }
+.cards-field dd { margin: 0; overflow-wrap: anywhere; }
+.cards-item-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+@media (max-width: 720px) {
+  .cards-form-grid { grid-template-columns: 1fr; }
+  .cards-field { grid-template-columns: 1fr; gap: 2px; }
+  .cards-toolbar, .cards-item-main { flex-direction: column; align-items: flex-start; }
+  .cards-toolbar-actions { width: 100%; }
+  .cards-toolbar-actions select { flex: 1 1 auto; }
+}

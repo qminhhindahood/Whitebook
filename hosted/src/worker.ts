@@ -1,4 +1,5 @@
 import { accountRoute, type AccountEnv } from "./accounts";
+import { cardRoute } from "./cards";
 import { scoresRoute } from "./scores";
 
 type Statement = {
@@ -151,6 +152,8 @@ export default {
       if (scoresResponse) return await scoresResponse;
       const accountResponse = accountRoute(request, env);
       if (accountResponse) return await accountResponse;
+      const cardsResponse = cardRoute(request, env);
+      if (cardsResponse) return await cardsResponse;
       if (request.method === "POST" && path === "/api/staging/session")
         return measured(await session(request, env, meter), meter);
       const questionMatch = request.method === "GET" && QUESTION_PATH.exec(path);
@@ -158,7 +161,7 @@ export default {
       const contentMatch = request.method === "GET" && CONTENT_PATH.exec(path);
       if (contentMatch) return measured(await content(request, env, meter, contentMatch[1], contentMatch[2], contentMatch[3]), meter);
     } catch {
-      if (path.startsWith("/api/account/") || path.startsWith("/api/auth/"))
+      if (path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/cards/"))
         return Response.json({ error: { code: "service_unavailable", message: "Whitebook could not reach your account. Try again." } },
           { status: 503, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
       return closed(503);

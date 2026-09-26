@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
+import { PersonalCards } from "./PersonalCards";
+import "./cards.css";
 import { ScoresSection } from "./ScoresSection";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
 
-function csrfToken(): string {
+export function csrfToken(): string {
   const match = /(?:^|;\s*)__Host-wb_csrf=([a-f0-9]{64})(?:;|$)/.exec(document.cookie);
   return match?.[1] ?? "";
 }
 
-async function accountFetch(path: string, init?: RequestInit): Promise<Response> {
+export async function accountFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(path, { credentials: "same-origin", cache: "no-store", ...init });
 }
 
@@ -20,6 +22,7 @@ export function AccountApp() {
   const [signInReady, setSignInReady] = useState(true);
   const [nickname, setNickname] = useState("");
   const [message, setMessage] = useState("");
+  const [view, setView] = useState<"dashboard" | "cards">("dashboard");
 
   async function refresh() {
     setLoading(true);
@@ -109,20 +112,28 @@ export function AccountApp() {
           <p className="dashboard-welcome">Welcome, {me.account.nickname || me.account.displayName}</p>
           <p>Your private study space follows you across devices.</p>
         </section>
-        <section className="dashboard-empty" aria-labelledby="activity-heading">
-          <h2 id="activity-heading">Your study activity</h2>
-          <p>Nothing to review yet. Your work will appear here as you study.</p>
-        </section>
-        <ScoresSection />
-        <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
-          <h2 id="account-heading">Account</h2>
-          <p>Signed in as {me.account.email}</p>
-          <form onSubmit={saveNickname}>
-            <label htmlFor="nickname">Nickname</label>
-            <div className="account-row"><input id="nickname" maxLength={80} value={nickname} onChange={(event) => setNickname(event.target.value)} /><button disabled={busy}>Save</button></div>
-          </form>
-          <div className="account-actions"><button type="button" disabled={busy} onClick={renew}>Renew session</button><button type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
-        </section>
+        <nav className="dashboard-nav" aria-label="Workspace areas">
+          <button type="button" className={view === "dashboard" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => setView("dashboard")}>Dashboard</button>
+          <button type="button" className={view === "cards" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "cards" ? "page" : undefined} onClick={() => setView("cards")}>Flashcards</button>
+        </nav>
+        {view === "cards" ?
+          <PersonalCards onSessionEnded={() => { setMe(null); setMessage("Your session ended. Sign in again."); }} /> :
+          <>
+            <section className="dashboard-empty" aria-labelledby="activity-heading">
+              <h2 id="activity-heading">Your study activity</h2>
+              <p>Nothing to review yet. Your work will appear here as you study.</p>
+            </section>
+            <ScoresSection />
+            <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
+              <h2 id="account-heading">Account</h2>
+              <p>Signed in as {me.account.email}</p>
+              <form onSubmit={saveNickname}>
+                <label htmlFor="nickname">Nickname</label>
+                <div className="account-row"><input id="nickname" maxLength={80} value={nickname} onChange={(event) => setNickname(event.target.value)} /><button disabled={busy}>Save</button></div>
+              </form>
+              <div className="account-actions"><button type="button" disabled={busy} onClick={renew}>Renew session</button><button type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
+            </section>
+          </>}
       </div> :
       <section className="account-card"><h1>Study in your own space</h1><p>Sign in with Google to open your private Whitebook account.</p>{signInReady ? <a className="account-button" href="/api/auth/google/start">Continue with Google</a> : <p role="status">Google sign-in is being set up. Please return later.</p>}</section>}
     {loginError && !me && <p className="account-message" role="alert">{loginError === "google_cancelled" ? "Google sign-in was cancelled. You can try again." : "Google sign-in could not be completed. Please try again."}</p>}

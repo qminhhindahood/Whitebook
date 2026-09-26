@@ -17,12 +17,12 @@ export type AccountEnv = {
 
 type Identity = { sub: string; email: string; name: string };
 type Account = { id: string; provider_subject: string; email: string; display_name: string; nickname: string };
-type Session = { token_hash: string; csrf_hash: string; expires_at: number; account_id: string };
+export type Session = { token_hash: string; csrf_hash: string; expires_at: number; account_id: string };
 type Flow = { nonce: string; code_verifier: string; expires_at: number };
 
 const SESSION_SECONDS = 7 * 24 * 60 * 60;
 const FLOW_SECONDS = 10 * 60;
-const noStore = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", Vary: "Cookie" };
+export const noStore = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", Vary: "Cookie" };
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 
 function randomToken(): string {

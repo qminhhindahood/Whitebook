@@ -53,3 +53,19 @@ it("shows account data, saves a nickname, renews and clears private state on sig
   expect(calls.map((call) => call.path)).toEqual(["/api/account/me", "/api/account/scores", "/api/account/profile", "/api/auth/renew", "/api/auth/signout"]);
   await waitFor(() => expect(calls.filter((call) => call.path !== "/api/account/scores").slice(1).every((call) => call.init?.method === "POST" && call.init?.credentials === "same-origin")).toBe(true));
 });
+
+it("opens the Flashcards area from the dashboard navigation", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
+    if (path === "/api/account/me") return Response.json({
+      account: { id: "account-1", email: "learner@example.test", displayName: "Learner", nickname: "", role: "learner" },
+      session: { expiresAt: 100 },
+    });
+    if (path === "/api/cards") return Response.json({ decks: ["My words"], cards: [] });
+    if (path === "/api/cards?archived=1") return Response.json({ cards: [] });
+    throw new Error(`Unexpected route ${path} ${String(init?.method)}`);
+  }));
+  render(<AccountApp />);
+  fireEvent.click(await screen.findByRole("button", { name: "Flashcards" }));
+  expect(await screen.findByRole("heading", { name: "Flashcards" })).toBeTruthy();
+  expect(screen.getByText("You have no cards here yet. Add your first word.")).toBeTruthy();
+});
