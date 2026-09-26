@@ -3,6 +3,7 @@ import { satDateRoute } from "./satDates";
 import { cardRoute } from "./cards";
 import { scoresRoute } from "./scores";
 import { studyRoute } from "./study";
+import { libraryRoute } from "./library";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -160,6 +161,8 @@ export default {
       if (studyResponse) return await studyResponse;
       const cardsResponse = cardRoute(request, env);
       if (cardsResponse) return await cardsResponse;
+      const libraryResponse = libraryRoute(request, env);
+      if (libraryResponse) return await libraryResponse;
       if (request.method === "POST" && path === "/api/staging/session")
         return measured(await session(request, env, meter), meter);
       const questionMatch = request.method === "GET" && QUESTION_PATH.exec(path);
@@ -167,7 +170,7 @@ export default {
       const contentMatch = request.method === "GET" && CONTENT_PATH.exec(path);
       if (contentMatch) return measured(await content(request, env, meter, contentMatch[1], contentMatch[2], contentMatch[3]), meter);
     } catch {
-      if (path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/cards/"))
+      if (path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/cards/") || path.startsWith("/api/library") || path.startsWith("/content/"))
         return Response.json({ error: { code: "service_unavailable", message: "Whitebook could not reach your account. Try again." } },
           { status: 503, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
       return closed(503);

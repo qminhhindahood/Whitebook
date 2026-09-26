@@ -6,6 +6,7 @@ data/
 logs/
 .scratch/runtime-review/
 question-bank/
+hosted/.publication/
 
 # JavaScript
 node_modules/
