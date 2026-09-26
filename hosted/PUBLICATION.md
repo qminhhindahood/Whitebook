@@ -45,3 +45,16 @@ so previously active curated revisions remain readable while interrupted imports
 stay invisible. Active Attempts must reference their revision ID when ticket 05
 adds hosted Attempt storage. This ticket does not activate an unprovided bundle
 or deploy production.
+
+## Source audit on 2026-09-26
+
+The local owner database at `D:/Notion/UI/data/whitebook.sqlite3` contains the
+five specified source revisions (1,152 questions). Their current presentation
+blocks are still PDF-dependent: Hardest Math revision 10 has 765 `region`
+blocks, August R&W revision 5 has 1,524, August Math revision 5 has 805,
+September R&W revision 5 has 1,308, and September Math revision 4 has 1,138.
+That is 5,540 region blocks. Some newer local revisions contain partial text,
+LaTeX, or reviewed text, but they are not the five-package, PDF-free publication
+bundle. The importer correctly rejects these source presentations. Activation
+and the authenticated real-bundle browser journey await the separate reviewed
+Question Presentation export.
