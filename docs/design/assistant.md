@@ -1,6 +1,9 @@
 # Whitebook Assistant — interaction and data-boundary design
 
-Status: design-only deliverable for ticket 14 (`.scratch/whitebook-account-learning-update/issues/14-assistant-design.md`).
+Status: design-only deliverable for ticket 14 of the whitebook-account-learning-update
+tranche. The ticket and its spec live in the owner-local `.scratch` tracker and are not
+committed to this repository; the ticket's five acceptance criteria are restated in §8,
+so this document is self-contained.
 Date: 2026-09-26.
 Audience: owner review before any provider integration work in the later AI tranche.
 
@@ -27,25 +30,32 @@ gates in §10 before any learner-visible control appears.
 3. **Minimal envelope.** A question request carries one canonical Question Presentation,
    the learner's response, and only the capped prior messages shown in the send preview —
    never a Source PDF, source path, account email, API key, full Test Package, full
-   Attempt, or diagnostic logs.
+   Attempt, or diagnostic logs — the §4.3 redaction list.
 4. **No chat history.** Ordinary AI conversations live for the visit and disappear;
    only an explicitly saved Study Note persists (story 63).
 5. **AI is optional everywhere.** Every flow has a non-AI path that keeps working when
    providers are blocked (stories 36, 91; spec quota circuit-breaker).
-6. **Domain vocabulary.** Guided Reasoning, Reasoning Steps, Reading Help, Assisted
-   Practice, Image Fallback, Reviewed Question Text, Study Note, and Shared AI Access
-   are used exactly as defined in `CONTEXT.md`.
+6. **Domain vocabulary.** Guided Reasoning (with its two staged phases, Reasoning Steps
+   and Reading Help), Assisted Practice, Image Fallback, Reviewed Question Text, Study
+   Note, and Shared AI Access are used exactly as defined in the learning-update
+   tranche's `CONTEXT.md` glossary; Reasoning Steps and Reading Help are the two staged
+   Guided Reasoning phases the tranche spec defines, not separate glossary entries.
+   That glossary update ships with the learning-update tranche and is not merged yet,
+   so the committed `CONTEXT.md` in this checkout does not contain it — this document
+   defers to those definitions rather than restating them.
 7. **Answer disclosure follows server-owned review state.** The Answer Manifest remains
    authoritative on the server. While an answer is hidden, the key is not included in a
    provider payload, and generated stages pass an answer-disclosure gate before any
    stage reaches the learner. An uncertain result is withheld; the learner gets a
-   reviewed non-AI hint where one exists, or a clear unavailable message.
+   reviewed non-AI hint where one exists, or a clear unavailable message (authoritative
+   form: §4.1–§4.2).
 8. **Question-source assumptions.** Reviewed Reading and Writing wording is sent as
    selectable text; unverifiable wording uses the whole question as an Image Fallback
    without text evidence highlights. Math stems and figures are confirmed source visuals;
    A–D choices use text or reviewed LaTeX, with a whole-choice Image Fallback if they
    cannot be represented faithfully. Every transmitted image uses a derived image at its
-   displayed transmit size and requires separate consent plus a vision-capable model. A
+   displayed transmit size and requires the separate §3.3 image consent plus a
+   vision-capable model. A
    future reviewed Math transcription may remove that image requirement.
 
 ---
@@ -274,7 +284,7 @@ their narrow-screen treatment is a stacking and overlay discipline, not a switch
   full-height sheet pattern: the content preview (or actual image, at transmit size)
   and the consent actions are both reachable without scrolling the actions off-screen.
 
-### 2. Worked examples
+## 2. Worked examples
 
 Both examples are original instructional content written for this design (no College
 Board material). Each shows the **complete Question Presentation context** the model
@@ -371,13 +381,20 @@ equation gives the total cost y for x hours; the stem states a 16-hour rental co
 $71.* `accepted_answers: ["A"]` — the $3.50-per-hour slope with the $15 fixed fee
 satisfies 15 + 3.50 × 16 = 71. The learner answered **C**, mistaking the $71 total for
 the fixed fee. The worked solution and answer-specific choice analysis below appear only
-after **Show answer**; pre-reveal hints omit the key and pass the answer-disclosure gate.
+after **Show answer**; pre-reveal hints omit the key and pass the
+answer-disclosure gate (§4.2).
 
 **Envelope note (vision):** because the stem is a region image, this question requires
-a **vision-capable model** and the **separate image consent** even though the choices
-are text — exactly the rule the R&W fallback follows. (If the owner later publishes
+a **vision-capable model** and the **separate image consent (§3.3)** even though the
+choices are text — exactly the rule the R&W fallback follows. (If the owner later publishes
 this revision with a reviewed text transcription, the vision requirement drops; the
 capability check runs per request against the actual envelope, §5.2.)
+
+**Evidence anchoring note (story 54):** the §1.1(c) match-and-highlight mechanism cannot
+anchor to a region image — there is no selectable text to match, so the stem receives no
+highlights by design. Where Math choices are reviewed text or reviewed LaTeX (§0), model
+quotes may anchor to choice text under the same fail-safe: an unmatched quote renders
+unhighlighted with a "span not located" marker, never an invented span.
 
 **Progressive interaction:**
 
@@ -417,8 +434,8 @@ summary reconstructed by the client.
 - **F1–F4 question content** — render the canonical Question Presentation text and all
   choices verbatim, the learner response, category, question/revision references, and
   answer visibility. While hidden, the Answer Manifest key stays server-side and is
-  omitted from the provider payload; the preview says so. After **Show answer**, if the
-  key is included for an explanation request, show its exact value in the preview.
+  omitted from the provider payload; the preview says so (§4.1). After **Show answer**,
+  if the key is included for an explanation request, show its exact value in the preview.
 - **Conversation content** — the first request has no prior messages. Each follow-up
   preview shows the exact current learner message and every capped prior learner and
   assistant message sent with it. No unseen portion of the visit conversation is added.
@@ -593,7 +610,9 @@ deletion cover these exactly as they cover other account data (spec §Accounts).
 
 Spec line 179 asks the design to "Document future AI preview/consent/request/report
 contracts in the Assistant design only." The request envelope is §4.1; the other three
-are the following design-level payloads (field shapes, not an API implementation):
+are the following design-level payloads (field shapes, not an API implementation; the
+`POST /assistant/…` paths below are illustrative names — the commitment is the fields
+and the server-owned snapshot behavior, and the AI tranche names the real endpoints):
 
 **Preview payload** — returned by `POST /assistant/preview` before the first request and
 before each follow-up send. The backend creates a short-lived immutable snapshot with
@@ -626,8 +645,9 @@ The learner sees exact values, not a category-only summary:
   "images": [
     { "imageRef": "opaque derived-asset ref", "transmitSizePx": [640, 130] }
   ],
-  "neverSent": ["Source PDF", "source paths", "account email", "API keys",
-                 "personal-key id", "full Test Package", "full Attempt", "diagnostic logs"],
+  "neverSent": [ // the §4.3 redaction list, restated as a contract field
+    "Source PDF", "source paths", "account email", "API keys",
+    "personal-key id", "full Test Package", "full Attempt", "diagnostic logs"],
   "retention": "visit-scoped unless a Study Note is saved"
 }
 ```
@@ -689,6 +709,8 @@ stored payload unchanged (§3.6):
 
 ---
 
+## 5. Provider routes, capability checks, and failure handling
+
 ### 5.1 Provider routes
 
 - **Shared Gemini** (Shared AI Access, owner-held key, server secret). The
@@ -703,12 +725,22 @@ stored payload unchanged (§3.6):
   an opaque internal id that is never sent to a provider, returned in plaintext after
   save, or logged. A paid model is offered only with its current price and payer disclosed
   at selection.
+- **Model selection (spec: how the learner chooses a supported model and response
+  language).** The language control is §3.4; model choice is designed as follows. The
+  first request of every flow shows a model selector on the preview/consent screen
+  (§3.1), listing exactly the route's models that pass the §5.2 at-use check for that
+  request's envelope — vision-capable when any image is present, Vietnamese-capable when
+  `locale: "vi"`, zero-cost-only for Shared OpenRouter. The choice is remembered for the
+  visit per flow; the §3.2 chip names the model that served each response, and a change
+  action re-enters preview and, when provider or terms change, that provider's consent.
+  When no model of a route passes the check, the route is not offered (§5.4).
 
 ### 5.2 At-use capability check
 
 Before each request the backend resolves, for the candidate model: provider health and
-quota headroom; **vision support** if the envelope carries any region image; Vietnamese
-capability if `locale: "vi"`; zero-cost confirmation for owner-held OpenRouter routes.
+quota headroom; **vision support** if the envelope carries any region image (sent only
+with the §3.3 image consent); Vietnamese capability if `locale: "vi"`; zero-cost
+confirmation for owner-held OpenRouter routes.
 A model failing the check is excluded from the offered set (or the request is refused
 with `capability_missing` if already selected). Availability is **always at-use**;
 nothing is assumed from last week's state (spec).
@@ -778,7 +810,7 @@ fabricates content, and no fallback silently downgrades to another provider (§3
 | Ticket-14 criterion | Where satisfied |
 | --- | --- |
 | Annotated desktop + narrow-screen flows covering History explanation, Reasoning Steps, Reading Help, Math + optional Desmos, Flashcard drafting, Study Plan suggestions | §1.1–§1.6 (desktop and narrow screens; F1–F7 map 1:1 to the listed flows) and §1.7 (narrow-screen treatment for Math help, Flashcard drafting, and Study Plan suggestions) |
-| One R&W + one Math example with complete Question Presentation context, progressive hints, evidence anchoring, answer reveal, why wrong choices fail | §2.1, §2.2 (both include fallback/vision variants and post-reveal context); §4.2 gates hidden-answer stages |
+| One R&W + one Math example with complete Question Presentation context, progressive hints, evidence anchoring, answer reveal, why wrong choices fail | §2.1 (text anchoring) and §2.2 (both include fallback/vision variants and post-reveal context; §2.2's note states why an image stem cannot anchor and where choice-text anchoring applies); §4.2 gates hidden-answer stages |
 | Content preview, provider-specific consent, separate Image Fallback consent, Vietnamese response choice, Study Note saving, report-payload preview, no full-chat persistence | §3.1–§3.6, §4.5 exact preview snapshots, §6 |
 | Backend request/response boundaries, answer-key authority, redaction, model/vision capability checks, quota and error states, consented OpenRouter fallback | §4.1–§4.5, §5.1–§5.4 |
 | No live provider call, secret storage, AI-generated content, or inactive Assistant button in this ticket | §0, §9 (explicit non-goals); nothing in this branch touches `web/src` or backend code |
