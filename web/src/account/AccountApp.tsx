@@ -1,17 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { SatWeekend } from "./SatWeekend";
+import { accountFetch, csrfToken } from "./accountClient";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
-
-function csrfToken(): string {
-  const match = /(?:^|;\s*)__Host-wb_csrf=([a-f0-9]{64})(?:;|$)/.exec(document.cookie);
-  return match?.[1] ?? "";
-}
-
-async function accountFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(path, { credentials: "same-origin", cache: "no-store", ...init });
-}
 
 export function AccountApp() {
   const [me, setMe] = useState<Me | null>(null);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { accountFetch, csrfToken } from "./accountClient";
 import { satCountdown, satDateLabel } from "./satCountdown";
 
 type CatalogEntry = { date: string; status: "confirmed" | "anticipated" };
@@ -6,11 +7,6 @@ type SatDatesData = {
   catalog: { source: string; sourceUrl: string; lastCheckedAt: string; dates: CatalogEntry[] };
   selection: { dates: string[]; primary: string | null; timeZone: string | null };
 };
-
-function csrfToken(): string {
-  const match = /(?:^|;\s*)__Host-wb_csrf=([a-f0-9]{64})(?:;|$)/.exec(document.cookie);
-  return match?.[1] ?? "";
-}
 
 function browserTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -29,7 +25,7 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch("/api/account/sat-dates", { credentials: "same-origin", cache: "no-store" });
+        const response = await accountFetch("/api/account/sat-dates");
         if (!cancelled && response.status === 401) { onSessionEnded?.(); return; }
         if (!response.ok) throw new Error("SAT dates unavailable");
         const body = await response.json() as SatDatesData;
@@ -50,7 +46,7 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
   if (loading) return <section className="dashboard-sat" aria-labelledby="sat-heading"><h2 id="sat-heading">SAT test date</h2><p>Loading your SAT dates…</p></section>;
 
   const zone = data?.selection.timeZone || browserTimeZone();
-  const countdown = satCountdown(primary ?? "", zone, now);
+  const countdown = satCountdown(primary, zone, now);
 
   function toggle(date: string, checked: boolean) {
     setSelected((current) => checked ? [...current, date].sort() : current.filter((item) => item !== date));
@@ -61,10 +57,8 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
     event.preventDefault();
     setBusy(true);
     try {
-      const response = await fetch("/api/account/sat-dates", {
+      const response = await accountFetch("/api/account/sat-dates", {
         method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
         body: JSON.stringify({ dates: selected, primary, timeZone: browserTimeZone() }),
       });

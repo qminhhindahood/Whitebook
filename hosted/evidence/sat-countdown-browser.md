@@ -29,6 +29,17 @@ session cookie was inserted directly; the sign-in itself is ticket 03's verified
 - `sat-countdown-narrow.png` — 390px phone layout: rows wrap, "Primary target"
   drops below each date, no horizontal overflow.
 
+## Contrast (WCAG 2.1 ratios, computed 2026-09-26)
+
+| Element | Foreground / background | Ratio | AA (4.5:1) |
+| --- | --- | --- | --- |
+| Confirmed pill | #2056AA on #E3ECFB | 5.94 | pass |
+| Anticipated pill | #8A5A00 on #FDF3E0 | 5.38 | pass |
+| Countdown text | #182538 on #FFFFFF | 15.43 | pass |
+| Section body text | #52647A on #FFFFFF | 6.06 | pass |
+| Body text on page background | #52647A on #F5F7FB | 5.65 | pass |
+| Primary button | #FFFFFF on #2056AA | 7.06 | pass |
+
 ## Honesty note
 
 The countdown "7 days" value and Test-day/past-date states at zone boundaries are

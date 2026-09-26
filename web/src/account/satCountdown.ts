@@ -23,7 +23,7 @@ function calendarDaysBetween(fromYmd: string, toYmd: string): number {
  * after it the learner is prompted to pick a new target. No time of day is
  * attached to the administration.
  */
-export function satCountdown(target: string, zone: string, now: Date): CountdownState {
+export function satCountdown(target: string | null, zone: string, now: Date): CountdownState {
   if (!target) return { kind: "none" };
   let today: string;
   try {

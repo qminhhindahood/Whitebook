@@ -65,7 +65,7 @@ async function savedTimeZone(env: AccountEnv, accountId: string): Promise<string
   return row?.time_zone ?? "";
 }
 
-async function persist(env: AccountEnv, accountId: string, dates: string[], primary: string | null, timeZone: string): Promise<void> {
+async function replaceSelection(env: AccountEnv, accountId: string, dates: string[], primary: string | null, timeZone: string): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   await env.DB.prepare("DELETE FROM learner_sat_dates WHERE account_id = ?").bind(accountId).run();
   for (const date of dates)
@@ -103,15 +103,16 @@ async function save(request: Request, env: AccountEnv, session: Session): Promis
       Object.keys(body).some((key) => key !== "dates" && key !== "primary" && key !== "timeZone"))
     return failure(400, "invalid_sat_dates", "Only SAT dates, the primary target, and a time zone can be saved here.");
   const { dates, primary, timeZone } = body as { dates?: unknown; primary?: unknown; timeZone?: unknown };
+  const allowed = catalogDates();
   if (!Array.isArray(dates) || dates.length > SAT_CATALOG.dates.length ||
-      dates.some((date) => typeof date !== "string" || !DATE_PATTERN.test(date) || !catalogDates().has(date)) ||
+      dates.some((date) => typeof date !== "string" || !DATE_PATTERN.test(date) || !allowed.has(date)) ||
       new Set(dates).size !== dates.length)
     return failure(400, "invalid_sat_dates", "Choose SAT Weekend dates from the official list.");
   if (primary !== null && (typeof primary !== "string" || !dates.includes(primary)))
     return failure(400, "invalid_sat_dates", "Your primary SAT date must be one of your selected dates.");
   if (typeof timeZone !== "string" || !isValidTimeZone(timeZone))
     return failure(400, "invalid_sat_dates", "Save a valid time zone so your countdown matches your calendar.");
-  await persist(env, session.account_id, [...dates].sort(), primary, timeZone);
+  await replaceSelection(env, session.account_id, [...dates].sort(), primary, timeZone);
   return Response.json(
     { selection: { dates: [...dates].sort(), primary, timeZone } satisfies SatSelection },
     { headers: noStore },
