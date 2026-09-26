@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { SatWeekend } from "./SatWeekend";
 import { accountFetch, csrfToken } from "./accountClient";
-import { PersonalCards } from "./PersonalCards";
+import { FlashcardsArea } from "./FlashcardStudy";
+import { deviceZone } from "./satCountdown";
 import "./cards.css";
 import { ScoresSection } from "./ScoresSection";
 
-type Account = { id: string; email: string; displayName: string; nickname: string; role: "learner" | "owner" };
+type Account = { id: string; email: string; displayName: string; nickname: string; timeZone: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
 
 export { accountFetch, csrfToken } from "./accountClient";
@@ -16,6 +17,7 @@ export function AccountApp() {
   const [busy, setBusy] = useState(false);
   const [signInReady, setSignInReady] = useState(true);
   const [nickname, setNickname] = useState("");
+  const [timeZone, setTimeZone] = useState("");
   const [message, setMessage] = useState("");
   const [view, setView] = useState<"dashboard" | "cards">("dashboard");
 
@@ -34,6 +36,7 @@ export function AccountApp() {
       const data = await response.json() as Me;
       setMe(data);
       setNickname(data.account.nickname);
+      setTimeZone(data.account.timeZone ?? "");
       setMessage("");
     } catch {
       setMe(null);
@@ -69,6 +72,26 @@ export function AccountApp() {
       setMessage("Saved to your account.");
     } catch {
       setMessage("Your nickname was not saved. Check your connection and try again.");
+    } finally { setBusy(false); }
+  }
+
+  async function saveTimeZone(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const response = await mutate("/api/account/profile", { timeZone });
+      if (response.status === 401) { setMe(null); setMessage("Your session ended. Sign in again."); return; }
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        setMessage(data?.error?.message ?? "Your time zone was not saved. Check the name and try again.");
+        return;
+      }
+      const saved = (await response.json() as { timeZone: string }).timeZone;
+      setTimeZone(saved);
+      setMe((current) => current ? { ...current, account: { ...current.account, timeZone: saved } } : null);
+      setMessage("Saved to your account.");
+    } catch {
+      setMessage("Your time zone was not saved. Check your connection and try again.");
     } finally { setBusy(false); }
   }
 
@@ -116,7 +139,7 @@ export function AccountApp() {
           <button type="button" className={view === "cards" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "cards" ? "page" : undefined} onClick={() => setView("cards")}>Flashcards</button>
         </nav>
         {view === "cards" ?
-          <PersonalCards onSessionEnded={() => { setMe(null); setMessage("Your session ended. Sign in again."); }} /> :
+          <FlashcardsArea onSessionEnded={() => { setMe(null); setMessage("Your session ended. Sign in again."); }} /> :
           <>
             <SatWeekend onSessionEnded={handleSessionEnded} />
             <section className="dashboard-empty" aria-labelledby="activity-heading">
@@ -130,6 +153,11 @@ export function AccountApp() {
               <form onSubmit={saveNickname}>
                 <label htmlFor="nickname">Nickname</label>
                 <div className="account-row"><input id="nickname" maxLength={80} value={nickname} onChange={(event) => setNickname(event.target.value)} /><button disabled={busy}>Save</button></div>
+              </form>
+              <form onSubmit={saveTimeZone}>
+                <label htmlFor="time-zone">Time zone</label>
+                <p className="account-hint">Study dates and due days use this IANA zone. Leave empty to follow this device ({deviceZone()}).</p>
+                <div className="account-row"><input id="time-zone" maxLength={64} value={timeZone} placeholder={deviceZone()} onChange={(event) => setTimeZone(event.target.value)} /><button disabled={busy}>Save time zone</button></div>
               </form>
               <div className="account-actions"><button type="button" disabled={busy} onClick={renew}>Renew session</button><button type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
             </section>
