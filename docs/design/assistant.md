@@ -17,16 +17,17 @@ gates in §10 before any learner-visible control appears.
 
 ---
 
-## 0. Design principles (from the spec)
+## 0. Design principles and assumptions
 
 1. **Opt-in, per flow, per provider.** Nothing calls a provider without a content
    preview followed by consent scoped to that provider and flow (spec stories 68–69).
 2. **The answer key is authoritative.** AI explains; it never regrades, never overrides
    an accepted answer, and its live output is labeled unverified until checked against
    the key (stories 61, 46; spec §Assistant design).
-3. **Minimal envelope.** The request carries the canonical Question Presentation for one
-   question plus the learner's response — never a Source PDF, source path, account
-   email, API key, full Test Package, full Attempt, or diagnostic logs.
+3. **Minimal envelope.** A question request carries one canonical Question Presentation,
+   the learner's response, and only the capped prior messages shown in the send preview —
+   never a Source PDF, source path, account email, API key, full Test Package, full
+   Attempt, or diagnostic logs.
 4. **No chat history.** Ordinary AI conversations live for the visit and disappear;
    only an explicitly saved Study Note persists (story 63).
 5. **AI is optional everywhere.** Every flow has a non-AI path that keeps working when
@@ -34,6 +35,18 @@ gates in §10 before any learner-visible control appears.
 6. **Domain vocabulary.** Guided Reasoning, Reasoning Steps, Reading Help, Assisted
    Practice, Image Fallback, Reviewed Question Text, Study Note, and Shared AI Access
    are used exactly as defined in `CONTEXT.md`.
+7. **Answer disclosure follows server-owned review state.** The Answer Manifest remains
+   authoritative on the server. While an answer is hidden, the key is not included in a
+   provider payload, and generated stages pass an answer-disclosure gate before any
+   stage reaches the learner. An uncertain result is withheld; the learner gets a
+   reviewed non-AI hint where one exists, or a clear unavailable message.
+8. **Question-source assumptions.** Reviewed Reading and Writing wording is sent as
+   selectable text; unverifiable wording uses the whole question as an Image Fallback
+   without text evidence highlights. Math stems and figures are confirmed source visuals;
+   A–D choices use text or reviewed LaTeX, with a whole-choice Image Fallback if they
+   cannot be represented faithfully. Every transmitted image uses a derived image at its
+   displayed transmit size and requires separate consent plus a vision-capable model. A
+   future reviewed Math transcription may remove that image requirement.
 
 ---
 
@@ -96,11 +109,11 @@ the indigo design system, never an overlay over the text.
 
 Annotations:
 
-- **(a) Answer reveal is learner-controlled.** The review surface the learner came from
-  decides whether the accepted answer is visible; the Assistant inherits that state and
-  never reveals the answer on its own. If the learner entered from the answer-hidden
-  guided retry, the Assistant panel shows Reading Help and Reasoning Steps but the
-  accepted answer area stays masked until Show answer (story 38).
+- **(a) Answer reveal is learner-controlled.** The server resolves whether the answer is
+  hidden or revealed from the review state; it does not trust a client-supplied flag.
+  While hidden, the Assistant may show only stages that pass the answer-disclosure gate
+  in §4.2. The answer-specific explanation and any step that gives away the choice stay
+  unavailable until the learner chooses **Show answer** (story 38).
 - **(b) Reasoning Steps are staged** (story 52): step 1 states the task ("decide what
   *resigned* conveys here"); each later step is revealed by an explicit action so the
   learner can predict the evidence or next move first. Steps are numbered, and "Reveal
@@ -150,6 +163,10 @@ segmented switch (the DESIGN.md segmented-tile pattern), defaulting to **Passage
 
 ### 1.3 Desktop flow — Math explanation with standard solution and Desmos approach (F4)
 
+The diagram shows a post-reveal state. While the answer is hidden, only answer-safe
+stages appear; the standard solution, answer-specific choice analysis, and Desmos result
+stay behind **Show answer**.
+
 ```
 ┌─ Whitebook — Results — Question 6 of 22 ──────────────────────────────────────┐
 │  September Math · Revision 4 · Algebra                                       │
@@ -157,9 +174,9 @@ segmented switch (the DESIGN.md segmented-tile pattern), defaulting to **Passage
 │  QUESTION 6                      │  Assistant (future)                        │
 │  ┌────────────────────────────┐  │  Why A: one-paragraph answer.              │
 │  │ Source visual (region) —   │  │                                            │
-│  │ per ADR-0006 Math question │  │  ▸ Worked solution (standard, staged):     │
-│  │ content is a confirmed     │  │    1. Set up the equation from the         │
-│  │ region image, not text.    │  │       constraint.                          │
+│  │ Math stem is a source      │  │  ▸ Worked solution (standard, staged):     │
+│  │ region image per §0;       │  │    1. Set up the equation from the         │
+│  │ it is not transcribed text │  │       constraint.                          │
 │  └────────────────────────────┘  │    2. Solve for x. [Show step]             │
 │  Choices A–D: reviewed text /    │    3. Check against the accepted answer.   │
 │  reviewed LaTeX, your choice C   │  ▸ Desmos approach (only when it helps):   │
@@ -286,11 +303,15 @@ why-wrong-choices explanation.
 }
 ```
 
-`accepted_answers: ["C"]`, `category: "Transition"`, learner response: **B**.
+`accepted_answers: ["C"]`, `category: "Transition"`, learner response: **B**. The
+answer-aware explanation below is shown after the learner chooses **Show answer**. Before
+that action, the provider payload omits the key and only answer-safe hint stages may be
+released (§4.1–§4.2).
 
-**Minimal envelope sent to the provider** (§4.1): this presentation verbatim, the
-accepted answer `C`, the learner response `B`, the category, the revision identity, and
-prior messages of this visit-scoped conversation. Nothing else.
+**Provider context after answer reveal** (§4.1): this presentation verbatim, the now
+visible accepted answer `C`, the learner response `B`, the category, and the capped prior
+messages included in the per-send preview. Before reveal, `acceptedAnswer` is omitted
+from the provider payload; the server still holds it for verification.
 
 **Progressive interaction:**
 
@@ -303,9 +324,9 @@ prior messages of this visit-scoped conversation. Nothing else.
    stimulus text and highlights the span. If matching failed (say the reviewed text
    used a different wording), the quote would render unhighlighted with a "span not
    located" marker — no invented evidence (story 55's fail-safe).
-3. **Reasoning step 3 (decide):** "A contrast transition is needed: *Nevertheless*."
-4. **Answer reveal (only on learner action or already-revealed state):** accepted
-   answer **C**.
+3. **Reasoning step 3 (decide):** "Choose a transition that signals contrast. Make your
+   choice before asking to reveal the answer."
+4. **Answer reveal (only after the learner chooses Show answer):** accepted answer **C**.
 5. **Why the learner's choice fails (story 48):** "*Likewise* (B) signals similarity,
    but the clause that follows contradicts the evidence — it cannot introduce an
    opposing view." **Why the others fail:** "*Consequently* (A) claims cause and
@@ -314,8 +335,8 @@ prior messages of this visit-scoped conversation. Nothing else.
 6. **Follow-up (F7)** in English or Vietnamese; **Save as Study Note** or **Report**
    per §6–§7.
 
-**Image Fallback variant.** If this whole question were a reviewed Image Fallback
-(ADR-0006: unverifiable R&W wording → entire question content as image), the envelope
+**Image Fallback variant.** If this whole question used the source-content assumption in
+§0 (unverifiable R&W wording → entire question content as image), the provider payload
 replaces the stimulus text blocks with the derived question image, the consent screen
 adds the separate image consent (§3.3), and the model must be vision-capable. Guidance
 becomes image-compatible: the panel may describe what the image shows and may reference
@@ -324,8 +345,9 @@ is attempted — the image stays the visual (story 55).
 
 ### 2.2 Math example (Algebra — linear modeling)
 
-**Question Presentation.** Per ADR-0006, Math question content is a confirmed source
-visual; choices are text/LaTeX. The envelope carries:
+**Question Presentation.** Under the source-content assumption in §0, Math question
+stems and figures are confirmed source visuals; choices are text/LaTeX. The provider
+payload carries the derived image for the region (not the Source PDF):
 
 ```jsonc
 {
@@ -348,7 +370,8 @@ part of the payload): a rental costs a $15 initial fee plus $3.50 per hour; whic
 equation gives the total cost y for x hours; the stem states a 16-hour rental costs
 $71.* `accepted_answers: ["A"]` — the $3.50-per-hour slope with the $15 fixed fee
 satisfies 15 + 3.50 × 16 = 71. The learner answered **C**, mistaking the $71 total for
-the fixed fee.
+the fixed fee. The worked solution and answer-specific choice analysis below appear only
+after **Show answer**; pre-reveal hints omit the key and pass the answer-disclosure gate.
 
 **Envelope note (vision):** because the stem is a region image, this question requires
 a **vision-capable model** and the **separate image consent** even though the choices
@@ -382,45 +405,65 @@ capability check runs per request against the actual envelope, §5.2.)
 
 ## 3. Consent and content preview
 
-### 3.1 First-request preview (every flow)
+### 3.1 Pre-send content preview (every flow)
 
-Before a flow's **first** external AI request in a visit, the learner sees a preview
-modal (DESIGN.md dialog pattern) showing (story 69):
+Before the first request in a flow, the learner sees the exact provider-bound content
+and provider/model, then grants provider-specific consent (story 69). Before each later
+send, a compact **Included in this send** view shows the new message and the exact capped
+prior messages that will accompany it; pressing **Send** confirms that request. The
+preview is made from the same server-side payload snapshot the adapter will use, not a
+summary reconstructed by the client.
 
-- **Content category and shape** — e.g., "This question's text and answer choices +
-  your response (about 250 words)" for F1–F4; "the word/phrase you entered" for F5;
-  "your aggregate progress numbers, no question content" for F6. For region-image
-  content: "one question image".
-- **Provider and model** — chosen explicitly (§5.1), with the payer: Shared AI Access
-  (owner-funded, zero-cost models only for OpenRouter) or the learner's personal key
-  (with current price and payer disclosure for paid models, per ADR-0008).
-- **What is never sent** — the standard redaction list (§4.3), abbreviated.
+- **F1–F4 question content** — render the canonical Question Presentation text and all
+  choices verbatim, the learner response, category, question/revision references, and
+  answer visibility. While hidden, the Answer Manifest key stays server-side and is
+  omitted from the provider payload; the preview says so. After **Show answer**, if the
+  key is included for an explanation request, show its exact value in the preview.
+- **Conversation content** — the first request has no prior messages. Each follow-up
+  preview shows the exact current learner message and every capped prior learner and
+  assistant message sent with it. No unseen portion of the visit conversation is added.
+- **Images** — display the actual derived image at the exact transmit size, alongside
+  its question identity. A region reference is resolved server-side; neither the Source
+  PDF nor its path is sent.
+- **F5 card draft** — show the exact front, target language, and optional context.
+  **F6 plan suggestion** — show the exact aggregate fields, activity catalog, and plan
+  constraints being sent, with an explicit statement that question text is excluded.
+- **Provider and model** — chosen explicitly (§5.1), with payer and price: Shared AI
+  Access, or the learner's personal key and any paid-model price disclosure.
+- **What is never sent** — the standard redaction list (§4.3), including provider
+  credentials and internal key references.
 - **Retention** — "This conversation disappears when you close Whitebook unless you
   save a Study Note."
 
 Consent is granted per **provider + flow** and remembered for the visit only; a new
-provider or a new flow class asks again (spec: "consent scoped to that provider and
-flow"). A persistent per-account consent record is a future tranche decision; this
-design assumes visit-scoped consent initially, surfaced with a "remember for this
-account" option for the AI tranche to decide explicitly.
+provider or flow asks again (spec: "consent scoped to that provider and flow"). A change
+to the selected model, payer, price, or provider terms returns to preview and consent.
+Every preview receives a short-lived server-side snapshot id; the request after consent must
+consume that snapshot so its content cannot drift between preview and send. A persistent
+per-account consent record is a future tranche decision; this design assumes visit-scoped
+consent initially and leaves any "remember for this account" option for the AI tranche
+to decide explicitly.
 
 ### 3.2 Provider-specific consent and no silent switching
 
 - Choosing **Shared Gemini** vs **Shared OpenRouter** vs **personal key** is always an
   explicit learner choice (story 68). OpenRouter additionally shows its own data-use
-  terms line before first use (spec launch-gate item; ADR-0011).
+  terms line before first use (spec launch-gate item).
 - If the selected provider fails or is exhausted, the panel offers **Retry**, **switch
   provider (goes back through that provider's own consent)**, or **close**. It never
   silently re-routes the request (spec: "the UI offers a choice rather than silently
   switching"). A visible chip in the panel always states the provider and model that
   served the current content (also required for AI-derived note metadata).
+- A model, payer, price, or terms change is shown before the next request and invalidates
+  the old preview snapshot. There is no silent model substitution within a provider route.
 
 ### 3.3 Separate Image Fallback consent (story 47)
 
-Whenever the envelope contains a derived question image (R&W whole-question fallback or
+Whenever the payload contains a derived question image (R&W whole-question fallback or
 Math stem/figure region), the preview shows **the actual image at transmit size** plus
 its scope ("this one question's image only"), and requires a separate, explicit
-approval distinct from the text consent. The provider selector then lists only
+approval bound to that image and provider, distinct from the text consent. A different
+question image requires a new image approval. The provider selector then lists only
 **vision-capable** models for that request (§5.2). Declining image consent keeps text
 where text exists (Math choices remain sendable) and disables the explanation with an
 honest message where the whole question is an image.
@@ -449,9 +492,11 @@ Section Exam Attempts; visible in review and Assisted Practice contexts).
 "Report" under any AI response opens a preview of the exact payload: question identity
 (package revision, question number, category), provider/model, the **learner-selected**
 messages and response excerpt, the learner's own description of the problem (required
-free-text), and a timestamp. The learner can deselect any optional field before
-submitting. Submission is one explicit action; the payload submitted is byte-for-byte
-what the preview showed. Routine chats are never an owner-browsable record — only
+free-text), and a timestamp. The learner can deselect optional excerpts or edit the
+description; each change produces a new immutable, short-lived report preview. The
+preview displays the exact fields and values that will reach the owner. On explicit
+submit, the client sends only the preview reference, and the server submits that stored
+snapshot byte-for-byte. Routine chats are never an owner-browsable record — only
 explicitly submitted reports reach the owner, with the retention period defined before
 launch (spec §Accounts).
 
@@ -461,39 +506,58 @@ launch (spec §Accounts).
 
 ### 4.1 Minimal input envelope
 
-One backend assistant interface, swappable provider adapters (spec). The explanation
-envelope for F1–F4:
+One backend assistant interface, swappable provider adapters (spec). The browser sends
+question/revision references, the learner's response, the chosen route/model, and any
+learner-authored message. The server resolves the canonical presentation, Answer
+Manifest key, consent, credential reference, and answer-reveal state; none of those
+authoritative values is accepted from client input. It then creates the provider
+payload from the previewed snapshot. The F1–F4 provider payload is:
 
 ```jsonc
 {
-  "flow": "question_explanation",            // F1–F4 discriminators: reasoning_steps, reading_help, math_solution, card_draft, plan_suggest
+  "flow": "question_explanation | reasoning_steps | reading_help | math_solution", // F1–F4
   "locale": "en | vi",                       // response language
-  "conversation": { "id": "visit-scoped", "priorMessages": [ /* capped, visit-scoped */ ] },
+  "conversation": { "priorMessages": [ /* exact, capped, visit-scoped messages */ ] },
   "question": {
     "revisionRef": "immutable published revision id",
     "questionRef": "stable question id + number",
     "category": "Transition",
-    "presentation": { /* canonical Question Presentation v1, verbatim from the contract */ },
-    "acceptedAnswer": ["C"],                 // server-injected from the Answer Manifest
-                                             // at request assembly; never read from,
-                                             // or trusted from, any client input
+    "presentation": { /* canonical Question Presentation v1; approved regions resolve to derived assets */ },
     "learnerResponse": "B",
-    "revealedState": "hidden | revealed"     // the review surface's current answer state
-  },
-  "provider": { "route": "shared_gemini | shared_openrouter | personal", "model": "…", "personalKeyId": "opaque ref, never a key" },
-  "consents": { "providerFlow": "granted-at", "image": "granted-at | declined | not-needed" }
+    "revealedState": "hidden | revealed"     // resolved by server from review state
+  }
 }
 ```
 
-F5 sends only the card front plus optional learner-provided context. F6 sends aggregate
-evidence (counts, per-category accuracy, due totals, catalog of activities, plan
-constraints) — no question text, no passage content.
+The `acceptedAnswer` field is omitted entirely while `revealedState` is `hidden`. Only
+after the learner reveals the key may the server add `acceptedAnswer`, sourced from the
+Answer Manifest; the key also remains in a server-only verification context. Region blocks are
+resolved to derived question images by an asset resolver; the adapter receives the
+approved image at transmit size, never the Source PDF or a source path. Provider route,
+model, personal-key id, and consent records are backend routing metadata and are not
+forwarded to the external model. The conversation id is also backend-only; only the exact
+prior messages shown in the current send preview are forwarded. The personal-key id is
+used only by the backend to resolve its encrypted credential.
+
+F5 sends only the exact card front, target language, and optional learner-provided
+context. F6 sends the exact aggregate evidence fields (counts, per-category accuracy,
+due totals), activity catalog, and plan constraints — no question text or passage
+content.
 
 ### 4.2 Answer-key authority and verification
 
 - `acceptedAnswer` is injected server-side from the Answer Manifest at request time and
   is **never accepted from client input** for grading purposes. AI output cannot alter
   grading, Raw Accuracy, or any Attempt record (spec: AI never regrades).
+- The server, not the client, resolves whether the answer is hidden. While hidden, it
+  keeps `acceptedAnswer` out of the provider payload and permits only staged hint output.
+  Before any stage is released, a server-side disclosure gate checks for the accepted
+  choice/value and conclusions that directly or unambiguously identify it; ordinary
+  next-step prompts remain allowed. It buffers each stage before streaming and never
+  forwards raw model tokens to the browser. If the gate finds a leak or cannot decide, it
+  discards that stage and uses a reviewed non-AI hint where available; otherwise it
+  returns `answer_withheld`. A later **Show answer** action updates server-owned reveal
+  state; only then may answer-aware explanation content be released.
 - Before the client may display generated content **as verified**, the backend checks:
   (a) for Math, the final value/equation in the worked solution against the accepted
   answer; (b) any "verified against the key" claim, including Desmos-derived
@@ -531,25 +595,57 @@ Spec line 179 asks the design to "Document future AI preview/consent/request/rep
 contracts in the Assistant design only." The request envelope is §4.1; the other three
 are the following design-level payloads (field shapes, not an API implementation):
 
-**Preview payload** — rendered by `POST /assistant/preview` before a flow's first
-request; every field is display-oriented so the learner sees exactly what sharing means:
+**Preview payload** — returned by `POST /assistant/preview` before the first request and
+before each follow-up send. The backend creates a short-lived immutable snapshot with
+the same serializer used for the provider call; after consent or explicit follow-up Send,
+the request consumes that `previewId`. It cannot accept edited content from the client.
+The learner sees exact values, not a category-only summary:
 
 ```jsonc
 {
-  "flow": "question_explanation",
-  "content": [
-    { "kind": "question_text", "summary": "This question's text and answer choices", "approxWords": 250 },
-    { "kind": "response",      "summary": "Your response: B" },
-    { "kind": "question_image", "imageRef": "derived asset ref", "transmitSizePx": [640, 130] }  // only when a region is present
+  "previewId": "short-lived opaque snapshot reference",
+  "flow": "reasoning_steps",
+  "provider": {
+    "route": "shared_gemini", "model": "…", "payer": "Shared AI Access",
+    "priceDisplay": "<current price, currency, billing unit>"  // null for zero-cost routes
+  },
+  "content": {
+    "question": {
+      "revisionRef": "…", "questionRef": "…", "category": "Transition",
+      "presentation": { /* canonical Question Presentation v1, exact text and choices */ },
+      "learnerResponse": "B",
+      "answer": { "state": "hidden", "providerValue": "omitted" }
+      // Once revealed, the preview includes the exact accepted answer if the call will send it.
+    },
+    "conversation": {
+      "currentMessage": null,
+      "priorMessages": []  // exact capped messages; populated in follow-up previews
+    },
+    "locale": "en"
+  },
+  "images": [
+    { "imageRef": "opaque derived-asset ref", "transmitSizePx": [640, 130] }
   ],
   "neverSent": ["Source PDF", "source paths", "account email", "API keys",
-                 "full Test Package", "full Attempt", "diagnostic logs"],
+                 "personal-key id", "full Test Package", "full Attempt", "diagnostic logs"],
   "retention": "visit-scoped unless a Study Note is saved"
 }
 ```
 
-**Consent record** — created by `POST /assistant/consents`; one row per
-(provider, flow, scope), visit-scoped by default (§3.1):
+For F5, `content` shows the exact card front, target language, and selected context. For
+F6, it shows the exact aggregate values, activity catalog, and plan constraints, with no
+question content. The image entry is accompanied in the UI by the actual derived image
+at that transmit size. Backend-only route credentials, consent references, conversation
+ids, and source paths never appear in the provider payload. A follow-up preview shows the
+new learner message and exact prior messages before the learner sends it.
+
+The provider preview's `priceDisplay` is populated from current provider pricing for a
+paid personal-key model, including currency and billing unit; it is null only when no
+provider charge applies to the learner.
+
+**Consent record** — created by `POST /assistant/consents`; one current grant per
+(provider, flow, scope, visit), keyed to the preview snapshot; image grants also bind to
+the exact `imageRef` (§3.1):
 
 ```jsonc
 {
@@ -557,24 +653,37 @@ request; every field is display-oriented so the learner sees exactly what sharin
   "flow": "question_explanation",
   "scope": "text | image",
   "model": "…",                       // the model the consent was shown for
+  "previewId": "the exact preview snapshot approved",
+  "imageRef": "exact derived image ref when scope is image; otherwise null",
   "termsShown": "provider data-use terms version id",
   "grantedAt": "timestamp"
 }
 ```
 
-**Report payload** — assembled by `GET /assistant/report-preview`, submitted by
-`POST /assistant/reports`; the submitted body is byte-for-byte the previewed one (§3.6):
+For a later follow-up, the existing visit grant is valid only for the same provider,
+model, payer, terms, and image scope. The new preview snapshot still requires the
+learner's explicit **Send** action; changed provider or model details require renewed
+consent.
+
+**Report preview and submission** — `POST /assistant/report-preview` returns the exact
+payload and a short-lived `reportPreviewId`. Any learner edit or excerpt deselection
+requests a new preview. `POST /assistant/reports` accepts only that preview reference;
+the server verifies that it belongs to the signed-in learner and visit, then submits the
+stored payload unchanged (§3.6):
 
 ```jsonc
 {
-  "question": { "revisionRef": "…", "questionRef": "…", "category": "…" },
-  "provider": { "route": "…", "model": "…" },
-  "excerpts": [                       // learner-selected; each optional field can be deselected
-    { "role": "assistant", "text": "…" },
-    { "role": "learner", "text": "…" }
-  ],
-  "learnerDescription": "required free text",
-  "createdAt": "timestamp"
+  "reportPreviewId": "short-lived opaque reference",
+  "payload": {
+    "question": { "revisionRef": "…", "questionRef": "…", "category": "…" },
+    "provider": { "route": "…", "model": "…" },
+    "excerpts": [                       // learner-selected; each optional field can be deselected
+      { "role": "assistant", "text": "…" },
+      { "role": "learner", "text": "…" }
+    ],
+    "learnerDescription": "required free text",
+    "createdAt": "timestamp"
+  }
 }
 ```
 
@@ -582,17 +691,18 @@ request; every field is display-oriented so the learner sees exactly what sharin
 
 ### 5.1 Provider routes
 
-- **Shared Gemini** (Shared AI Access, owner-held key, server secret; ADR-0011). The
+- **Shared Gemini** (Shared AI Access, owner-held key, server secret). The
   owner's stated access path changes 30 September 2026 (Vertex AI Model Garden) →
   1 October 2026 (Gemini API key). Because this tranche is design-only, **no Vertex
   adapter is built now**; the AI tranche must confirm the actual billing/credit
   allowance and API tier/quota at enable time — a subscription or key alone does not
   establish free API usage (spec launch gate).
-- **Shared OpenRouter** — explicit choice, its own consent screen, **confirmed
-  zero-cost models only, no paid fallback** (ADR-0011).
-- **Personal key** (ADR-0008) — application-layer-encrypted at rest, referenced by an
-  opaque id in every envelope, never returned in plaintext after save, never logged.
-  May surface paid models only with current price and payer disclosed at selection.
+- **Shared OpenRouter** — an owner-held server secret, explicit learner choice, its own
+  consent screen, **confirmed zero-cost models only, no paid fallback**.
+- **Personal key** — application-layer-encrypted at rest. The backend resolves it through
+  an opaque internal id that is never sent to a provider, returned in plaintext after
+  save, or logged. A paid model is offered only with its current price and payer disclosed
+  at selection.
 
 ### 5.2 At-use capability check
 
@@ -624,6 +734,7 @@ Every AI panel implements one state set; the learner's current work is never los
 | `model_unavailable` / `capability_missing` | Offered models list minus failing ones | Same |
 | `rate_limited` (per-account) | Wait time in plain language | Same |
 | `consent_required` / `image_consent_required` | The relevant consent screen, re-shown | Same |
+| `answer_withheld` | "This step could reveal the answer." Use a reviewed hint or choose Show answer | Current work and previously approved steps |
 | `blocked_content` (validator) | "Something in this request isn't allowed to leave Whitebook." Report-this-bug path | Same |
 | Offline | Panel inert with the offline banner; no queued sends | Same |
 
@@ -657,8 +768,8 @@ fabricates content, and no fallback silently downgrades to another provider (§3
   who served the content; the "Not verified" label is text, not color alone.
 - `prefers-reduced-motion` disables the streaming/entrance animations (DESIGN.md rule).
 - Evidence highlighting uses the indigo-tint family so it is distinguishable from the
-  learner's yellow/pink/cyan Student Highlights (ADR-0006) — AI-suggested evidence is
-  never drawn to look like the learner's own marking.
+  learner's yellow/pink/cyan Student Highlights — AI-suggested evidence is never drawn
+  to look like the learner's own marking.
 
 ---
 
@@ -667,8 +778,8 @@ fabricates content, and no fallback silently downgrades to another provider (§3
 | Ticket-14 criterion | Where satisfied |
 | --- | --- |
 | Annotated desktop + narrow-screen flows covering History explanation, Reasoning Steps, Reading Help, Math + optional Desmos, Flashcard drafting, Study Plan suggestions | §1.1–§1.6 (desktop and narrow screens; F1–F7 map 1:1 to the listed flows) and §1.7 (narrow-screen treatment for Math help, Flashcard drafting, and Study Plan suggestions) |
-| One R&W + one Math example with complete Question Presentation context, progressive hints, evidence anchoring, answer reveal, why wrong choices fail | §2.1, §2.2 (both include the fallback/vision variants and the minimal envelope) |
-| Content preview, provider-specific consent, separate Image Fallback consent, Vietnamese response choice, Study Note saving, report-payload preview, no full-chat persistence | §3.1–§3.6, §6 |
+| One R&W + one Math example with complete Question Presentation context, progressive hints, evidence anchoring, answer reveal, why wrong choices fail | §2.1, §2.2 (both include fallback/vision variants and post-reveal context); §4.2 gates hidden-answer stages |
+| Content preview, provider-specific consent, separate Image Fallback consent, Vietnamese response choice, Study Note saving, report-payload preview, no full-chat persistence | §3.1–§3.6, §4.5 exact preview snapshots, §6 |
 | Backend request/response boundaries, answer-key authority, redaction, model/vision capability checks, quota and error states, consented OpenRouter fallback | §4.1–§4.5, §5.1–§5.4 |
 | No live provider call, secret storage, AI-generated content, or inactive Assistant button in this ticket | §0, §9 (explicit non-goals); nothing in this branch touches `web/src` or backend code |
 
@@ -681,8 +792,9 @@ constraints the AI tranche must honor, not built here.
 ## 9. Explicitly not built by this ticket
 
 1. Any live call to Gemini, Vertex AI, OpenRouter, or any model provider.
-2. Any storage of provider secrets — owner-held or personal (ADR-0008/0011 define the
-   storage decisions; the AI tranche implements them).
+2. Any storage of provider secrets — owner-held keys remain backend secrets and personal
+   keys use the application-layer encryption boundary in §5.1; implementation is for the
+   future AI tranche.
 3. Any AI-generated content in the product, fixtures, or tests.
 4. Any learner-visible Assistant control — including disabled ones. No "Ask AI"
    button, panel, or menu may render from this tranche, in any surface.
@@ -702,3 +814,5 @@ constraints the AI tranche must honor, not built here.
    not hardcoded assumptions.
 5. Every §5.4 state exercised against a real adapter failure; every §4.3 exclusion
    enforced by the envelope validator in tests.
+6. Answer-hidden flows tested against direct and answer-equivalent leakage; the server
+   must withhold unsafe stages and use a reviewed hint or a clear withheld state.
