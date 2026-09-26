@@ -38,6 +38,8 @@ it("shows account data, saves a nickname, renews and clears private state on sig
     throw new Error(`Unexpected route ${path}`);
   }));
   render(<AccountApp />);
+  expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Your study activity" })).toBeTruthy();
   expect(await screen.findByText("Welcome, Learner")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Nickname"), { target: { value: "Sam" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));

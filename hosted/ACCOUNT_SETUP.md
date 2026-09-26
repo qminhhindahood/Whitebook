@@ -1,7 +1,7 @@
 # Ticket 03 staging account setup
 
 Ticket 03 has its own staging Worker and D1 database. It is deployed at
-`https://whitebook-ticket-03-staging.anothermiralph.workers.dev/app`.
+`https://whitebook-ticket-03-staging.anothermiralph.workers.dev/dashboard`.
 No production route or paid binding is configured. The ticket 02 staging Worker
 and D1 database remain separate.
 

@@ -133,8 +133,9 @@ async function content(request: Request, env: Env, meter: Meter, revisionId: str
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (request.method === "GET" && path === "/") return Response.redirect(new URL("/staging", request.url), 302);
-    if (request.method === "GET" && (path === "/app" || path === "/app.html")) {
+    if (request.method === "GET" && (path === "/" || path === "/app" || path === "/app.html"))
+      return new Response(null, { status: 302, headers: { Location: new URL("/dashboard", request.url).toString(), "Cache-Control": "private, no-store" } });
+    if (request.method === "GET" && path === "/dashboard") {
       const asset = await env.ASSETS.fetch(new Request(new URL("/app", request.url), request));
       const headers = new Headers(asset.headers);
       headers.set("Cache-Control", "private, no-store");

@@ -94,6 +94,7 @@ it("creates separate accounts by Google subject, returns to the same account, re
     expect(jar["__Host-wb_oauth"]).toBeTruthy();
     const callback = await call(request(`/api/auth/google/callback?code=${subject}&state=${authorization.searchParams.get("state")}`, jar));
     expect(callback.status).toBe(302);
+    expect(callback.headers.get("location")).toBe(`${origin}/dashboard`);
     expect(callback.headers.get("cache-control")).toContain("no-store");
     const sessionJar = cookies(callback);
     expect(callback.headers.getSetCookie().join(" ")).toMatch(/HttpOnly.*Secure.*SameSite=Lax/);
@@ -146,7 +147,7 @@ it("rejects a forged callback and gives a useful provider failure", async () => 
   const state = new URL(started.headers.get("location")!).searchParams.get("state");
   expect((await call(request("/api/auth/google/callback?code=x&state=wrong", jar))).status).toBe(403);
   const failed = await call(request(`/api/auth/google/callback?code=x&state=${state}`, jar));
-  expect(failed.headers.get("location")).toBe(`${origin}/app?error=google_failed`);
+  expect(failed.headers.get("location")).toBe(`${origin}/dashboard?error=google_failed`);
   expect((await call(request(`/api/auth/google/callback?code=x&state=${state}`, jar))).status).toBe(403);
 });
 

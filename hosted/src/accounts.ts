@@ -148,12 +148,12 @@ async function callback(request: Request, env: AccountEnv, provider: Provider): 
   if (!flow) return failure(403, "invalid_login_state", "Sign-in expired. Start again from Whitebook.");
   const code = url.searchParams.get("code");
   if (url.searchParams.has("error") || !code || code.length > 2048)
-    return new Response(null, { status: 302, headers: { ...noStore, Location: `${env.APP_ORIGIN}/app?error=google_cancelled`, "Set-Cookie": flowCookie("", 0) } });
+    return new Response(null, { status: 302, headers: { ...noStore, Location: `${env.APP_ORIGIN}/dashboard?error=google_cancelled`, "Set-Cookie": flowCookie("", 0) } });
   let identity: Identity;
   try {
     identity = await provider.verify(await provider.exchange(code, flow.code_verifier, env), env.GOOGLE_CLIENT_ID, flow.nonce);
   } catch {
-    return new Response(null, { status: 302, headers: { ...noStore, Location: `${env.APP_ORIGIN}/app?error=google_failed`, "Set-Cookie": flowCookie("", 0) } });
+    return new Response(null, { status: 302, headers: { ...noStore, Location: `${env.APP_ORIGIN}/dashboard?error=google_failed`, "Set-Cookie": flowCookie("", 0) } });
   }
   const now = Math.floor(Date.now() / 1000);
   await env.DB.prepare("INSERT INTO learner_accounts (id, provider, provider_subject, email, display_name, created_at) VALUES (?, 'google', ?, ?, ?, ?) ON CONFLICT(provider_subject) DO UPDATE SET email = excluded.email, display_name = excluded.display_name")
@@ -165,7 +165,7 @@ async function callback(request: Request, env: AccountEnv, provider: Provider): 
   const csrf = randomToken();
   await env.DB.prepare("INSERT INTO learner_sessions (token_hash, account_id, csrf_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
     .bind(await sha256(token), account.id, await sha256(csrf), now + SESSION_SECONDS, now).run();
-  const headers = new Headers({ ...noStore, Location: `${env.APP_ORIGIN}/app` });
+  const headers = new Headers({ ...noStore, Location: `${env.APP_ORIGIN}/dashboard` });
   headers.append("Set-Cookie", sessionCookie(token));
   headers.append("Set-Cookie", csrfCookie(csrf));
   headers.append("Set-Cookie", flowCookie("", 0));

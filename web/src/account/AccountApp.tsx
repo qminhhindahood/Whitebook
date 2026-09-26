@@ -99,20 +99,29 @@ export function AccountApp() {
   }
 
   const loginError = new URLSearchParams(window.location.search).get("error");
-  return <main className="account-shell">
-    <header><strong>Whitebook</strong><span>Personal study workspace</span></header>
+  return <main className={`account-shell${me ? " account-shell--dashboard" : ""}`}>
+    <header className="account-header"><a href="/dashboard" className="account-brand">Whitebook</a><span>Personal study workspace</span></header>
     {loading ? <section className="account-card"><p>Opening your workspace…</p></section> : me ?
-      <section className="account-card">
-        <p className="account-eyebrow">Your private workspace</p>
-        <h1>Welcome, {me.account.nickname || me.account.displayName}</h1>
-        <p>Signed in as {me.account.email}</p>
-        <p>Your account is ready. Personal attempts, cards, notes, scores, and plans start empty.</p>
-        <form onSubmit={saveNickname}>
-          <label htmlFor="nickname">Nickname</label>
-          <div className="account-row"><input id="nickname" maxLength={80} value={nickname} onChange={(event) => setNickname(event.target.value)} /><button disabled={busy}>Save</button></div>
-        </form>
-        <div className="account-actions"><button type="button" disabled={busy} onClick={renew}>Renew session</button><button type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
-      </section> :
+      <div className="dashboard-layout">
+        <section className="dashboard-intro" aria-labelledby="dashboard-heading">
+          <h1 id="dashboard-heading">Dashboard</h1>
+          <p className="dashboard-welcome">Welcome, {me.account.nickname || me.account.displayName}</p>
+          <p>Your private study space follows you across devices.</p>
+        </section>
+        <section className="dashboard-empty" aria-labelledby="activity-heading">
+          <h2 id="activity-heading">Your study activity</h2>
+          <p>Nothing to review yet. Your work will appear here as you study.</p>
+        </section>
+        <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
+          <h2 id="account-heading">Account</h2>
+          <p>Signed in as {me.account.email}</p>
+          <form onSubmit={saveNickname}>
+            <label htmlFor="nickname">Nickname</label>
+            <div className="account-row"><input id="nickname" maxLength={80} value={nickname} onChange={(event) => setNickname(event.target.value)} /><button disabled={busy}>Save</button></div>
+          </form>
+          <div className="account-actions"><button type="button" disabled={busy} onClick={renew}>Renew session</button><button type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
+        </section>
+      </div> :
       <section className="account-card"><h1>Study in your own space</h1><p>Sign in with Google to open your private Whitebook account.</p>{signInReady ? <a className="account-button" href="/api/auth/google/start">Continue with Google</a> : <p role="status">Google sign-in is being set up. Please return later.</p>}</section>}
     {loginError && !me && <p className="account-message" role="alert">{loginError === "google_cancelled" ? "Google sign-in was cancelled. You can try again." : "Google sign-in could not be completed. Please try again."}</p>}
     {message && <p className="account-message" role="status">{message}</p>}

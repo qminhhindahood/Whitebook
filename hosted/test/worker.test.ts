@@ -119,3 +119,15 @@ it("rejects wrong codes and cross-origin login", async () => {
     expect(response.status).toBe(status);
   }
 });
+
+it("opens the hosted Dashboard shell and preserves the old account URL", async () => {
+  const env = environment();
+  const legacy = await worker.fetch(get("/app"), env);
+  expect(legacy.status).toBe(302);
+  expect(legacy.headers.get("location")).toBe("https://staging.example.test/dashboard");
+  const dashboard = await worker.fetch(get("/dashboard"), env);
+  expect(dashboard.status).toBe(200);
+  expect(dashboard.headers.get("cache-control")).toBe("private, no-store");
+  expect(dashboard.headers.get("content-security-policy")).toContain("script-src 'self'");
+  expect(new URL((env.assetFetch.mock.calls[0] as unknown as [Request])[0].url).pathname).toBe("/app");
+});
