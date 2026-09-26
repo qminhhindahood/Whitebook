@@ -1,8 +1,11 @@
 {
-  "name": "whitebook-ticket-02-staging",
+  "name": "whitebook-ticket-03-staging",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-26",
   "workers_dev": true,
+  "vars": {
+    "APP_ORIGIN": "https://whitebook-ticket-03-staging.anothermiralph.workers.dev"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -11,8 +14,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "whitebook-ticket-02-staging",
-      "database_id": "f3429093-d21d-4cf4-9774-c346eec951fc",
+      "database_name": "whitebook-ticket-03-staging",
+      "database_id": "8d8415ec-fc45-4648-8369-598f0c8fa4f1",
       "migrations_dir": "migrations"
     }
   ]

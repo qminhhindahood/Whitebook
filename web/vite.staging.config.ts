@@ -11,7 +11,7 @@ export default defineConfig({
   build: {
     outDir: "../hosted/dist",
     emptyOutDir: true,
-    rollupOptions: { input: "staging.html" },
+    rollupOptions: { input: ["staging.html", "app.html"] },
   },
   plugins: [react()],
 });
