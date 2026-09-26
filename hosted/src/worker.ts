@@ -1,4 +1,5 @@
 import { accountRoute, type AccountEnv } from "./accounts";
+import { satDateRoute } from "./satDates";
 import { cardRoute } from "./cards";
 import { scoresRoute } from "./scores";
 
@@ -150,6 +151,8 @@ export default {
     try {
       const scoresResponse = scoresRoute(request, env);
       if (scoresResponse) return await scoresResponse;
+      const satResponse = satDateRoute(request, env);
+      if (satResponse) return await satResponse;
       const accountResponse = accountRoute(request, env);
       if (accountResponse) return await accountResponse;
       const cardsResponse = cardRoute(request, env);

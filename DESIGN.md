@@ -102,7 +102,8 @@ College Board or any commercial product.
   paired with text.
 
 **The Indigo Rule.** Indigo marks interaction and selection; it is not a
-decorative page background. The only large indigo surfaces are pill buttons.
+decorative page background. The compact SAT countdown banner is the one broad
+indigo dashboard surface; other large indigo surfaces remain pill buttons.
 
 ## Typography
 
@@ -177,7 +178,13 @@ control color transitions, pulsing stage dot while loading. All removed under
 
 - **Don't** copy Bluebook/Bluebooky/College Board logos, wording, or trade
   dress; branding stays "Whitebook" with the authored mark.
-- **Don't** add countdown banners, dated administrations, difficulty labels,
-  or per-question Check buttons — the product has no such data or behavior.
+- **Don't** add countdown banners in the player, difficulty labels, or
+  per-question Check buttons — the product has no such data or behavior. The
+  one exception is the Dashboard's SAT test-date section: a compact live
+  countdown to 8:00 a.m. GMT+7 (Asia/Bangkok) on the learner's chosen official
+  SAT Weekend date. The target time is a dashboard countdown convention, not a
+  claim about the SAT's actual start time; on that date it changes to Test day.
+  This supersedes the earlier blanket
+  no-dated-administrations rule.
 - **Don't** reintroduce the left rail or flat 5px-radius world.
 - **Don't** use emoji or Unicode glyphs as interface icons.

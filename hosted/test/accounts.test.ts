@@ -10,6 +10,7 @@ function dbFixture() {
   const flows = new Map<string, { nonce: string; code_verifier: string; expires_at: number }>();
   return {
     accounts, sessions, flows,
+    async batch() { throw new Error("Unexpected D1 batch"); },
     prepare(sql: string) {
       let args: unknown[] = [];
       return {

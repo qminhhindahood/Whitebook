@@ -30,6 +30,7 @@ function dbFixture() {
   const results = new Map<string, Row>();
   return {
     sessions, results,
+    async batch(): Promise<unknown[]> { throw new Error("Unexpected D1 batch"); },
     prepare(sql: string) {
       let args: unknown[] = [];
       return {

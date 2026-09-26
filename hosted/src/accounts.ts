@@ -8,7 +8,10 @@ type Statement = {
 };
 
 export type AccountEnv = {
-  DB: { prepare(sql: string): Statement };
+  DB: {
+    prepare(sql: string): Statement;
+    batch(statements: Statement[]): Promise<unknown[]>;
+  };
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   APP_ORIGIN?: string;
@@ -64,7 +67,6 @@ function sameOrigin(request: Request, origin: string): boolean {
 }
 
 export type LearnerSession = Session;
-
 export async function currentSession(request: Request, env: AccountEnv): Promise<Session | null> {
   const token = cookie(request, "__Host-wb_session");
   if (!token) return null;

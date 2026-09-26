@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { SatWeekend } from "./SatWeekend";
+import { accountFetch, csrfToken } from "./accountClient";
 import { PersonalCards } from "./PersonalCards";
 import "./cards.css";
 import { ScoresSection } from "./ScoresSection";
@@ -6,14 +8,7 @@ import { ScoresSection } from "./ScoresSection";
 type Account = { id: string; email: string; displayName: string; nickname: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
 
-export function csrfToken(): string {
-  const match = /(?:^|;\s*)__Host-wb_csrf=([a-f0-9]{64})(?:;|$)/.exec(document.cookie);
-  return match?.[1] ?? "";
-}
-
-export async function accountFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(path, { credentials: "same-origin", cache: "no-store", ...init });
-}
+export { accountFetch, csrfToken } from "./accountClient";
 
 export function AccountApp() {
   const [me, setMe] = useState<Me | null>(null);
@@ -103,6 +98,10 @@ export function AccountApp() {
   }
 
   const loginError = new URLSearchParams(window.location.search).get("error");
+  const handleSessionEnded = useCallback(() => {
+    setMe(null);
+    setMessage("Your session ended. Sign in again.");
+  }, []);
   return <main className={`account-shell${me ? " account-shell--dashboard" : ""}`}>
     <header className="account-header"><a href="/dashboard" className="account-brand">Whitebook</a><span>Personal study workspace</span></header>
     {loading ? <section className="account-card"><p>Opening your workspace…</p></section> : me ?
@@ -119,6 +118,7 @@ export function AccountApp() {
         {view === "cards" ?
           <PersonalCards onSessionEnded={() => { setMe(null); setMessage("Your session ended. Sign in again."); }} /> :
           <>
+            <SatWeekend onSessionEnded={handleSessionEnded} />
             <section className="dashboard-empty" aria-labelledby="activity-heading">
               <h2 id="activity-heading">Your study activity</h2>
               <p>Nothing to review yet. Your work will appear here as you study.</p>
