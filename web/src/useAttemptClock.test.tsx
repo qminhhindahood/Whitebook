@@ -100,6 +100,23 @@ it("keeps counting down through a section break", async () => {
   );
   await tickClock(7500);
   expect(result.current.breakRemaining).toBe(592.5);
+  expect(api).not.toHaveBeenCalled();
+});
+
+it("does not charge module elapsed time during a section break", async () => {
+  vi.useFakeTimers();
+  const attempt = {
+    ...baseAttempt,
+    status: "break",
+    remainingSeconds: 0,
+    breakRemainingSeconds: 600,
+    elapsedSeconds: 3840,
+  } as unknown as Attempt;
+  const { result } = renderHook(() =>
+    useAttemptClock(attempt, { update: vi.fn(), fail: vi.fn() }),
+  );
+  await tickClock(7500);
+  expect(result.current.elapsed).toBe(3840);
 });
 
 it("counts elapsed time up for untimed practice between payloads", async () => {

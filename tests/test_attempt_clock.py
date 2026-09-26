@@ -7,6 +7,7 @@ per-second request or write to keep a countdown honest.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,6 +17,7 @@ import pytest
 from tests.test_simulation_engine import FakeClock, publish_full_package
 from whitebook import attempts as attempts_module
 from whitebook.attempts import AttemptEngine, AttemptError
+from whitebook.storage import connect
 
 COUNTDOWN_SECONDS = 600
 
@@ -152,6 +154,67 @@ def test_break_runs_on_the_server_clock_without_per_second_writes(
     clock.advance(10 * 60)
     transitioned = engine.get_attempt(attempt["id"])
     assert transitioned["status"] == "transition"
+
+
+def test_legacy_running_break_expires_at_its_original_deadline(tmp_path: Path):
+    package = publish_full_package(tmp_path)
+    clock = FakeClock()
+    engine = AttemptEngine(tmp_path, clock=clock)
+    gate = engine.prepare(
+        package_id=package["id"],
+        kind="simulation",
+        selection={"calculatorMode": "scientific"},
+    )
+    attempt = engine.begin(gate["setupId"])
+    clock.advance(32 * 60)
+    engine.get_attempt(attempt["id"])
+    engine.continue_after_transition(attempt["id"])
+    clock.advance(32 * 60)
+    running_break = engine.get_attempt(attempt["id"])
+    assert running_break["status"] == "break"
+
+    # Simulate a persisted Attempt from the old per-second tick release.
+    with connect(tmp_path) as connection:
+        state = json.loads(
+            connection.execute(
+                "SELECT state_json FROM attempts WHERE id = ?", (attempt["id"],)
+            ).fetchone()["state_json"]
+        )
+        state["lastTick"] = state.pop("lastAnchorAt")
+        state.pop("moduleDeadlineAt")
+        state.pop("breakDeadlineAt")
+        connection.execute(
+            "UPDATE attempts SET state_json = ? WHERE id = ?",
+            (json.dumps(state), attempt["id"]),
+        )
+        connection.commit()
+
+    clock.advance(10 * 60)
+    expired = engine.get_attempt(attempt["id"])
+    assert expired["status"] == "transition"
+    assert expired["breakRemainingSeconds"] == 0
+
+
+def test_sleeping_tab_cannot_restart_a_break_after_its_deadline(tmp_path: Path):
+    package = publish_full_package(tmp_path)
+    clock = FakeClock()
+    engine = AttemptEngine(tmp_path, clock=clock)
+    gate = engine.prepare(
+        package_id=package["id"],
+        kind="simulation",
+        selection={"calculatorMode": "scientific"},
+    )
+    attempt = engine.begin(gate["setupId"])
+    clock.advance(32 * 60)
+    engine.get_attempt(attempt["id"])
+    engine.continue_after_transition(attempt["id"])
+
+    # The tab sleeps through the second module deadline and the entire break.
+    clock.advance(32 * 60 + 11 * 60)
+    resumed = engine.get_attempt(attempt["id"])
+    assert resumed["status"] == "transition"
+    assert resumed["breakRemainingSeconds"] == 0
+    assert resumed["elapsedSeconds"] == 64 * 60
 
 
 def test_refreshing_reads_cannot_extend_remaining(tmp_path: Path):

@@ -1145,12 +1145,18 @@ class AttemptEngine:
             if deadline is not None and now >= deadline:
                 self._charge(state, now, mode="module")
                 status, result = self._expire_active(row, plan, state)
+                if status == "break" and now >= state["breakDeadlineAt"]:
+                    self._charge(state, now, mode="break")
+                    state["lastAnchorAt"] = None
+                    state["breakDeadlineAt"] = None
+                    status = "transition"
                 self._persist(row, state, status=status, result=result)
         elif status == "break":
             deadline = state.get("breakDeadlineAt")
             if deadline is not None and now >= deadline:
                 self._charge(state, now, mode="break")
                 state["lastAnchorAt"] = None
+                state["breakDeadlineAt"] = None
                 self._persist(row, state, status="transition")
 
     def _charge(self, state: dict, now: float, *, mode: str) -> None:
@@ -1201,10 +1207,17 @@ class AttemptEngine:
         anchor = state.pop("lastTick", None)
         state["lastAnchorAt"] = anchor
         remaining = state.get("remainingSeconds")
+        break_remaining = state.get("breakRemainingSeconds")
         state["moduleDeadlineAt"] = (
-            anchor + remaining if anchor is not None and remaining is not None else None
+            anchor + remaining
+            if anchor is not None and remaining is not None and break_remaining is None
+            else None
         )
-        state["breakDeadlineAt"] = None
+        state["breakDeadlineAt"] = (
+            anchor + break_remaining
+            if anchor is not None and break_remaining is not None
+            else None
+        )
         return state
 
     @staticmethod
@@ -1281,10 +1294,11 @@ class AttemptEngine:
             state["moduleDeadlineAt"] = None
             return "completed", self._grade(plan, state)
         if active_index == 1:
-            now = self._clock.now()
+            break_started_at = state["moduleDeadlineAt"]
             state["breakRemainingSeconds"] = BREAK_SECONDS
-            state["breakDeadlineAt"] = now + BREAK_SECONDS
-            state["lastAnchorAt"] = now
+            state["breakDeadlineAt"] = break_started_at + BREAK_SECONDS
+            state["lastAnchorAt"] = break_started_at
+            state["moduleDeadlineAt"] = None
             return "break", None
         state["lastAnchorAt"] = None
         state["moduleDeadlineAt"] = None

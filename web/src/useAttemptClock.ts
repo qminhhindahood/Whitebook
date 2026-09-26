@@ -54,7 +54,7 @@ export function useAttemptClock(
       remaining: attempt.remainingSeconds,
       breakRemaining: attempt.breakRemainingSeconds,
       elapsed: attempt.elapsedSeconds,
-      running: attempt.lastAnchorAt !== null,
+      running: attempt.status === "active" && attempt.lastAnchorAt !== null,
     };
     syncedEpoch.current = -1;
     setRemaining(attempt.remainingSeconds);
@@ -105,8 +105,12 @@ export function useAttemptClock(
         setElapsed(mark.elapsed + seconds);
       }
       if (
-        (mark.remaining !== null && mark.remaining - seconds <= 0) ||
-        (mark.breakRemaining !== null && mark.breakRemaining - seconds <= 0)
+        (attempt.status === "active" &&
+          mark.remaining !== null &&
+          mark.remaining - seconds <= 0) ||
+        (attempt.status === "break" &&
+          mark.breakRemaining !== null &&
+          mark.breakRemaining - seconds <= 0)
       ) {
         void sync(mark.epoch);
       }

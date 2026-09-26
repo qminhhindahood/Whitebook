@@ -45,3 +45,7 @@ ticket 01 of `whitebook-account-learning-update`:
 - Engine write budget (`tests/test_attempt_clock.py`): 120 one-second idle
   reads produce zero database writes; durable writes occur only on learner
   actions and clock transitions.
+- Break regression checks: idle break display makes zero API requests and does
+  not increase module elapsed time. A read after a sleeping tab crosses both
+  the module and break deadlines moves straight to the next transition; old
+  tick-based break state also retains its original expiry.
