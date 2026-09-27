@@ -24,9 +24,9 @@ def hash_bytes(value):
 def fixture(root):
     root.mkdir()
     titles = [
-        ("August Math", 5), ("August R&W", 5),
-        ("Hardest SAT Math Questions", 10), ("September Math", 4),
-        ("September R&W", 5),
+        ("August Math", 6), ("August R&W", 6),
+        ("Hardest SAT Math Questions", 11), ("September Math", 5),
+        ("September R&W", 6),
     ]
     packages, answers, assets = [], [], []
     for index, (title, source_revision) in enumerate(titles):
@@ -66,6 +66,60 @@ def fixture(root):
 
 
 class PublicationTests(unittest.TestCase):
+    def test_reviewed_v3_bundle_binds_audit_and_image_asset(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            packages = fixture(bundle)
+            manifest = json.loads((bundle / "manifest.json").read_text())
+            asset = manifest["assets"][0]
+            old = bundle / "assets" / asset["revisionId"] / asset["questionId"] / asset["name"]
+            asset["name"] = asset["sha256"] + ".png"
+            old.rename(old.with_name(asset["name"]))
+            for package in packages:
+                question = package["questions"][0]
+                presentation = question["presentation"]
+                presentation.update({"version": 3, "reviewStatus": "reviewed",
+                                     "mode": "image_fallback" if question["reviewStatus"] == "image_fallback" else "reviewed_text"})
+                if question["reviewStatus"] == "image_fallback":
+                    presentation["stem"] = [{"kind": "image_asset", "assetId": asset["sha256"],
+                                             "width": 1, "height": 1, "alt": "Question image"}]
+                else:
+                    presentation["stem"] = [{"kind": "reviewed_text", "runs": [
+                        {"text": "Reviewed question", "emphasis": True}]}]
+                    presentation["choices"][0]["content"] = [{"kind": "latex", "latex": "x^2"}]
+            presentation_bytes = encoded({"packages": packages})
+            (bundle / "presentations.json").write_bytes(presentation_bytes)
+            audit = {"schema": "whitebook.region-migration-results.v1",
+                     "active_source_database_modified_by_this_run": False,
+                     "scope": {"new_active_region_blocks_in_migration_copy": 0,
+                               "answer_rows_match_for_all_banks": True,
+                               "missing_assets": [],
+                               "unique_asset_count": 1,
+                               "total_unique_asset_bytes": asset["byteSize"],
+                               "maximum_asset_bytes": asset["byteSize"]},
+                     "bank_results": [{"new_package_id": package["revisionId"],
+                                       "title": package["title"],
+                                       "source_revision": package["sourceRevision"],
+                                       "new_revision": package["publishedRevision"],
+                                       "answer_rows_match": True, "new_region_blocks": 0,
+                                       "missing_assets": [],
+                                       "asset_count": int(package["revisionId"] == asset["revisionId"]),
+                                       "questions": 1, "owner_source_audit_rows": 1}
+                                      for package in packages]}
+            audit_bytes = encoded(audit)
+            (bundle / "review-audit.json").write_bytes(audit_bytes)
+            manifest.update({"version": 2, "presentationsSha256": hash_bytes(presentation_bytes),
+                             "auditSha256": hash_bytes(audit_bytes)})
+            (bundle / "manifest.json").write_bytes(encoded(manifest))
+            self.assertEqual(publication.prepare(bundle, root / "check", check_only=True), (5, 5, 1))
+            self.assertFalse((root / "check").exists())
+            self.assertEqual(publication.prepare(bundle, root / "prepared"), (5, 5, 1))
+            self.assertNotIn("review-audit.json", (root / "prepared/publication.sql").read_text())
+            (bundle / "review-audit.json").write_bytes(audit_bytes + b" ")
+            with self.assertRaisesRegex(ValueError, "Hash mismatch for review-audit"):
+                publication.prepare(bundle, root / "invalid")
+
     def test_hash_checked_retry_and_interrupted_import(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

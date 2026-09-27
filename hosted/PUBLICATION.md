@@ -1,60 +1,65 @@
 # Curated Library publication (ticket 04)
 
-The owner prepares a reviewed bundle outside this repository. `manifest.json`,
-`presentations.json`, `answers.json`, and `assets/<revisionId>/<questionId>/<name>`
-are the only inputs. The manifest has `version: 1`, a stable `releaseId`,
-`kind: "curated"`, SHA-256 hashes of the two JSON files, and an `assets` array.
-Each asset entry has `revisionId`, `questionId`, `name`, `sha256`, and `byteSize`.
-The five package records in `presentations.json` use the exact source title and
-revision set from the account learning spec. Each question carries an explicit
-`reviewStatus` (`reviewed_text` or `image_fallback`) and a version 1 presentation.
-`sourceQuestionId` records its identity in the owner-reviewed source;
-`questionId` is the immutable published identity used by learner reads.
-`answers.json` has one `{revisionId, questionId, acceptedAnswers}` row per
-question. Asset blocks refer to `/content/<revisionId>/<questionId>/<name>`.
-Only PNG, WebP, and JPEG question visuals are accepted. Raw PDF files, region
-blocks, source paths, extra fields, missing answers, and unlisted visuals fail
-validation. The importer never copies `answers.json` into web assets.
+The five reviewed revisions are exported from the isolated migration copy described in
+`docs/region-reference-reduction/region-migration-results.json` in the separate
+region-reduction worktree. Its active source database was not modified. The revisions
+are August R&W 7, September R&W 7, August Math 7, Hardest SAT Math Questions 12,
+and September Math 6. They contain 1,152 questions, no PDF region blocks, and
+2,272 visual references to 2,168 hash-checked PNGs. The export and prepared import
+are private owner artifacts; neither belongs in `dist/` or Git.
 
-From `hosted/`, on an owner-controlled machine:
+## Prepare the private bundle
 
-1. Run `npm run build` and `npx wrangler d1 migrations apply DB --remote` on a
-   dedicated staging deployment. Review the bundle before continuing.
-2. Run `python scripts/prepare-publication.py <bundle-directory> .publication/release`.
-   Use an empty output directory. The command verifies hashes and completeness
-   before it writes `publication.sql` and `assets/content/...`.
-3. Copy `.publication/release/assets/content` into `dist/content`, then deploy
-   the staging Worker. Confirm the new assets exist via the Worker route only;
-   without a release entitlement, that route returns an unavailable response.
-4. Execute `.publication/release/publication.sql` against the staging D1 using
-   `wrangler d1 execute DB --remote --file <absolute-sql-path>`. The final SQL
-   statement moves the single active release pointer after all rows have been
-   inserted. Retry the same SQL after an interruption. Query
-   `SELECT release_id FROM active_publication WHERE slot = 1` and verify it
-   equals the intended release ID before treating publication as complete.
-5. Sign in with a fresh Google Learner Account and inspect `/api/library`, a
-   question in each section, and an Image Fallback visual. Inspect network
-   responses for PDF bytes/URLs, original paths, and accepted answers. Test a
-   second account and a direct, unentitled visual URL.
+On an owner-controlled machine, from the repository root:
 
-The SQL file includes the server-held answer key. Keep `.publication/` private;
-it is ignored by Git and must never be placed under `dist/`. The release pointer
-can be restored to a prior imported release without editing immutable question
-or answer rows. Activation also records a release in the same database statement,
-so previously active curated revisions remain readable while interrupted imports
-stay invisible. Active Attempts must reference their revision ID when ticket 05
-adds hosted Attempt storage. This ticket does not activate an unprovided bundle
-or deploy production.
+```powershell
+python hosted/scripts/export-reviewed-copy.py <isolated-data-root> <region-migration-results.json> hosted/.publication/bundle
+python hosted/scripts/prepare-publication.py hosted/.publication/bundle hosted/.publication/prepared
+```
 
-## Source audit on 2026-09-26
+Use new, empty output directories. Both commands accept `--check-only` to validate
+without writing output. The exporter opens `whitebook.sqlite3` read-only, checks
+the five revision identities, question order, unchanged answer-row hashes, zero
+regions, source audit, image links, dimensions, bytes, and SHA-256 values. It
+exports only derived PNGs and learner presentation metadata to the bundle, with
+accepted answers in a separate `answers.json`. The version 2 manifest binds the
+presentation, answers, and review audit by SHA-256. The importer rechecks every
+asset and the audit inventory before writing SQL and protected static assets.
 
-The local owner database at `D:/Notion/UI/data/whitebook.sqlite3` contains the
-five specified source revisions (1,152 questions). Their current presentation
-blocks are still PDF-dependent: Hardest Math revision 10 has 765 `region`
-blocks, August R&W revision 5 has 1,524, August Math revision 5 has 805,
-September R&W revision 5 has 1,308, and September Math revision 4 has 1,138.
-That is 5,540 region blocks. Some newer local revisions contain partial text,
-LaTeX, or reviewed text, but they are not the five-package, PDF-free publication
-bundle. The importer correctly rejects these source presentations. Activation
-and the authenticated real-bundle browser journey await the separate reviewed
-Question Presentation export.
+`hosted/.publication/prepared/publication.sql` contains the answer key. Keep the
+entire `.publication/` directory private. Never copy the bundle JSON or SQL into
+`dist/`; copy only `prepared/assets/content/*` to `dist/content/` after a build.
+
+## Activate in staging
+
+1. From `hosted/`, run `npm run build` and `npx wrangler d1 migrations apply DB
+   --remote` against a dedicated staging Worker/D1.
+2. Copy `prepared/assets/content/*` into `dist/content/`, then deploy the staging
+   Worker. Confirm an unentitled direct content URL is unavailable.
+3. Execute the prepared SQL in staging with `wrangler d1 execute DB --remote
+   --file <absolute-publication-sql-path>`.
+4. Query `SELECT release_id FROM active_publication WHERE slot = 1`. It must be
+   `reviewed-five-20260927`. Sign in with a fresh Google Learner Account and
+   inspect all five library entries, Reading and Writing text, Math typeset
+   choices, and Image Fallback visuals. Check responses for PDF URLs/bytes,
+   source paths, and accepted answers. Check a second account and an unentitled
+   visual URL.
+
+The SQL inserts immutable rows with `INSERT OR IGNORE`, then moves the single
+active pointer in its final guarded statement. An interrupted import leaves the
+previous active release visible. Retrying the same SQL is safe; a conflicting
+revision or answer row fails the final guard and cannot activate. Prior revision
+rows remain readable for references from Attempts. The importer does not edit the
+active source database.
+
+## Local verification on 2026-09-27
+
+The real bundle exported and imported into a disposable local D1 copy. The copy
+had five revisions, 1,152 questions, 1,152 answer rows, and 2,272 protected
+visual paths. A local authenticated LearnerSession browsed the five revisions and
+opened representative August R&W Image Fallback, September R&W selectable text,
+and Math image and KaTeX questions. A second local account listed the same five
+revisions. Direct requests returned 401 for an anonymous visual, 404 for an
+unlisted visual and a raw static path, and 200 for a listed, entitled visual.
+This is a local browser check; it does not replace staging Google OAuth
+verification or deploy production.

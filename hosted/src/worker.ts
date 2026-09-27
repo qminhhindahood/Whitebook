@@ -19,7 +19,7 @@ type Env = AccountEnv & {
 
 const QUESTION_PATH = /^\/api\/staging\/questions\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)$/;
 const CONTENT_PATH = /^\/content\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+\.svg)$/;
-const PUBLIC_ASSET_PATH = /^\/assets\/[A-Za-z0-9_-]+\.(?:js|css)$/;
+const PUBLIC_ASSET_PATH = /^\/assets\/[A-Za-z0-9_-]+\.(?:js|css|woff2?|ttf)$/;
 const SESSION_SECONDS = 30 * 60;
 type Meter = { rowsRead: number; rowsWritten: number };
 
@@ -144,7 +144,7 @@ export default {
       const asset = await env.ASSETS.fetch(new Request(new URL("/app", request.url), request));
       const headers = new Headers(asset.headers);
       headers.set("Cache-Control", "private, no-store");
-      headers.set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+      headers.set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
       return new Response(asset.body, { status: asset.status, headers });
     }
     if (request.method === "GET" && (path === "/staging" || path === "/staging.html" || PUBLIC_ASSET_PATH.test(path)))

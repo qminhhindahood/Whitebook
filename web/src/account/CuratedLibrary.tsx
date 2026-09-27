@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
-import { AnswerChoices, QuestionContent } from "../QuestionContent";
-import type { QuestionPresentation } from "../types";
+import { useEffect, useRef, useState } from "react";
+import { HostedBlocks, HostedChoices, type HostedPresentationData } from "./HostedPresentation";
 
 type Package = { revisionId: string; title: string; publishedRevision: number; questionCount: number };
 type QuestionLink = { questionId: string; ordinal: number; section: string; module: number; questionNumber: number };
-type Question = QuestionLink & { revisionId: string; responseType: string; presentation: QuestionPresentation };
+type Question = QuestionLink & { revisionId: string; responseType: string; presentation: HostedPresentationData };
 
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(path, { credentials: "same-origin", cache: "no-store" });
@@ -13,6 +12,7 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export function CuratedLibrary({ onSessionEnded }: { onSessionEnded: () => void }) {
+  const requestToken = useRef(0);
   const [packages, setPackages] = useState<Package[]>([]);
   const [revision, setRevision] = useState<string | null>(null);
   const [links, setLinks] = useState<QuestionLink[]>([]);
@@ -34,21 +34,24 @@ export function CuratedLibrary({ onSessionEnded }: { onSessionEnded: () => void 
   }, []);
 
   async function openPackage(id: string) {
+    const token = ++requestToken.current;
     setRevision(id); setQuestion(null); setLinks([]); setError(""); setLoading(true);
     try {
       const data = await get<{ questions: QuestionLink[] }>(`/api/library/${id}/questions`);
+      if (token !== requestToken.current) return;
       setLinks(data.questions);
-      if (data.questions.length) await openQuestion(id, data.questions[0].questionId);
-    } catch (cause) { setError((cause as Error).message); }
-    finally { setLoading(false); }
+      if (data.questions.length) await openQuestion(id, data.questions[0].questionId, token);
+    } catch (cause) { if (token === requestToken.current) setError((cause as Error).message); }
+    finally { if (token === requestToken.current) setLoading(false); }
   }
 
-  async function openQuestion(id: string, questionId: string) {
+  async function openQuestion(id: string, questionId: string, packageToken?: number) {
+    const token = packageToken ?? ++requestToken.current;
     setQuestion(null); setSelected(undefined); setEliminated([]); setEntry(""); setError("");
     try {
       const data = await get<Question>(`/api/library/${id}/questions/${questionId}`);
-      setQuestion(data);
-    } catch (cause) { setError((cause as Error).message); }
+      if (token === requestToken.current) setQuestion(data);
+    } catch (cause) { if (token === requestToken.current) setError((cause as Error).message); }
   }
 
   return <section className="curated-library" aria-labelledby="library-heading">
@@ -72,10 +75,10 @@ export function CuratedLibrary({ onSessionEnded }: { onSessionEnded: () => void 
     </div>}
     {question && <article className="curated-library__question" aria-label="Question Presentation">
       <h3>{question.section} · Question {question.questionNumber}</h3>
-      <QuestionContent blocks={question.presentation.stimulus} document={null} />
-      <QuestionContent blocks={question.presentation.stem} document={null} />
+      <HostedBlocks blocks={question.presentation.stimulus} revisionId={question.revisionId} questionId={question.questionId} />
+      <HostedBlocks blocks={question.presentation.stem} revisionId={question.revisionId} questionId={question.questionId} />
       {question.responseType === "multiple_choice" ?
-        <AnswerChoices presentation={question.presentation} document={null} questionId={question.questionId}
+        <HostedChoices presentation={question.presentation} revisionId={question.revisionId} questionId={question.questionId}
           selected={selected} eliminated={eliminated} onSelect={setSelected}
           onEliminate={(id) => setEliminated((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])} /> :
         <label>Enter your answer<input value={entry} onChange={(event) => setEntry(event.target.value)} /></label>}
