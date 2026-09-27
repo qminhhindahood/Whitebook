@@ -9,6 +9,7 @@ type Timing =
   | { mode: "custom"; durationSeconds: number }
   | { mode: "sat_paced" };
 type AttemptConfig = {
+  kind?: "practice" | "section_exam";
   section: Section;
   modules: number[];
   count: number;
@@ -79,6 +80,21 @@ async function bodyObject(request: Request): Promise<Record<string, unknown> | R
 
 function parseConfig(value: Record<string, unknown>): AttemptConfig | Response {
   const section = value.section;
+  const kind = value.kind;
+  if (kind === "section_exam") {
+    if (section !== "Math" && section !== "Reading and Writing")
+      return failure(400, "invalid_attempt", "Choose a supported Section: Math or Reading and Writing.");
+    return {
+      kind,
+      section,
+      modules: [1, 2],
+      count: section === "Math" ? 44 : 54,
+      ordering: "random",
+      timing: { mode: "sat_paced" },
+    };
+  }
+  if (kind !== undefined && kind !== "practice")
+    return failure(400, "invalid_attempt", "Choose a supported Attempt kind.");
   const modules = value.modules;
   const count = value.count;
   const ordering = value.ordering;
@@ -107,6 +123,7 @@ function parseConfig(value: Record<string, unknown>): AttemptConfig | Response {
   }
 
   return {
+    kind: "practice",
     section,
     modules: [...modules] as number[],
     count: Number(count),
@@ -218,14 +235,25 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
   if (!(await hasPackageEntitlement(env, accountId, revisionId)))
     return failure(404, "not_found", "This Test Package is unavailable.");
 
+  const sectionExam = config.kind === "section_exam";
   const placeholders = config.modules.map(() => "?").join(", ");
-  const candidates = await rows<QuestionRow>(env.DB.prepare("SELECT question_id, ordinal, section, module, " +
-      "question_number, response_type, presentation_json FROM publication_questions " +
-      "WHERE revision_id = ? AND section = ? AND module IN (" + placeholders + ") ORDER BY ordinal")
-    .bind(revisionId, config.section, ...config.modules));
-  if (config.count > candidates.length)
-    return failure(400, "invalid_attempt", "The selected question count exceeds this Section and Module selection.");
-  if (config.timing.mode === "sat_paced" &&
+  const candidates = sectionExam
+    ? await rows<QuestionRow>(env.DB.prepare("SELECT question_id, ordinal, section, module, " +
+        "question_number, response_type, presentation_json FROM publication_questions " +
+        "WHERE revision_id = ? AND section = ? ORDER BY ordinal")
+      .bind(revisionId, config.section))
+    : await rows<QuestionRow>(env.DB.prepare("SELECT question_id, ordinal, section, module, " +
+        "question_number, response_type, presentation_json FROM publication_questions " +
+        "WHERE revision_id = ? AND section = ? AND module IN (" + placeholders + ") ORDER BY ordinal")
+      .bind(revisionId, config.section, ...config.modules));
+  const eligible = sectionExam
+    ? [...new Map(candidates.map((question) => [question.question_id, question])).values()]
+    : candidates;
+  if (config.count > eligible.length)
+    return failure(400, "invalid_attempt", sectionExam
+      ? `This Section needs at least ${config.count} unique questions to create a Section Exam.`
+      : "The selected question count exceeds this Section and Module selection.");
+  if (!sectionExam && config.timing.mode === "sat_paced" &&
       (config.modules.length !== 1 ||
        !((config.section === "Math" && config.count === 22) ||
          (config.section === "Reading and Writing" && config.count === 27)) ||
@@ -233,9 +261,10 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
     return failure(400, "invalid_attempt", "SAT-Paced Timing requires one complete Module.");
   }
 
-  const selected = config.ordering === "random" ? shuffle(candidates).slice(0, config.count)
+  const selected = config.ordering === "random" ? shuffle(eligible).slice(0, config.count)
     : candidates.slice(0, config.count);
-  const questions: QuestionLink[] = selected.map((question) => {
+  const moduleSize = config.section === "Math" ? 22 : 27;
+  const questions: QuestionLink[] = selected.map((question, index) => {
     const presentation = JSON.parse(question.presentation_json) as { choices?: { id?: unknown }[] };
     const choiceIds = Array.isArray(presentation.choices) ? presentation.choices.flatMap((choice) =>
       typeof choice.id === "string" && /^[A-D]$/.test(choice.id) ? [choice.id] : []) : [];
@@ -243,7 +272,7 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
       questionId: question.question_id,
       ordinal: question.ordinal,
       section: question.section,
-      module: question.module,
+      module: sectionExam ? Math.floor(index / moduleSize) + 1 : question.module,
       questionNumber: question.question_number,
       responseType: question.response_type,
       choiceIds,
@@ -254,11 +283,16 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
     return failure(503, "attempt_unavailable", "Whitebook could not prepare this Attempt. Try again.");
 
   const id = crypto.randomUUID();
-  const state = { responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: questionIds[0] };
+  const state = sectionExam
+    ? { phase: "module", activeModule: 1, lockedModules: [], responses: {}, markedQuestionIds: [],
+        eliminatedChoices: {}, currentQuestionId: questionIds[0], remainingSeconds: null, pausedPhase: null,
+        calculatorState: null, questionElapsedMs: {} }
+    : { responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: questionIds[0] };
   const result = await env.DB.prepare("INSERT INTO learner_attempts " +
       "(id, account_id, revision_id, kind, status, config_json, questions_json, state_json, state_version, created_at_ms) " +
-      "VALUES (?, ?, ?, 'practice', 'preparing', ?, ?, ?, 0, ?)")
-    .bind(id, accountId, revisionId, JSON.stringify(config), JSON.stringify(questions), JSON.stringify(state), now).run();
+      "VALUES (?, ?, ?, ?, 'preparing', ?, ?, ?, 0, ?)")
+    .bind(id, accountId, revisionId, sectionExam ? "section_exam" : "practice", JSON.stringify(config),
+      JSON.stringify(questions), JSON.stringify(state), now).run();
   if (!result.success || result.meta.changes !== 1)
     return failure(503, "attempt_unavailable", "Whitebook could not create this Attempt. Try again.");
 

@@ -31,19 +31,52 @@ async function fixture() {
     token_hash: await sha256(item.token), csrf_hash: await sha256(item.csrf),
     account_id: item.accountId, expires_at: Math.floor(Date.now() / 1000) + 3600,
   });
-  const questions: QuestionRow[] = [1, 2, 3].map((n) => ({
+  const practiceQuestions: QuestionRow[] = [1, 2, 3].map((n) => ({
     revision_id: "reviewed-rw", question_id: `q${n}`, ordinal: n,
     section: "Reading and Writing", module: n === 3 ? 2 : 1,
     question_number: n, response_type: "multiple_choice",
     presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Question ${n}` }],
       choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
   }));
+  const sectionExamQuestions: QuestionRow[] = [
+    ...Array.from({ length: 44 }, (_, index) => ({
+      revision_id: "reviewed-math", question_id: `math-q${index + 1}`, ordinal: index + 1,
+      section: "Math" as const, module: 1, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Math question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+    ...Array.from({ length: 54 }, (_, index) => ({
+      revision_id: "reviewed-math", question_id: `cross-rw-q${index + 1}`, ordinal: index + 45,
+      section: "Reading and Writing" as const, module: 2, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Other Section question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+    ...Array.from({ length: 54 }, (_, index) => ({
+      revision_id: "reviewed-rw-exam", question_id: `rw-exam-q${index + 1}`, ordinal: index + 1,
+      section: "Reading and Writing" as const, module: 2, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Reading question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+    ...Array.from({ length: 43 }, (_, index) => ({
+      revision_id: "reviewed-short-math", question_id: `short-math-q${index + 1}`, ordinal: index + 1,
+      section: "Math" as const, module: 1, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Short pool question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+    ...Array.from({ length: 44 }, (_, index) => ({
+      revision_id: "reviewed-duplicate-math", question_id: `duplicate-math-q${Math.min(index + 1, 43)}`, ordinal: index + 1,
+      section: "Math" as const, module: 1, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Duplicate pool question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+  ];
+  const questions: QuestionRow[] = [...practiceQuestions, ...sectionExamQuestions];
   const answers = questions.map((question, index) => ({
     question_id: question.question_id,
     accepted_answers_json: JSON.stringify([index === 1 ? "A" : "B"]),
   }));
   const attempts = new Map<string, AttemptRow>();
-  const publicRevisions = new Set(["reviewed-rw"]);
+  const publicRevisions = new Set(["reviewed-rw", "reviewed-math", "reviewed-rw-exam", "reviewed-short-math", "reviewed-duplicate-math"]);
   const privateEntitlements = new Set(["learner-a:private-rw"]);
   const db = {
     async batch() { throw new Error("Unexpected D1 batch"); },
@@ -73,7 +106,9 @@ async function fixture() {
             const revisionId = String(args[0]);
             const section = String(args[1]);
             const modules = args.slice(2).map(Number);
-            const rows = questions.filter((row) => row.revision_id === revisionId && row.section === section && modules.includes(row.module));
+            const filtersModules = sql.includes("module IN (");
+            const rows = questions.filter((row) => row.revision_id === revisionId && row.section === section &&
+              (!filtersModules || modules.includes(row.module)));
             return { results: rows, meta: { rows_read: rows.length, rows_written: 0 } };
           }
           if (sql.includes("FROM learner_attempts")) {
@@ -88,10 +123,10 @@ async function fixture() {
         },
         async run() {
           if (sql.includes("INSERT INTO learner_attempts")) {
-            const [id, accountId, revisionId, configJson, questionsJson, stateJson, createdAt] = args;
+            const [id, accountId, revisionId, kind, configJson, questionsJson, stateJson, createdAt] = args;
             attempts.set(String(id), {
               id: String(id), account_id: String(accountId), revision_id: String(revisionId),
-              kind: "practice", status: "preparing", config_json: String(configJson),
+              kind: String(kind), status: "preparing", config_json: String(configJson),
               questions_json: String(questionsJson), state_json: String(stateJson), state_version: 0,
               created_at_ms: Number(createdAt), started_at_ms: null, deadline_at_ms: null,
               completed_at_ms: null, result_json: null, editor_token_hash: null,
@@ -180,6 +215,92 @@ async function fixture() {
   }
   return { env, credentials, attempts, call };
 }
+
+it.each([
+  ["Math", "reviewed-math", 44, 22],
+  ["Reading and Writing", "reviewed-rw-exam", 54, 27],
+] as const)("creates a %s Section Exam with two unique generated Modules", async (section, revisionId, total, perModule) => {
+  const { credentials, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId, kind: "section_exam", section },
+  });
+
+  expect(response.status).toBe(201);
+  const created = await response.json() as {
+    kind: string; status: string; questions: { questionId: string; module: number }[];
+    state: Record<string, unknown>;
+  };
+  expect(created).toMatchObject({ kind: "section_exam", status: "preparing" });
+  expect(created.questions).toHaveLength(total);
+  expect(new Set(created.questions.map((question) => question.questionId)).size).toBe(total);
+  expect(created.questions.filter((question) => question.module === 1)).toHaveLength(perModule);
+  expect(created.questions.filter((question) => question.module === 2)).toHaveLength(perModule);
+  expect(created.state).toMatchObject({ phase: "module", activeModule: 1, lockedModules: [] });
+  expect(JSON.stringify(created)).not.toMatch(/acceptedAnswers|answerKey|correctAnswer/);
+});
+
+it("allows later Section Exam Attempts to select questions used by an earlier Attempt", async () => {
+  const { credentials, call } = await fixture();
+  const create = () => call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-math", kind: "section_exam", section: "Math" },
+  });
+  const firstResponse = await create();
+  const secondResponse = await create();
+  expect(firstResponse.status).toBe(201);
+  expect(secondResponse.status).toBe(201);
+  const first = await firstResponse.json() as { questionIds: string[] };
+  const second = await secondResponse.json() as { questionIds: string[] };
+  expect(new Set(first.questionIds)).toEqual(new Set(second.questionIds));
+});
+
+it("rejects unsupported Section Exam Sections with an actionable validation error", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-math", kind: "section_exam", section: "Science" },
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { message: expect.stringMatching(/supported Section/i) } });
+  expect(attempts.size).toBe(0);
+});
+
+it("rejects a Section Exam pool below the required question count", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-short-math", kind: "section_exam", section: "Math" },
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { message: expect.stringMatching(/44.*question|question.*44/i) } });
+  expect(attempts.size).toBe(0);
+});
+
+it("rejects a Section Exam pool whose rows repeat question identities", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-duplicate-math", kind: "section_exam", section: "Math" },
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { message: expect.stringMatching(/44.*question|question.*44/i) } });
+  expect(attempts.size).toBe(0);
+});
+
+it("checks package entitlement before creating a Section Exam", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[1],
+    body: { revisionId: "private-rw", kind: "section_exam", section: "Reading and Writing" },
+  });
+
+  expect(response.status).toBe(404);
+  expect(attempts.size).toBe(0);
+});
 
 it("requires same-origin CSRF protection for Attempt creation", async () => {
   const { credentials, call } = await fixture();
