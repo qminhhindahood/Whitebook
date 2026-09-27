@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import type { HostedBlock, HostedPresentationData } from "./HostedPresentation";
 import { HostedAttempt } from "./HostedAttempt";
+import { DesmosReadinessProbe, loadDesmos } from "../calculator";
 
 type Package = { revisionId: string; title: string; publishedRevision: number; questionCount: number };
 export type QuestionLink = {
@@ -13,7 +14,7 @@ export type PresentationQuestion = QuestionLink & {
 };
 export type AttemptSnapshot = {
   attemptId: string; revisionId: string; status: "preparing" | "active" | "completed" | "expired";
-  section: string; modules: number[]; questionIds: string[]; questions: QuestionLink[];
+  kind?: "practice" | "section_exam"; section: string; modules: number[]; questionIds: string[]; questions: QuestionLink[];
   state: Record<string, unknown>; stateVersion: number; createdAt?: number; startedAt: number | null;
   deadlineAt: number | null; serverNow?: number; completedAt?: number | null;
   editorToken?: string; lease?: { held: boolean; expiresAt: number | null };
@@ -80,6 +81,25 @@ export async function loadSelectedContent(snapshot: AttemptSnapshot): Promise<Pr
   return presentations;
 }
 
+async function prepareReferenceSheet(): Promise<void> {
+  const sheet = await accountFetch("/api/math/reference-sheet.png", { method: "GET", credentials: "same-origin", cache: "no-store" });
+  if (!sheet.ok) throw new Error("The Math Reference Sheet could not be loaded. The timer has not started. Retry loading.");
+  const sheetBlob = await sheet.blob();
+  if (!sheetBlob.size || (sheetBlob.type && sheetBlob.type !== "image/png"))
+    throw new Error("The Math Reference Sheet could not be decoded. The timer has not started. Retry loading.");
+  if (typeof createImageBitmap === "function") {
+    const decoded = await createImageBitmap(sheetBlob); decoded.close();
+  } else {
+    await new Promise<void>((resolve, reject) => {
+      const image = new Image();
+      const objectUrl = URL.createObjectURL(sheetBlob);
+      image.onload = () => { URL.revokeObjectURL(objectUrl); resolve(); };
+      image.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("The Math Reference Sheet could not be decoded. The timer has not started. Retry loading.")); };
+      image.src = objectUrl;
+    });
+  }
+}
+
 function selectedPool(questions: QuestionLink[], section: string, modules: number[]) {
   return questions.filter((question) => question.section === section && modules.includes(question.module));
 }
@@ -93,6 +113,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
   const [modules, setModules] = useState<number[]>([]);
   const [count, setCount] = useState("1");
   const [ordering, setOrdering] = useState<"source" | "random">("source");
+  const [sectionExam, setSectionExam] = useState(false);
   const [timing, setTiming] = useState<TimingMode>("elapsed");
   const [durationSeconds, setDurationSeconds] = useState("1800");
   const [loading, setLoading] = useState(true);
@@ -104,6 +125,9 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
   const [preparingAttemptId, setPreparingAttemptId] = useState("");
   const [activeAttempt, setActiveAttempt] = useState<AttemptSnapshot | null>(null);
   const [activeQuestions, setActiveQuestions] = useState<PresentationQuestion[]>([]);
+  const [desmosScriptUrl, setDesmosScriptUrl] = useState<string | null>(null);
+  const [calculatorProbeUrl, setCalculatorProbeUrl] = useState("");
+  const calculatorProbeResolver = useRef<((ready: boolean) => void) | null>(null);
 
   const sections = useMemo(() => [...new Set(questions.map((question) => question.section))], [questions]);
   const availableModules = useMemo(() => [...new Set(questions.filter((question) => question.section === section)
@@ -180,6 +204,26 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
     setLoadError(""); setLoadMessage("Loading selected questions and visuals…");
     try {
       const prepared = await loadSelectedContent(snapshot);
+      if (snapshot.kind === "section_exam" && snapshot.section === "Math") {
+        setLoadMessage("Preparing the Math calculator and Reference Sheet…");
+        const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
+        let readyScriptUrl: string | null = null;
+        if (calculator.scriptUrl) {
+          await loadDesmos(calculator.scriptUrl);
+          const ready = await new Promise<boolean>((resolve) => {
+            calculatorProbeResolver.current = resolve;
+            setCalculatorProbeUrl(calculator.scriptUrl!);
+            window.setTimeout(() => {
+              if (calculatorProbeResolver.current === resolve) {
+                calculatorProbeResolver.current = null; setCalculatorProbeUrl(""); resolve(false);
+              }
+            }, 26_000);
+          });
+          if (ready) readyScriptUrl = calculator.scriptUrl;
+        }
+        await prepareReferenceSheet();
+        setDesmosScriptUrl(readyScriptUrl);
+      }
       if (snapshot.status !== "preparing") {
         setActiveQuestions(prepared);
         setActiveAttempt(snapshot);
@@ -213,10 +257,10 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
       return;
     setBuilding(true); setGeneralError(""); setLoadError("");
     try {
-      const created = await request<AttemptSnapshot>("/api/attempts", mutation({
-        revisionId, section, modules, count: Number(count), ordering,
-        timing: timing === "custom" ? { mode: "custom", durationSeconds: Number(durationSeconds) } : { mode: timing },
-      }));
+      const created = await request<AttemptSnapshot>("/api/attempts", mutation(sectionExam
+        ? { revisionId, kind: "section_exam", section }
+        : { revisionId, section, modules, count: Number(count), ordering,
+          timing: timing === "custom" ? { mode: "custom", durationSeconds: Number(durationSeconds) } : { mode: timing } }));
       await openLoadingGate(created);
     } catch (cause: unknown) {
       setGeneralError(cause instanceof Error ? cause.message : "Practice Attempt could not be created. Try again.");
@@ -248,6 +292,12 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
       }
       setLoadMessage("Loading this Attempt and its visuals…");
       const prepared = await loadSelectedContent(snapshot);
+      if (snapshot.kind === "section_exam" && snapshot.section === "Math") {
+        const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
+        if (calculator.scriptUrl) await loadDesmos(calculator.scriptUrl);
+        setDesmosScriptUrl(calculator.scriptUrl);
+        await prepareReferenceSheet();
+      }
       setActiveQuestions(prepared);
       setActiveAttempt(snapshot);
       setLoadMessage("");
@@ -264,20 +314,31 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
       : item));
   }, []);
 
-  if (activeAttempt) return <HostedAttempt initial={activeAttempt} questions={activeQuestions}
+  if (activeAttempt) return <HostedAttempt initial={activeAttempt} questions={activeQuestions} desmosScriptUrl={desmosScriptUrl}
     packageTitle={packages.find((item) => item.revisionId === activeAttempt.revisionId)?.title ?? "Reviewed Test Package"}
     onSessionEnded={onSessionEnded} onExit={() => { setActiveAttempt(null); setActiveQuestions([]); }}
     onSnapshotChange={handleSnapshotChange} />;
 
   return <section className="practice-area" aria-labelledby="practice-heading">
+    {calculatorProbeUrl && <div className="practice-loading" role="status">
+      <p>Checking graphing calculator readiness; the scientific calculator remains available if it cannot be verified.</p>
+      <DesmosReadinessProbe options={{ expressions: true, settingsMenu: false }} onResult={(checks) => {
+        const resolver = calculatorProbeResolver.current;
+        if (resolver) { calculatorProbeResolver.current = null; setCalculatorProbeUrl(""); resolver(Object.values(checks).every(Boolean)); }
+      }} />
+    </div>}
     <header className="practice-area__heading"><div><h2 id="practice-heading">Practice</h2>
       <p>Build one focused Attempt from a reviewed Test Package. Your work stays with your account.</p></div></header>
     {generalError && <p className="practice-error" role="alert">{generalError}</p>}
     {loading ? <p role="status">Loading packages and Attempts…</p> : <>
       <div className="practice-builder">
         <form onSubmit={(event) => void prepareAttempt(event)}>
-          <h3>Build a Practice Attempt</h3>
-          <p className="practice-helper">Choose one package, then select the questions and timing for this Attempt.</p>
+          <h3>{sectionExam ? "Build a Section Exam" : "Build a Practice Attempt"}</h3>
+          <div className="practice-mode-switch" aria-label="Attempt type">
+            <button type="button" aria-pressed={!sectionExam} onClick={() => setSectionExam(false)}>Practice</button>
+            <button type="button" aria-pressed={sectionExam} onClick={() => setSectionExam(true)}>Section Exam</button>
+          </div>
+          <p className="practice-helper">{sectionExam ? "Complete both Modules with server timed deadlines." : "Choose one package, then select the questions and timing for this Attempt."}</p>
           <label className="practice-field" htmlFor="practice-package">Test Package
             <select id="practice-package" value={revisionId} onChange={(event) => setRevisionId(event.target.value)}>
               <option value="">Choose one reviewed package</option>
@@ -289,7 +350,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
           {questionsLoading && <p role="status">Loading this package’s questions…</p>}
           {revisionId && !questionsLoading && questions.length === 0 && <p className="practice-empty">This package has no questions available for practice.</p>}
           {revisionId && !questionsLoading && questions.length > 0 && <>
-            <div className="practice-form-grid">
+            {!sectionExam && <div className="practice-form-grid">
               <label className="practice-field" htmlFor="practice-section">Section
                 <select id="practice-section" value={section} onChange={(event) => chooseSection(event.target.value)}>
                   {sections.map((value) => <option key={value}>{value}</option>)}
@@ -304,16 +365,16 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
                   }} />
                 <span className="practice-field__hint">{pool.length} questions in this selection</span>
               </label>
-            </div>
-            <fieldset className="practice-modules"><legend>Modules</legend>
+            </div>}
+            {!sectionExam && <fieldset className="practice-modules"><legend>Modules</legend>
               <div className="practice-modules__options">
                 {availableModules.map((module) => <label key={module} className="practice-option">
                   <input type="checkbox" checked={modules.includes(module)} onChange={() => toggleModule(module)} />
                   <span>Module {module}</span>
                 </label>)}
               </div>
-            </fieldset>
-            <div className="practice-form-grid">
+            </fieldset>}
+            {!sectionExam && <div className="practice-form-grid">
               <label className="practice-field" htmlFor="practice-order">Question order
                 <select id="practice-order" value={ordering} onChange={(event) => setOrdering(event.target.value as "source" | "random")}>
                   <option value="source">Package order</option><option value="random">Random order</option>
@@ -326,8 +387,8 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
                   <option value="sat_paced" disabled={!satPacedAvailable}>SAT-paced Module</option>
                 </select>
               </label>
-            </div>
-            {timing === "custom" && <label className="practice-field" htmlFor="practice-duration">Time limit in seconds
+            </div>}
+            {!sectionExam && timing === "custom" && <label className="practice-field" htmlFor="practice-duration">Time limit in seconds
               <input id="practice-duration" type="number" min={1} max={86_400} value={durationSeconds}
                 onChange={(event) => setDurationSeconds(event.target.value)} />
             </label>}
@@ -335,8 +396,8 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
               <button type="button" className="practice-button practice-button--quiet" disabled={building} onClick={() => void retryLoading()}>Retry loading</button>
             </div>}
             {loadMessage && <p className="practice-loading" role="status">{loadMessage}</p>}
-            <div className="practice-actions"><button type="submit" className="practice-button" disabled={building || pool.length === 0 || Number(count) < 1 || Number(count) > pool.length}>
-              {building && !preparingAttemptId ? "Creating Attempt…" : "Prepare Attempt"}
+            <div className="practice-actions"><button type="submit" className="practice-button" disabled={building || pool.length === 0 || (!sectionExam && (Number(count) < 1 || Number(count) > pool.length))}>
+              {building && !preparingAttemptId ? "Creating Attempt…" : sectionExam ? "Prepare Section Exam" : "Prepare Attempt"}
             </button></div>
           </>}
         </form>

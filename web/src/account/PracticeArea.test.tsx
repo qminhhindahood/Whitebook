@@ -126,3 +126,40 @@ it("resumes an active Attempt from the server snapshot without restarting its cl
   expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
   expect(calls.some((call) => call.path.endsWith("/takeover"))).toBe(false);
 });
+
+it("creates a Section Exam with a section-only payload and prepares its Math tools before starting", async () => {
+  const mathLinks = Array.from({ length: 44 }, (_, index) => ({ questionId: `m${index + 1}`, ordinal: index + 1,
+    section: "Math", module: index < 22 ? 1 : 2, questionNumber: index % 22 + 1, responseType: "multiple_choice" }));
+  const calls: { path: string; init?: RequestInit }[] = [];
+  vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close() {} })));
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
+    calls.push({ path, init });
+    if (path === "/api/library") return Response.json({ packages: [{ ...packages[1], revisionId: "math-pack" }] });
+    if (path === "/api/attempts" && !init?.method) return Response.json({ attempts: [] });
+    if (path === "/api/library/math-pack/questions") return Response.json({ questions: mathLinks });
+    if (path === "/api/attempts" && init?.method === "POST") return Response.json({ attemptId: "exam-1", revisionId: "math-pack", kind: "section_exam",
+      status: "preparing", section: "Math", modules: [1, 2], questionIds: mathLinks.map((q) => q.questionId), questions: mathLinks,
+      state: { phase: "module", activeModule: 1 }, stateVersion: 0, deadlineAt: null, startedAt: null });
+    if (path.startsWith("/api/library/math-pack/questions/")) {
+      const id = path.split("/").pop()!;
+      return Response.json({ revisionId: "math-pack", questionId: id, responseType: "multiple_choice", presentation: {
+        version: 3, stimulus: [], stem: [{ kind: "text", text: "Question" }], choices: [],
+      } });
+    }
+    if (path === "/api/math/calculator-config") return Response.json({ configured: false, scriptUrl: null });
+    if (path === "/api/math/reference-sheet.png") return new Response("sheet", { status: 200, headers: { "Content-Type": "image/png" } });
+    if (path === "/api/attempts/exam-1/start") return Response.json({ attemptId: "exam-1", revisionId: "math-pack", kind: "section_exam", status: "active",
+      section: "Math", modules: [1, 2], questionIds: mathLinks.map((q) => q.questionId), questions: mathLinks,
+      state: { phase: "module", activeModule: 1 }, stateVersion: 1, deadlineAt: 1_800_000_000_000,
+      startedAt: 1_799_997_900_000, serverNow: 1_799_997_900_000, editorToken: "a".repeat(64), lease: { held: true, expiresAt: 1_800_000_000_000 } });
+    throw new Error(`Unexpected request ${path}`);
+  }));
+  render(<PracticeArea initialRevisionId="math-pack" onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Section Exam" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Prepare Section Exam" }));
+  await screen.findByRole("heading", { name: "Section Exam · Module 1" });
+  const createCall = calls.find((call) => call.path === "/api/attempts" && call.init?.method === "POST")!;
+  expect(JSON.parse(String(createCall.init?.body))).toEqual({ revisionId: "math-pack", kind: "section_exam", section: "Math" });
+  expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+  expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+});
