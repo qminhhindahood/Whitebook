@@ -148,7 +148,7 @@ body { margin: 0; }
 .curated-library__practice button:hover { background: #3343ab; }
 .curated-library__practice button:focus-visible { outline: 3px solid #637aec; outline-offset: 2px; }
 
-.practice-area { grid-column: 1 / -1; min-width: 0; padding: clamp(22px, 3vw, 32px); border: 1px solid #dce4ef; border-radius: 16px; background: #fff; }
+.practice-area { grid-column: 1 / -1; min-width: 0; padding: clamp(22px, 3vw, 32px); border: 1px solid #dce4ef; border-radius: 16px; background: #fff; font-family: "Segoe UI", Aptos, Arial, sans-serif; }
 .practice-area__heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .practice-area__heading h2 { margin: 0 0 7px; font-size: 1.4rem; letter-spacing: -.02em; }
 .practice-area__heading p { margin: 0; max-width: 65ch; color: #52647a; line-height: 1.55; }
@@ -192,7 +192,7 @@ body { margin: 0; }
 .practice-attempts li div { display: grid; gap: 4px; }
 .practice-attempts li span, .practice-empty { color: #52647a; line-height: 1.5; }
 .practice-empty { margin: 0; }
-.hosted-attempt { grid-column: 1 / -1; min-width: 0; padding: clamp(20px, 3vw, 32px); border: 1px solid #dce4ef; border-radius: 16px; background: #fff; }
+.hosted-attempt { grid-column: 1 / -1; min-width: 0; padding: clamp(20px, 3vw, 32px); border: 1px solid #dce4ef; border-radius: 16px; background: #fff; font-family: "Segoe UI", Aptos, Arial, sans-serif; }
 .hosted-attempt__header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid #dce4ef; }
 .hosted-attempt__title, .hosted-attempt__header-side { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
 .hosted-attempt__title h2 { margin: 0 0 4px; font-size: 1.35rem; letter-spacing: -.02em; }
