@@ -31,7 +31,7 @@ function fixture(fetcher?: (path: string, init?: RequestInit) => Promise<Respons
     throw new Error(`Unexpected request ${path}`);
   });
   vi.stubGlobal("fetch", fetchMock);
-  const view = (initial = attempt()) => render(<HostedAttempt initial={initial} questions={questions}
+  const view = (initial = attempt(), availableQuestions = questions) => render(<HostedAttempt initial={initial} questions={availableQuestions}
     packageTitle="Reviewed Reading" onSessionEnded={() => {}} onExit={() => {}} onSnapshotChange={() => {}} />);
   return { calls, view };
 }
@@ -182,8 +182,68 @@ it("sends a heartbeat after 45 seconds without depending on user input", async (
     throw new Error(`Unexpected route ${path} ${String(init?.method)}`);
   });
   view(attempt({ serverNow: Date.now(), deadlineAt: Date.now() + 600_000, startedAt: Date.now(), lease: { held: true, expiresAt: Date.now() + 120_000 } }));
-  await act(async () => { await vi.advanceTimersByTimeAsync(45_000); await Promise.resolve(); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(44_000); await Promise.resolve(); });
+  expect(calls.some((call) => call.path.endsWith("/heartbeat"))).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000); await Promise.resolve(); });
   expect(calls.some((call) => call.path.endsWith("/heartbeat"))).toBe(true);
   const heartbeat = calls.find((call) => call.path.endsWith("/heartbeat"))!;
   expect(JSON.parse(String(heartbeat.init?.body))).toMatchObject({ editorToken: token, expectedStateVersion: 1 });
+  await act(async () => { await vi.advanceTimersByTimeAsync(45_000); await Promise.resolve(); });
+  expect(calls.filter((call) => call.path.endsWith("/heartbeat"))).toHaveLength(2);
+});
+
+it("shows only Module 1 and uses finish-module before the untimed transition", async () => {
+  const examQuestions: PresentationQuestion[] = [1, 2, 3, 4].map((n) => ({ ...questions[0], questionId: `e${n}`,
+    ordinal: n, module: n < 3 ? 1 : 2, questionNumber: n < 3 ? n : n - 2 }));
+  const initial = attempt({ kind: "section_exam", section: "Math", modules: [1, 2], questions: examQuestions.map(({ presentation: _p, ...q }) => q),
+    questionIds: examQuestions.map((q) => q.questionId), state: { phase: "module", activeModule: 1, responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "e1" } });
+  const { calls, view } = fixture(async (path) => path.endsWith("/finish-module") ? Response.json({ ...initial,
+    stateVersion: 2, state: { ...initial.state, phase: "transition", activeModule: 1 }, deadlineAt: null, serverNow: now + 1 }) : Promise.reject(new Error(path)));
+  view(initial, examQuestions);
+  expect(screen.getByText(/Question\s+1\s+of\s+2/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Question 3, unanswered" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Finish Module" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Finish Module" }));
+  await waitFor(() => expect(calls.some((call) => call.path.endsWith("/finish-module"))).toBe(true));
+  expect(await screen.findByText(/Module 1 is complete/i)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Continue to Module 2" })).toBeTruthy();
+  expect(screen.queryByText(/break/i)).toBeNull();
+});
+
+it("shows a low-time warning at five minutes without making a request", async () => {
+  vi.useFakeTimers(); vi.setSystemTime(now);
+  const { calls, view } = fixture();
+  view(attempt({ kind: "section_exam", state: { phase: "module", activeModule: 1 }, serverNow: now, deadlineAt: now + 301_000, startedAt: now }));
+  expect(screen.queryByRole("status", { name: /low time/i })).toBeNull();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+  expect(screen.getByRole("status", { name: /low time/i })).toBeTruthy();
+  expect(calls.filter((call) => /\/(?:heartbeat|write)$/.test(call.path))).toHaveLength(0);
+});
+
+it("pauses and resumes through the Section Exam lifecycle endpoints", async () => {
+  const base = attempt({ kind: "section_exam", state: { phase: "module", activeModule: 1, responses: {},
+    markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" } });
+  const { calls, view } = fixture(async (path) => {
+    if (path.endsWith("/pause")) return Response.json({ ...base, stateVersion: 2, state: { ...base.state,
+      phase: "paused", pausedPhase: "module", remainingSeconds: 540 }, deadlineAt: null });
+    if (path.endsWith("/resume")) return Response.json({ ...base, stateVersion: 3, state: { ...base.state,
+      phase: "module", pausedPhase: null }, deadlineAt: now + 540_000, serverNow: now + 1_000 });
+    throw new Error(path);
+  });
+  view(base);
+  fireEvent.click(screen.getByRole("button", { name: "Pause Section Exam" }));
+  expect(await screen.findByRole("heading", { name: "Section Exam paused" })).toBeTruthy();
+  expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Resume through Loading Gate" }));
+  await screen.findByRole("button", { name: "Pause Section Exam" });
+  expect(calls.some((call) => call.path.endsWith("/resume"))).toBe(true);
+});
+
+it("preserves calculator state access and the Reference Sheet control in Math", () => {
+  const mathAttempt = attempt({ kind: "section_exam", section: "Math", state: { phase: "module", activeModule: 1 } });
+  const { view } = fixture();
+  view(mathAttempt, questions.map((question) => ({ ...question, section: "Math" })));
+  expect(screen.getByRole("region", { name: "Math tools" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Reference Sheet" })).toBeTruthy();
 });

@@ -206,6 +206,14 @@ body { margin: 0; }
 .hosted-attempt__save--saved { color: #166b3e; }
 .hosted-attempt__save--pending { color: #785000; }
 .hosted-attempt__save--failed { color: #8a2c24; }
+.hosted-attempt__warning { margin: 12px 0; padding: 11px 14px; border: 1px solid #d99331; border-radius: 9px; background: #fff6e8; color: #724600; font-weight: 750; }
+.hosted-attempt__transition { display: grid; justify-items: start; gap: 10px; margin: 18px 0; padding: 22px; border: 1px solid #cbd6ee; border-radius: 12px; background: #f5f7ff; }
+.hosted-attempt__transition h3, .hosted-attempt__transition p { margin: 0; }
+.hosted-attempt__module-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0; }
+.hosted-attempt__math-tools { margin: 16px 0; padding: 14px; border: 1px solid #dce4ef; border-radius: 12px; background: #f8f9fd; }
+.hosted-attempt__math-tools .hosted-attempt__module-actions { margin: 0 0 12px; }
+.hosted-attempt__math-tools .desmos-panel, .hosted-attempt__math-tools .scientific-calculator { min-height: 300px; }
+.hosted-attempt__math-tools iframe.desmos-frame { display: block; width: 100%; min-height: 300px; border: 0; }
 .hosted-attempt__results { margin: 18px 0; padding: 14px 16px; border: 1px solid #cce7d6; border-radius: 10px; background: #f1faf4; }
 .hosted-attempt__results h3 { margin: 0 0 5px; font-size: 1.05rem; }
 .hosted-attempt__results p { margin: 0; color: #166b3e; font-weight: 700; }

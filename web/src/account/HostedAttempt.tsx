@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import { HostedBlocks, HostedChoices } from "./HostedPresentation";
+import { DesmosCalculatorPanel, ScientificCalculator } from "../calculator";
+import { ReferenceSheet } from "../ReferenceSheet";
 import type { AttemptResult, AttemptSnapshot, PresentationQuestion } from "./PracticeArea";
 
 type AttemptState = {
@@ -8,13 +10,15 @@ type AttemptState = {
   markedQuestionIds: string[];
   eliminatedChoices: Record<string, string[]>;
   currentQuestionId: string;
+  calculatorState?: Record<string, unknown>;
 };
 type Change =
   | { type: "response"; questionId: string; response: string | null }
   | { type: "mark"; questionId: string; marked: boolean }
   | { type: "elimination"; questionId: string; choiceId: string; eliminated: boolean }
   | { type: "navigation"; questionId: string };
-type QueueItem = { kind: "change"; change: Change } | { kind: "heartbeat" };
+type CalculatorChange = { type: "calculator_state"; state: Record<string, unknown> };
+type QueueItem = { kind: "change"; change: Change | CalculatorChange } | { kind: "heartbeat" };
 type HostedAttemptProps = {
   initial: AttemptSnapshot;
   questions: PresentationQuestion[];
@@ -22,6 +26,7 @@ type HostedAttemptProps = {
   onSessionEnded: () => void;
   onExit: () => void;
   onSnapshotChange: (snapshot: AttemptSnapshot) => void;
+  desmosScriptUrl?: string | null;
 };
 
 class AttemptRequestError extends Error {
@@ -48,14 +53,17 @@ function emptyState(source: Record<string, unknown>): AttemptState {
   const eliminatedChoices = source.eliminatedChoices && typeof source.eliminatedChoices === "object"
     ? source.eliminatedChoices as Record<string, string[]> : {};
   const currentQuestionId = typeof source.currentQuestionId === "string" ? source.currentQuestionId : "";
+  const calculatorState = source.calculatorState && typeof source.calculatorState === "object"
+    ? structuredClone(source.calculatorState as Record<string, unknown>) : undefined;
   return { responses: { ...responses }, markedQuestionIds: [...markedQuestionIds],
     eliminatedChoices: Object.fromEntries(Object.entries(eliminatedChoices).map(([id, choices]) => [id, [...choices]])),
-    currentQuestionId };
+    currentQuestionId, ...(calculatorState ? { calculatorState } : {}) };
 }
 
-function applyChange(source: AttemptState, change: Change): AttemptState {
+function applyChange(source: AttemptState, change: Change | CalculatorChange): AttemptState {
   const next = emptyState(source as unknown as Record<string, unknown>);
-  if (change.type === "response") {
+  if (change.type === "calculator_state") next.calculatorState = change.state;
+  else if (change.type === "response") {
     if (change.response === null) delete next.responses[change.questionId];
     else next.responses[change.questionId] = change.response;
   } else if (change.type === "mark") {
@@ -94,7 +102,7 @@ function storeToken(attemptId: string, token: string) {
   } catch { /* The server still enforces the lease when tab storage is unavailable. */ }
 }
 
-export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded, onExit, onSnapshotChange }: HostedAttemptProps) {
+export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded, onExit, onSnapshotChange, desmosScriptUrl }: HostedAttemptProps) {
   const [snapshot, setSnapshot] = useState(initial);
   const [draftState, setDraftState] = useState(() => emptyState(initial.state));
   const [localQuestionId, setLocalQuestionId] = useState(() => emptyState(initial.state).currentQuestionId);
@@ -103,23 +111,32 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const [paused, setPaused] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "pending" | "failed">("saved");
   const [syncError, setSyncError] = useState("");
-  const [failedChanges, setFailedChanges] = useState<Change[]>([]);
+  const [failedChanges, setFailedChanges] = useState<(Change | CalculatorChange)[]>([]);
   const [takingOver, setTakingOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [resultLoading, setResultLoading] = useState(initial.status === "completed");
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState("");
+  const [showReference, setShowReference] = useState(false);
+  const [calculatorMode, setCalculatorMode] = useState<"desmos" | "scientific">(desmosScriptUrl ? "desmos" : "scientific");
   const [clockNow, setClockNow] = useState(() => performance.now());
   const snapshotRef = useRef(snapshot);
   const tokenRef = useRef(editorToken);
   const pausedRef = useRef(paused);
   const queueRef = useRef<QueueItem[]>([]);
   const runningRef = useRef(false);
-  const failedChangesRef = useRef<Change[]>([]);
+  const failedChangesRef = useRef<(Change | CalculatorChange)[]>([]);
   const remainingRef = useRef<number | null>(null);
   const drainRef = useRef<() => Promise<void>>(async () => {});
   const questionById = useMemo(() => new Map(questions.map((question) => [question.questionId, question])), [questions]);
   const resultById = useMemo(() => new Map((result?.questions ?? []).map((question) => [question.questionId, question])), [result]);
-  const questionLinks = snapshot.questions;
+  const sectionExam = snapshot.kind === "section_exam";
+  const phase = String(snapshot.state.phase ?? (snapshot.status === "preparing" ? "loading" : "module"));
+  const activeModule = Number(snapshot.state.activeModule ?? 1);
+  const questionLinks = sectionExam && phase === "module" && snapshot.status !== "completed"
+    ? snapshot.questions.filter((question) => question.module === activeModule)
+    : sectionExam && phase === "transition" ? [] : snapshot.questions;
   const currentIndex = Math.max(0, questionLinks.findIndex((question) => question.questionId === localQuestionId));
   const currentLink = questionLinks[currentIndex];
   const current = currentLink ? questionById.get(currentLink.questionId) : undefined;
@@ -214,19 +231,52 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   drainRef.current = drainQueue;
 
   useEffect(() => {
-    if (snapshot.status !== "active" || !editorToken || !snapshot.lease?.held || paused) return;
+    if (snapshot.status !== "active" || (sectionExam && phase !== "module") || !editorToken || !snapshot.lease?.held || paused) return;
     const timer = window.setInterval(() => {
       if (remainingRef.current !== null && remainingRef.current <= 0) return;
       queueRef.current.push({ kind: "heartbeat" });
       void drainRef.current();
     }, 45_000);
     return () => window.clearInterval(timer);
-  }, [snapshot.attemptId, snapshot.status, snapshot.lease?.held, editorToken, paused]);
+  }, [snapshot.attemptId, snapshot.status, snapshot.lease?.held, editorToken, paused, sectionExam, phase]);
 
   const timeExpired = snapshot.deadlineAt !== null && clockNow <= 0;
-  const canEdit = snapshot.status === "active" && !!editorToken && !!snapshot.lease?.held && !paused && !timeExpired;
+  const canControl = snapshot.status === "active" && !!editorToken && !!snapshot.lease?.held && !paused && !timeExpired;
+  const canEdit = canControl && (!sectionExam || phase === "module");
 
-  function enqueue(change: Change) {
+  const warning = sectionExam && phase === "module" && snapshot.deadlineAt !== null && clockNow > 0 && clockNow <= 300_000;
+  const expiryRefreshRef = useRef("");
+  const snapshotRefreshRunning = useRef(false);
+  useEffect(() => {
+    const refresh = async () => {
+      if (document.visibilityState === "hidden" || snapshotRefreshRunning.current) return;
+      snapshotRefreshRunning.current = true;
+      try {
+        const fresh = await request<AttemptSnapshot>(`/api/attempts/${snapshot.attemptId}`);
+        snapshotRef.current = fresh; setSnapshot(fresh); setDraftState(emptyState(fresh.state));
+        if (fresh.editorToken) setEditorToken(fresh.editorToken);
+      } catch { /* The next edit or heartbeat will report connection failures. */ }
+      finally { snapshotRefreshRunning.current = false; }
+    };
+    const pageshow = (event: PageTransitionEvent) => { if (event.persisted) void refresh(); };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("pageshow", pageshow);
+    window.addEventListener("online", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("pageshow", pageshow);
+      window.removeEventListener("online", refresh);
+    };
+  }, [snapshot.attemptId]);
+  useEffect(() => {
+    if (!timeExpired || expiryRefreshRef.current === snapshot.attemptId) return;
+    expiryRefreshRef.current = snapshot.attemptId;
+    void request<AttemptSnapshot>(`/api/attempts/${snapshot.attemptId}`).then((fresh) => {
+      snapshotRef.current = fresh; setSnapshot(fresh); setDraftState(emptyState(fresh.state));
+    }).catch(() => {});
+  }, [timeExpired, snapshot.attemptId]);
+
+  function enqueue(change: Change | CalculatorChange) {
     if (!canEdit) return;
     setDraftState((currentState) => applyChange(currentState, change));
     queueRef.current.push({ kind: "change", change });
@@ -292,6 +342,28 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     } finally { setSubmitting(false); }
   }
 
+  async function sectionAction(action: "pause" | "resume" | "finish-module" | "continue") {
+    if (!sectionExam || lifecycleBusy || !editorToken) return;
+    setLifecycleBusy(true); setLifecycleError("");
+    try {
+      if (action === "resume" && snapshot.section === "Math" && snapshot.state.pausedPhase === "module") {
+        await request("/api/math/calculator-config");
+        const sheet = await accountFetch("/api/math/reference-sheet.png", { credentials: "same-origin", cache: "no-store" });
+        if (!sheet.ok) throw new Error("The Math Reference Sheet could not be prepared. Retry resuming when it is available.");
+        const blob = await sheet.blob();
+        if (typeof createImageBitmap === "function") { const image = await createImageBitmap(blob); image.close(); }
+      }
+      const next = await request<AttemptSnapshot>(`/api/attempts/${snapshot.attemptId}/${action}`, mutation({
+        editorToken, expectedStateVersion: snapshot.stateVersion,
+      }));
+      snapshotRef.current = next; setSnapshot(next); setDraftState(emptyState(next.state));
+      setLocalQuestionId(emptyState(next.state).currentQuestionId); setPaused(false); pausedRef.current = false;
+      if (next.status === "completed") setEditorToken("");
+    } catch (cause) {
+      setLifecycleError(cause instanceof Error ? cause.message : "This Section Exam action could not be completed.");
+    } finally { setLifecycleBusy(false); }
+  }
+
   function goTo(index: number) {
     const question = questionLinks[index];
     if (!question || question.questionId === localQuestionId) return;
@@ -300,13 +372,14 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   }
 
   const completed = snapshot.status === "completed";
-  const clockLabel = completed ? "Submitted" : snapshot.deadlineAt === null
+  const clockLabel = completed ? "Submitted" : sectionExam && phase === "transition" ? "Module 1 complete"
+    : sectionExam && phase === "paused" ? "Paused" : snapshot.deadlineAt === null
     ? `Elapsed ${formatClock(clockNow)}` : timeExpired ? "Time ended" : `Time left ${formatClock(clockNow)}`;
 
   return <section className="hosted-attempt" aria-labelledby="hosted-attempt-heading">
     <header className="hosted-attempt__header">
       <div className="hosted-attempt__title"><button type="button" className="practice-button practice-button--quiet" onClick={onExit}>Back to Practice</button>
-        <div><h2 id="hosted-attempt-heading">Practice Attempt</h2>
+        <div><h2 id="hosted-attempt-heading">{sectionExam ? `Section Exam · Module ${activeModule}` : "Practice Attempt"}</h2>
           <p>{packageTitle} · {snapshot.section} · {questionLinks.length} questions</p></div>
       </div>
       <div className="hosted-attempt__header-side">
@@ -327,6 +400,40 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       </button>
     </div>}
     {syncError && <p className="practice-error" role="alert">{syncError}</p>}
+    {lifecycleError && <p className="practice-error" role="alert">{lifecycleError}</p>}
+    {warning && <p className="hosted-attempt__warning" role="status" aria-label="Low time warning">5 minutes remaining in Module {activeModule}.</p>}
+    {sectionExam && phase === "transition" && <section className="hosted-attempt__transition" aria-label="Module transition">
+      <h3>Module 1 is complete</h3><p>Your answers are saved. Continue when you are ready for Module 2.</p>
+      {canControl && <button type="button" className="practice-button practice-button--quiet" disabled={lifecycleBusy}
+        onClick={() => void sectionAction("pause")}>Pause Section Exam</button>}
+      {canControl && <button type="button" className="practice-button" disabled={lifecycleBusy}
+        onClick={() => void sectionAction("continue")}>{lifecycleBusy ? "Preparing Module 2…" : "Continue to Module 2"}</button>}
+    </section>}
+    {sectionExam && phase === "paused" && <section className="hosted-attempt__transition" aria-label="Paused Section Exam">
+      <h3>Section Exam paused</h3><p>The remaining time is held by the server. Reload the Math tools before resuming.</p>
+      {canControl && <button type="button" className="practice-button" disabled={lifecycleBusy}
+        onClick={() => void sectionAction("resume")}>{lifecycleBusy ? "Checking resources…" : "Resume through Loading Gate"}</button>}
+    </section>}
+    {sectionExam && phase === "module" && canEdit && <div className="hosted-attempt__module-actions">
+      <button type="button" className="practice-button practice-button--quiet" disabled={lifecycleBusy}
+        onClick={() => void sectionAction("pause")}>Pause Section Exam</button>
+      <button type="button" className="practice-button" disabled={lifecycleBusy || saveStatus !== "saved"}
+        onClick={() => void sectionAction("finish-module")}>{activeModule === 1 ? "Finish Module" : "Finish Section Exam"}</button>
+    </div>}
+    {sectionExam && snapshot.section === "Math" && phase === "module" && <section className="hosted-attempt__math-tools" aria-label="Math tools">
+      <div className="hosted-attempt__module-actions">
+        <span>Math tools</span>
+        {desmosScriptUrl && <button type="button" className="practice-button practice-button--quiet"
+          aria-pressed={calculatorMode === "desmos"} onClick={() => setCalculatorMode("desmos")}>Graphing calculator</button>}
+        <button type="button" className="practice-button practice-button--quiet"
+          aria-pressed={calculatorMode === "scientific"} onClick={() => setCalculatorMode("scientific")}>Scientific calculator</button>
+        <button type="button" className="practice-button practice-button--quiet" onClick={() => setShowReference(true)}>Reference Sheet</button>
+      </div>
+      {calculatorMode === "desmos" && desmosScriptUrl ? <DesmosCalculatorPanel options={{ expressions: true, settingsMenu: false }}
+        savedState={(snapshot.state.calculatorState as Record<string, unknown> | undefined) ?? null}
+        onSave={(state) => enqueue({ type: "calculator_state", state })} /> : <ScientificCalculator />}
+    </section>}
+    {showReference && <ReferenceSheet onClose={() => setShowReference(false)} />}
     {failedChanges.length > 0 && <div className="hosted-attempt__unsaved" role="group" aria-label="Unsaved changes">
       <p>{failedChanges.length === 1 ? "One change was not saved." : `${failedChanges.length} changes were not saved.`} The latest server answers are shown below.</p>
       {canEdit && <button type="button" className="practice-button practice-button--quiet" onClick={reapplyFailedChanges}>Reapply unsaved changes</button>}
@@ -341,7 +448,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         <p>{result.correctCount} of {result.questionCount} correct</p> : <p>Results could not be loaded. Return to Your Attempts and try again.</p>}
     </section>}
 
-    <div className="hosted-attempt__workspace">
+    {(!sectionExam || phase === "module" || completed) && <div className="hosted-attempt__workspace">
       <nav className="hosted-attempt__navigator" aria-label="Question navigation">
         <h3>Questions</h3>
         <ol>{questionLinks.map((link, index) => {
@@ -389,11 +496,11 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
             <span>Question {currentIndex + 1} of {questionLinks.length}</span>
             {currentIndex < questionLinks.length - 1 ?
               <button type="button" className="practice-button" disabled={!canEdit} onClick={() => goTo(currentIndex + 1)}>Next question</button> :
-              <button type="button" className="practice-button" disabled={!canEdit || saveStatus !== "saved" || submitting}
-                onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit Attempt"}</button>}
+              (sectionExam ? null : <button type="button" className="practice-button" disabled={!canEdit || saveStatus !== "saved" || submitting}
+                onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit Attempt"}</button>)}
           </footer>}
         </> : <p role="status">The selected Question Presentation is unavailable.</p>}
       </article>
-    </div>
+    </div>}
   </section>;
 }
