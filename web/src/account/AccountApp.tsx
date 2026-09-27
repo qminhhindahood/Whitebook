@@ -3,6 +3,7 @@ import { SatWeekend } from "./SatWeekend";
 import { accountFetch, csrfToken } from "./accountClient";
 import { FlashcardsArea } from "./FlashcardStudy";
 import { deviceZone } from "./satCountdown";
+import { CuratedLibrary } from "./CuratedLibrary";
 import "./cards.css";
 import { ScoresSection } from "./ScoresSection";
 
@@ -19,7 +20,7 @@ export function AccountApp() {
   const [nickname, setNickname] = useState("");
   const [timeZone, setTimeZone] = useState("");
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<"dashboard" | "cards">("dashboard");
+  const [view, setView] = useState<"dashboard" | "cards" | "library">("dashboard");
 
   async function refresh() {
     setLoading(true);
@@ -137,9 +138,11 @@ export function AccountApp() {
         <nav className="dashboard-nav" aria-label="Workspace areas">
           <button type="button" className={view === "dashboard" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => setView("dashboard")}>Dashboard</button>
           <button type="button" className={view === "cards" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "cards" ? "page" : undefined} onClick={() => setView("cards")}>Flashcards</button>
+          <button type="button" className={view === "library" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "library" ? "page" : undefined} onClick={() => setView("library")}>Library</button>
         </nav>
         {view === "cards" ?
-          <FlashcardsArea onSessionEnded={() => { setMe(null); setMessage("Your session ended. Sign in again."); }} /> :
+          <FlashcardsArea onSessionEnded={handleSessionEnded} /> : view === "library" ?
+          <CuratedLibrary onSessionEnded={handleSessionEnded} /> :
           <>
             <SatWeekend onSessionEnded={handleSessionEnded} />
             <section className="dashboard-empty" aria-labelledby="activity-heading">
