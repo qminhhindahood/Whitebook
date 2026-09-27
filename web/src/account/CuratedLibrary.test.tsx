@@ -66,3 +66,23 @@ it("keeps the latest package visible when an earlier request finishes later", as
   expect(screen.getByText("Fast question")).toBeTruthy();
   expect(screen.getByRole("button", { name: /Fast Math/ }).getAttribute("aria-pressed")).toBe("true");
 });
+
+it("opens Practice from the selected immutable package revision", async () => {
+  const build = vi.fn();
+  vi.stubGlobal("fetch", vi.fn(async (path: string) => {
+    if (path === "/api/library") return Response.json({ packages: [
+      { revisionId: "revision-4", title: "Reviewed Reading", publishedRevision: 4, questionCount: 2 },
+    ] });
+    if (path === "/api/library/revision-4/questions") return Response.json({ questions: [
+      { questionId: "q1", ordinal: 1, section: "Reading and Writing", module: 1, questionNumber: 1 },
+    ] });
+    if (path === "/api/library/revision-4/questions/q1") return Response.json({ revisionId: "revision-4",
+      questionId: "q1", ordinal: 1, section: "Reading and Writing", module: 1, questionNumber: 1,
+      responseType: "multiple_choice", presentation: { version: 3, stimulus: [], stem: [{ kind: "text", text: "Question" }], choices: [] } });
+    return Response.json({});
+  }));
+  render(<CuratedLibrary onSessionEnded={() => {}} onBuildPractice={build} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Reviewed Reading/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "Build Practice Attempt" }));
+  expect(build).toHaveBeenCalledWith("revision-4");
+});

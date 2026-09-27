@@ -55,10 +55,10 @@ export function HostedBlocks({ blocks, revisionId, questionId }: {
   </span>;
 }
 
-export function HostedChoices({ presentation, revisionId, questionId, selected, eliminated, onSelect, onEliminate }: {
+export function HostedChoices({ presentation, revisionId, questionId, selected, eliminated, onSelect, onEliminate, disabled = false }: {
   presentation: HostedPresentationData;
   revisionId: string; questionId: string; selected?: string; eliminated: string[];
-  onSelect: (choice: string) => void; onEliminate: (choice: string) => void;
+  onSelect: (choice: string) => void; onEliminate: (choice: string) => void; disabled?: boolean;
 }) {
   return <fieldset className="content-choices">
     <legend className="visually-hidden">Select one answer</legend>
@@ -66,13 +66,13 @@ export function HostedChoices({ presentation, revisionId, questionId, selected, 
       const excluded = eliminated.includes(choice.id);
       return <div className={`content-choice${excluded ? " content-choice--eliminated" : ""}`} key={choice.id}>
         <label className="choice-card"><input type="radio" name={`answer-${questionId}`} value={choice.id}
-          checked={selected === choice.id} onChange={() => onSelect(choice.id)} />
+          checked={selected === choice.id} disabled={disabled} onChange={() => onSelect(choice.id)} />
           <span className="choice-letter">{choice.id}</span>
           <HostedBlocks blocks={choice.content} revisionId={revisionId} questionId={questionId} />
           {excluded && <span className="visually-hidden">Eliminated</span>}
         </label>
         <button type="button" className="choice-eliminate" aria-label={`${excluded ? "Restore" : "Eliminate"} ${choice.id}`}
-          onClick={() => onEliminate(choice.id)}>{excluded ? "Restore" : "Eliminate"}</button>
+          disabled={disabled} onClick={() => onEliminate(choice.id)}>{excluded ? "Restore" : "Eliminate"}</button>
       </div>;
     })}
   </fieldset>;

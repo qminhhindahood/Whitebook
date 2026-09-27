@@ -4,6 +4,7 @@ import { accountFetch, csrfToken } from "./accountClient";
 import { FlashcardsArea } from "./FlashcardStudy";
 import { deviceZone } from "./satCountdown";
 import { CuratedLibrary } from "./CuratedLibrary";
+import { PracticeArea } from "./PracticeArea";
 import "./cards.css";
 import { ScoresSection } from "./ScoresSection";
 
@@ -20,7 +21,8 @@ export function AccountApp() {
   const [nickname, setNickname] = useState("");
   const [timeZone, setTimeZone] = useState("");
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<"dashboard" | "cards" | "library">("dashboard");
+  const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice">("dashboard");
+  const [practiceRevisionId, setPracticeRevisionId] = useState<string>();
 
   async function refresh() {
     setLoading(true);
@@ -139,10 +141,14 @@ export function AccountApp() {
           <button type="button" className={view === "dashboard" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => setView("dashboard")}>Dashboard</button>
           <button type="button" className={view === "cards" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "cards" ? "page" : undefined} onClick={() => setView("cards")}>Flashcards</button>
           <button type="button" className={view === "library" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "library" ? "page" : undefined} onClick={() => setView("library")}>Library</button>
+          <button type="button" className={view === "practice" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "practice" ? "page" : undefined} onClick={() => { setPracticeRevisionId(undefined); setView("practice"); }}>Practice</button>
         </nav>
         {view === "cards" ?
           <FlashcardsArea onSessionEnded={handleSessionEnded} /> : view === "library" ?
-          <CuratedLibrary onSessionEnded={handleSessionEnded} /> :
+          <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={(revisionId) => {
+            setPracticeRevisionId(revisionId); setView("practice");
+          }} /> : view === "practice" ?
+          <PracticeArea initialRevisionId={practiceRevisionId} onSessionEnded={handleSessionEnded} /> :
           <>
             <SatWeekend onSessionEnded={handleSessionEnded} />
             <section className="dashboard-empty" aria-labelledby="activity-heading">

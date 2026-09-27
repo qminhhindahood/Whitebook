@@ -121,6 +121,18 @@ it("rejects wrong codes and cross-origin login", async () => {
   }
 });
 
+it("routes learner Attempt requests through account authentication", async () => {
+  const env = environment();
+  const response = await worker.fetch(new Request("https://staging.example.test/api/attempts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ revisionId: "reviewed-rw" }),
+  }), env);
+
+  expect(response.status).toBe(401);
+  expect(await response.json()).toMatchObject({ error: { code: "signed_out" } });
+});
+
 it("opens the hosted Dashboard shell and preserves the old account URL", async () => {
   const env = environment();
   const legacy = await worker.fetch(get("/app"), env);

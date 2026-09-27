@@ -10,7 +10,7 @@ async function rows<T>(statement: Statement): Promise<T[]> {
   return (await statement.all()).results as T[];
 }
 
-async function entitled(env: LibraryEnv, accountId: string, revisionId: string): Promise<boolean> {
+export async function hasPackageEntitlement(env: AccountEnv, accountId: string, revisionId: string): Promise<boolean> {
   const row = await env.DB.prepare(`SELECT p.id FROM package_revisions p WHERE p.id = ? AND (
     EXISTS (SELECT 1 FROM activated_publication_releases a JOIN publication_release_revisions r
       ON r.release_id = a.release_id WHERE r.revision_id = p.id)
@@ -95,7 +95,7 @@ export function libraryRoute(request: Request, env: LibraryEnv): Promise<Respons
     const listMatch = new RegExp(`^/api/library/(${ID})/questions$`).exec(path);
     const visualMatch = VISUAL.exec(path);
     const revisionId = questionMatch?.[1] ?? listMatch?.[1] ?? visualMatch?.[1];
-    if (!revisionId || !(await entitled(env, session.account_id, revisionId)))
+    if (!revisionId || !(await hasPackageEntitlement(env, session.account_id, revisionId)))
       return failure(404, "not_found", "This content is unavailable.");
     if (questionMatch) return question(env, revisionId, questionMatch[2]);
     if (listMatch) return questions(env, revisionId);

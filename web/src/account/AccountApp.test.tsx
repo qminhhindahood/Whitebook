@@ -93,3 +93,23 @@ it("opens the Flashcards area from the dashboard navigation and reaches the stud
   expect(await screen.findByRole("heading", { name: "Flashcards" })).toBeTruthy();
   expect(screen.getByText("You have no cards here yet. Add your first word.")).toBeTruthy();
 });
+
+it("opens the hosted Practice builder from workspace navigation", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string) => {
+    if (path === "/api/account/me") return Response.json({ account: {
+      id: "account-1", email: "learner@example.test", displayName: "Learner", nickname: "", role: "learner", timeZone: "",
+    }, session: { expiresAt: 100 } });
+    if (path === "/api/account/sat-dates") return Response.json({
+      catalog: { source: "official calendar", sourceUrl: "https://example.test", lastCheckedAt: "2026-09-26", dates: [] },
+      selection: { dates: [], primary: null },
+    });
+    if (path === "/api/account/scores") return Response.json({ results: [] });
+    if (path === "/api/library") return Response.json({ packages: [] });
+    if (path === "/api/attempts") return Response.json({ attempts: [] });
+    throw new Error(`Unexpected route ${path}`);
+  }));
+  render(<AccountApp />);
+  fireEvent.click(await screen.findByRole("button", { name: "Practice" }));
+  expect(await screen.findByRole("heading", { name: "Build a Practice Attempt" })).toBeTruthy();
+  expect(screen.getByLabelText("Test Package")).toBeTruthy();
+});
