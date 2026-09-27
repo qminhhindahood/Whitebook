@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AccountApp } from "./AccountApp";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 it("shows Google sign-in when the private API says the browser is signed out", async () => {
   vi.stubGlobal("fetch", vi.fn(async (path: string) => path === "/api/auth/status"
@@ -13,6 +13,34 @@ it("shows Google sign-in when the private API says the browser is signed out", a
   const link = await screen.findByRole("link", { name: "Continue with Google" });
   expect(link.getAttribute("href")).toBe("/api/auth/google/start");
   expect(screen.queryByText(/Welcome/)).toBeNull();
+});
+
+it("requires the deletion phrase and sends the account mutation with CSRF", async () => {
+  vi.spyOn(document, "cookie", "get").mockReturnValue(`__Host-wb_csrf=${"c".repeat(64)}`);
+  const calls: { path: string; init?: RequestInit }[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
+    calls.push({ path, init });
+    if (path === "/api/account/me") return Response.json({ account: {
+      id: "a", email: "a@test.invalid", displayName: "A", nickname: "", timeZone: "", role: "learner",
+    }, session: { expiresAt: 100 } });
+    if (path === "/api/account/sat-dates") return Response.json({ catalog: { source: "official calendar", dates: [] }, selection: { dates: [], primary: null } });
+    if (path === "/api/account/scores") return Response.json({ results: [] });
+    if (path === "/api/account/delete") return new Response(null, { status: 204 });
+    throw new Error(`Unexpected route ${path}`);
+  }));
+  render(<AccountApp />);
+  const button = await screen.findByRole("button", { name: "Permanently delete account" });
+  expect(button.hasAttribute("disabled")).toBe(true);
+  expect(screen.getByRole("button", { name: "Download account data" })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Delete account"), { target: { value: "DELETE MY ACCOUNT" } });
+  expect(button.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(button);
+  expect(await screen.findByText("Your account and study data were deleted.")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Continue with Google" })).toBeTruthy();
+  const deletion = calls.find(call => call.path === "/api/account/delete");
+  expect(deletion?.init).toMatchObject({ method: "POST", credentials: "same-origin",
+    body: JSON.stringify({ confirmation: "DELETE MY ACCOUNT" }) });
+  expect(new Headers(deletion?.init?.headers).get("X-CSRF-Token")).toBe("c".repeat(64));
 });
 
 it("explains when Google sign-in has not been configured", async () => {
