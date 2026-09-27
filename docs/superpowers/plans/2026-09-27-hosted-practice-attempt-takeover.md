@@ -151,7 +151,7 @@
 - The Loading Gate creates a preparing Attempt, loads every selected Question Presentation, extracts all image_asset and asset visual paths, fetches every visual, then calls start. A failure leaves the timer unstarted and exposes retry.
 - After start, the selected Attempt opens in the hosted Player; the active deadline comes from the server.
 
-- [ ] **Step 1: Write failing rendered tests for one-package setup and Loading Gate**
+- [x] **Step 1: Write failing rendered tests for one-package setup and Loading Gate**
   - Verify only the chosen revision is sent to POST /api/attempts.
   - Verify start is not called until every presentation and visual fetch succeeds.
   - Verify a failed visual prevents start and shows a retryable Loading Gate error.
@@ -163,18 +163,18 @@
     expect(await screen.findByRole("alert")).toHaveTextContent(/visual/i);
     expect(startAttempt).not.toHaveBeenCalled();
 
-- [ ] **Step 2: Run the focused web test and confirm it fails before the Builder exists**
+- [x] **Step 2: Run the focused web test and confirm it fails before the Builder exists**
 
     cd web
     npm test -- src/account/PracticeArea.test.tsx
 
-- [ ] **Step 3: Add the Builder, preparation loader, and AccountApp/Library entry points**
+- [x] **Step 3: Add the Builder, preparation loader, and AccountApp/Library entry points**
   - Derive Sections and Modules from the selected revision's question metadata.
   - Validate count against the selected pool before calling the API.
   - Preload question JSON and all referenced visuals with same-origin credentials and cache: no-store.
   - Keep attempt creation in preparing status until selected content is ready; start only after that boundary.
 
-- [ ] **Step 4: Re-run the focused web test and commit the Builder/Loading Gate**
+- [x] **Step 4: Re-run the focused web test and commit the Builder/Loading Gate**
 
     cd web
     npm test -- src/account/PracticeArea.test.tsx

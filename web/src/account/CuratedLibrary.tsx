@@ -11,7 +11,9 @@ async function get<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function CuratedLibrary({ onSessionEnded }: { onSessionEnded: () => void }) {
+export function CuratedLibrary({ onSessionEnded, onBuildPractice }: {
+  onSessionEnded: () => void; onBuildPractice?: (revisionId: string) => void;
+}) {
   const requestToken = useRef(0);
   const [packages, setPackages] = useState<Package[]>([]);
   const [revision, setRevision] = useState<string | null>(null);
@@ -72,6 +74,10 @@ export function CuratedLibrary({ onSessionEnded }: { onSessionEnded: () => void 
         onClick={() => void openQuestion(revision, item.questionId)}>
         {item.section} · Module {item.module} · Question {item.questionNumber}
       </button>)}
+    </div>}
+    {revision && onBuildPractice && <div className="curated-library__practice">
+      <p>Build a saved Practice Attempt from this exact package revision.</p>
+      <button type="button" onClick={() => onBuildPractice(revision)}>Build Practice Attempt</button>
     </div>}
     {question && <article className="curated-library__question" aria-label="Question Presentation">
       <h3>{question.section} · Question {question.questionNumber}</h3>
