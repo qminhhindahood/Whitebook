@@ -55,7 +55,7 @@ type AttemptRow = {
 
 const ROOT = "/api/attempts";
 const ATTEMPT_ID = /^[0-9a-f-]{36}$/i;
-const MAX_BODY_CHARS = 16_384;
+const MAX_BODY_CHARS = 65_536;
 const EDITOR_LEASE_MS = 120_000;
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -196,12 +196,14 @@ function summary(row: AttemptRow) {
   };
 }
 
-async function listAttempts(env: AttemptEnv, accountId: string): Promise<Response> {
+async function listAttempts(env: AttemptEnv, accountId: string, now: number): Promise<Response> {
   const items = await rows<AttemptRow>(env.DB.prepare("SELECT id, account_id, revision_id, kind, status, " +
       "config_json, questions_json, state_json, state_version, created_at_ms, started_at_ms, deadline_at_ms, " +
       "completed_at_ms, result_json, editor_token_hash, editor_lease_expires_at_ms " +
       "FROM learner_attempts WHERE account_id = ? ORDER BY created_at_ms DESC").bind(accountId));
-  return json({ attempts: items.map(summary) });
+  const current = await Promise.all(items.map((row) => enforceSectionDeadline(env, row, now)));
+  if (current.some((row) => !row)) return failure(503, "attempt_unavailable", "Whitebook could not refresh Attempt history. Try again.");
+  return json({ attempts: current.map((row) => summary(row!)) });
 }
 
 function shuffle<T>(items: T[]): T[] {
@@ -216,6 +218,8 @@ function shuffle<T>(items: T[]): T[] {
 }
 
 function durationMs(config: AttemptConfig, questions: QuestionLink[]): number | null {
+  if (config.kind === "section_exam")
+    return config.section === "Math" ? 35 * 60_000 : 32 * 60_000;
   if (config.timing.mode === "elapsed") return null;
   if (config.timing.mode === "custom") return config.timing.durationSeconds * 1000;
   if (questions.length !== config.count || config.modules.length !== 1) return null;
@@ -324,10 +328,13 @@ async function startAttempt(env: AttemptEnv, accountId: string, attemptId: strin
 
   const token = editorToken();
   const expiresAt = now + EDITOR_LEASE_MS;
-  const result = await env.DB.prepare("UPDATE learner_attempts SET status = 'active', started_at_ms = ?, " +
+  const state = parseState(row);
+  if (row.kind === "section_exam") state.questionTimingStartedAtMs = now;
+  const result = await env.DB.prepare("UPDATE learner_attempts SET state_json = ?, status = 'active', started_at_ms = ?, " +
       "deadline_at_ms = ?, editor_token_hash = ?, editor_lease_expires_at_ms = ?, state_version = state_version + 1 " +
       "WHERE id = ? AND account_id = ? AND status = 'preparing'")
-    .bind(now, duration === null ? null : now + duration, await sha256(token), expiresAt, attemptId, accountId).run();
+    .bind(JSON.stringify(state), now, duration === null ? null : now + duration, await sha256(token), expiresAt,
+      attemptId, accountId).run();
   if (!result.success) return failure(503, "attempt_unavailable", "Whitebook could not start this Attempt. Try again.");
   if (result.meta.changes !== 1) return failure(409, "attempt_changed", "This Attempt has already changed.");
   const started = await attemptRow(env, accountId, attemptId);
@@ -335,13 +342,95 @@ async function startAttempt(env: AttemptEnv, accountId: string, attemptId: strin
   return json({ ...snapshot(started, now), editorToken: token });
 }
 
+function checkpointQuestionTime(source: Record<string, unknown>, at: number, deadlineAt: number | null): Record<string, unknown> {
+  const state = { ...source };
+  const questionId = state.currentQuestionId;
+  const startedAt = state.questionTimingStartedAtMs;
+  if (typeof questionId !== "string" || typeof startedAt !== "number") return state;
+  const endAt = deadlineAt === null ? at : Math.min(at, deadlineAt);
+  const elapsed = Math.max(0, endAt - startedAt);
+  const previous = isObject(state.questionElapsedMs) ? state.questionElapsedMs : {};
+  state.questionElapsedMs = { ...previous, [questionId]: Number(previous[questionId] ?? 0) + elapsed };
+  state.questionTimingStartedAtMs = endAt;
+  return state;
+}
+
+async function gradeSectionExam(env: AttemptEnv, row: AttemptRow, state: Record<string, unknown>) {
+  const questions = parseQuestions(row);
+  const answerRows = await rows<AnswerRow>(env.DB.prepare("SELECT question_id, accepted_answers_json FROM publication_answers " +
+      "WHERE revision_id = ?").bind(row.revision_id));
+  const answers = new Map(answerRows.map((answer) => [answer.question_id, JSON.parse(answer.accepted_answers_json) as string[]]));
+  if (questions.some((question) => !answers.has(question.questionId))) return null;
+  const responses = isObject(state.responses) ? state.responses : {};
+  const graded = questions.map((question) => {
+    const acceptedAnswers = answers.get(question.questionId)!;
+    const response = typeof responses[question.questionId] === "string" ? responses[question.questionId] as string : null;
+    const correct = response !== null && acceptedAnswers.some((answer) =>
+      answer.trim().toLocaleLowerCase() === response.trim().toLocaleLowerCase());
+    return { questionId: question.questionId, response, acceptedAnswers, correct };
+  });
+  return { correctCount: graded.filter((question) => question.correct).length,
+    questionCount: graded.length, questions: graded };
+}
+
+async function closeSectionExamModule(
+  env: AttemptEnv,
+  row: AttemptRow,
+  now: number,
+  closedAt: number,
+): Promise<AttemptRow | null> {
+  const state = parseState(row);
+  if (row.kind !== "section_exam" || state.phase !== "module" || row.deadline_at_ms === null) return row;
+  const closeTime = Math.min(closedAt, now);
+  const checkpointAt = Math.min(closeTime, row.deadline_at_ms);
+  const closedState = checkpointQuestionTime(state, checkpointAt, row.deadline_at_ms);
+  const activeModule = Number(closedState.activeModule);
+  const locked = Array.isArray(closedState.lockedModules) ? closedState.lockedModules.filter(Number.isInteger) as number[] : [];
+  closedState.lockedModules = [...new Set([...locked, activeModule])].sort();
+  closedState.questionTimingStartedAtMs = null;
+  closedState.remainingSeconds = null;
+  closedState.pausedPhase = null;
+
+  if (activeModule === 1) {
+    closedState.phase = "transition";
+    const update = await env.DB.prepare("UPDATE learner_attempts SET state_json = ?, deadline_at_ms = NULL, " +
+        "state_version = state_version + 1 WHERE id = ? AND account_id = ? AND status = 'active' " +
+        "AND state_version = ? AND deadline_at_ms = ?")
+      .bind(JSON.stringify(closedState), row.id, row.account_id, row.state_version, row.deadline_at_ms).run();
+    if (!update.success) return null;
+    return attemptRow(env, row.account_id, row.id);
+  }
+
+  const result = await gradeSectionExam(env, row, closedState);
+  if (!result) return null;
+  const update = await env.DB.prepare("UPDATE learner_attempts SET status = 'completed', state_json = ?, " +
+      "deadline_at_ms = NULL, completed_at_ms = ?, result_json = ?, editor_token_hash = NULL, " +
+      "editor_lease_expires_at_ms = NULL, state_version = state_version + 1 WHERE id = ? AND account_id = ? " +
+      "AND status = 'active' AND state_version = ? AND deadline_at_ms = ?")
+    .bind(JSON.stringify(closedState), closeTime, JSON.stringify(result), row.id, row.account_id,
+      row.state_version, row.deadline_at_ms).run();
+  if (!update.success) return null;
+  return attemptRow(env, row.account_id, row.id);
+}
+
+async function enforceSectionDeadline(env: AttemptEnv, row: AttemptRow, now: number): Promise<AttemptRow | null> {
+  if (row.kind !== "section_exam" || row.status !== "active" || row.deadline_at_ms === null || row.deadline_at_ms > now)
+    return row;
+  const next = await closeSectionExamModule(env, row, now, row.deadline_at_ms);
+  if (next) return next;
+  return attemptRow(env, row.account_id, row.id);
+}
+
 async function getAttempt(env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
   const row = await attemptRow(env, accountId, attemptId);
   if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
-  return json(snapshot(row, now));
+  const current = await enforceSectionDeadline(env, row, now);
+  if (!current) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
+  return json(snapshot(current, now));
 }
 
 type AttemptState = {
+  [key: string]: unknown;
   responses: Record<string, string>;
   markedQuestionIds: string[];
   eliminatedChoices: Record<string, string[]>;
@@ -352,7 +441,8 @@ type AttemptChange =
   | { type: "response"; questionId: string; response: string | null }
   | { type: "mark"; questionId: string; marked: boolean }
   | { type: "elimination"; questionId: string; choiceId: string; eliminated: boolean }
-  | { type: "navigation"; questionId: string };
+  | { type: "navigation"; questionId: string }
+  | { type: "calculator_state"; state: Record<string, unknown> };
 
 function parseVersion(value: unknown): number | null {
   return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null;
@@ -371,7 +461,10 @@ function sameSecret(left: string, right: string): boolean {
 }
 
 function parseChange(value: unknown, questions: QuestionLink[]): AttemptChange | null {
-  if (!isObject(value) || typeof value.questionId !== "string") return null;
+  if (!isObject(value)) return null;
+  if (value.type === "calculator_state" && isObject(value.state) && JSON.stringify(value.state).length <= 48_000)
+    return { type: "calculator_state", state: value.state };
+  if (typeof value.questionId !== "string") return null;
   const question = questions.find((item) => item.questionId === value.questionId);
   if (!question) return null;
   const questionId = question.questionId;
@@ -392,6 +485,7 @@ function parseChange(value: unknown, questions: QuestionLink[]): AttemptChange |
 function applyChange(source: Record<string, unknown>, change: AttemptChange): AttemptState {
   const previous = source as unknown as AttemptState;
   const state: AttemptState = {
+    ...source,
     responses: { ...previous.responses },
     markedQuestionIds: [...previous.markedQuestionIds],
     eliminatedChoices: Object.fromEntries(Object.entries(previous.eliminatedChoices)
@@ -411,8 +505,10 @@ function applyChange(source: Record<string, unknown>, change: AttemptChange): At
     else choices.delete(change.choiceId);
     if (choices.size) state.eliminatedChoices[change.questionId] = [...choices].sort();
     else delete state.eliminatedChoices[change.questionId];
-  } else {
+  } else if (change.type === "navigation") {
     state.currentQuestionId = change.questionId;
+  } else {
+    state.calculatorState = change.state;
   }
   return state;
 }
@@ -446,19 +542,159 @@ async function updateEditorState(env: AttemptEnv, row: AttemptRow, token: string
   return result.success && result.meta.changes === 1;
 }
 
+async function updateSectionLifecycle(
+  env: AttemptEnv,
+  row: AttemptRow,
+  token: string,
+  state: Record<string, unknown>,
+  deadlineAt: number | null,
+  now: number,
+): Promise<boolean> {
+  const result = await env.DB.prepare("UPDATE learner_attempts SET state_json = ?, deadline_at_ms = ?, " +
+      "state_version = state_version + 1, editor_lease_expires_at_ms = ? WHERE id = ? AND account_id = ? " +
+      "AND status = 'active' AND state_version = ? AND editor_token_hash = ? AND editor_lease_expires_at_ms > ? " +
+      "AND deadline_at_ms IS ?")
+    .bind(JSON.stringify(state), deadlineAt, now + EDITOR_LEASE_MS, row.id, row.account_id, row.state_version,
+      await sha256(token), now, row.deadline_at_ms).run();
+  return result.success && result.meta.changes === 1;
+}
+
+async function finishModule(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const body = await readBody(request);
+  if (body instanceof Response) return body;
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
+  if (row.kind !== "section_exam") return failure(409, "attempt_changed", "Only a Section Exam closes one Module at a time.");
+  const token = parseEditorToken(body.editorToken);
+  const denied = await validateMutable(row, token, parseVersion(body.expectedStateVersion), now);
+  if (denied) return denied;
+  if (parseState(row).phase !== "module")
+    return failure(409, "attempt_changed", "There is no running Module to finish.");
+  const updated = await closeSectionExamModule(env, row, now, now);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not close this Module. Try again.");
+  const result = updated.status === "completed" && updated.result_json ? { result: JSON.parse(updated.result_json) } : {};
+  return json({ ...snapshot(updated, now), ...result });
+}
+
+async function continueSectionExam(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const body = await readBody(request);
+  if (body instanceof Response) return body;
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
+  if (row.kind !== "section_exam") return failure(409, "attempt_changed", "This Attempt has no Section Exam transition.");
+  const token = parseEditorToken(body.editorToken);
+  const denied = await validateMutable(row, token, parseVersion(body.expectedStateVersion), now);
+  if (denied) return denied;
+  const state = parseState(row);
+  if (state.phase !== "transition" || Number(state.activeModule) !== 1)
+    return failure(409, "attempt_changed", "Module 2 can start only from the Section Exam transition.");
+  const questions = parseQuestions(row);
+  const first = questions.find((question) => question.module === 2);
+  if (!first) return failure(503, "attempt_unavailable", "Module 2 questions are unavailable.");
+  const config = JSON.parse(row.config_json) as AttemptConfig;
+  const nextState = { ...state, phase: "module", activeModule: 2, currentQuestionId: first.questionId,
+    remainingSeconds: null, pausedPhase: null, questionTimingStartedAtMs: now };
+  const deadlineAt = now + (durationMs(config, questions) ?? 0);
+  if (!(await updateSectionLifecycle(env, row, token!, nextState, deadlineAt, now)))
+    return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before continuing.");
+  const updated = await attemptRow(env, accountId, attemptId);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  return json(snapshot(updated, now));
+}
+
+async function pauseSectionExam(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const body = await readBody(request);
+  if (body instanceof Response) return body;
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
+  if (row.kind !== "section_exam") return failure(409, "attempt_changed", "Pause is unavailable for this Attempt.");
+  const token = parseEditorToken(body.editorToken);
+  const denied = await validateMutable(row, token, parseVersion(body.expectedStateVersion), now);
+  if (denied) return denied;
+  const state = parseState(row);
+  if (state.phase !== "module" && state.phase !== "transition")
+    return failure(409, "attempt_changed", "This Attempt is already paused or closed.");
+  const pausedPhase = state.phase;
+  const pausedState = pausedPhase === "module"
+    ? checkpointQuestionTime(state, now, row.deadline_at_ms)
+    : { ...state };
+  pausedState.phase = "paused";
+  pausedState.pausedPhase = pausedPhase;
+  pausedState.remainingSeconds = pausedPhase === "module" && row.deadline_at_ms !== null
+    ? Math.floor(Math.max(0, row.deadline_at_ms - now) / 1000) : null;
+  pausedState.questionTimingStartedAtMs = null;
+  if (!(await updateSectionLifecycle(env, row, token!, pausedState, null, now)))
+    return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before pausing.");
+  const updated = await attemptRow(env, accountId, attemptId);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  return json(snapshot(updated, now));
+}
+
+async function resumeSectionExam(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const body = await readBody(request);
+  if (body instanceof Response) return body;
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
+  if (row.kind !== "section_exam") return failure(409, "attempt_changed", "Resume is unavailable for this Attempt.");
+  const token = parseEditorToken(body.editorToken);
+  const denied = await validateMutable(row, token, parseVersion(body.expectedStateVersion), now);
+  if (denied) return denied;
+  const state = parseState(row);
+  if (state.phase !== "paused" || (state.pausedPhase !== "module" && state.pausedPhase !== "transition"))
+    return failure(409, "attempt_changed", "This Attempt is not paused.");
+  const resumedState = { ...state, phase: state.pausedPhase, pausedPhase: null,
+    remainingSeconds: null,
+    questionTimingStartedAtMs: state.pausedPhase === "module" ? now : null };
+  const deadlineAt = state.pausedPhase === "module"
+    ? now + Number(state.remainingSeconds ?? 0) * 1000 : null;
+  if (!(await updateSectionLifecycle(env, row, token!, resumedState, deadlineAt, now)))
+    return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before resuming.");
+  const updated = await attemptRow(env, accountId, attemptId);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  const current = await enforceSectionDeadline(env, updated, now);
+  if (!current) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
+  return json(snapshot(current, now));
+}
+
 async function writeAttempt(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
   const body = await readBody(request);
   if (body instanceof Response) return body;
-  const row = await attemptRow(env, accountId, attemptId);
-  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
   const token = parseEditorToken(body.editorToken);
   const expectedVersion = parseVersion(body.expectedStateVersion);
   const denied = await validateMutable(row, token, expectedVersion, now);
   if (denied) return denied;
   const change = parseChange(body.change, parseQuestions(row));
   if (!change) return failure(400, "invalid_attempt_change", "This Attempt change is invalid.");
-  const state = applyChange(parseState(row), change);
-  if (!(await updateEditorState(env, row, token!, state as unknown as Record<string, unknown>, now)))
+  const originalState = parseState(row);
+  let state = originalState;
+  if (row.kind === "section_exam") {
+    if (originalState.phase !== "module")
+      return failure(409, "attempt_changed", "Continue to the active Module before editing.");
+    if (change.type === "calculator_state") {
+      const config = JSON.parse(row.config_json) as AttemptConfig;
+      if (config.section !== "Math") return failure(400, "invalid_attempt_change", "Calculator state is only available in Math.");
+    } else {
+      const question = parseQuestions(row).find((item) => item.questionId === change.questionId);
+      if (!question || question.module !== Number(originalState.activeModule))
+        return failure(400, "invalid_attempt_change", "Only the active Module can be changed.");
+    }
+    state = checkpointQuestionTime(originalState, now, row.deadline_at_ms);
+    state.questionTimingStartedAtMs = now;
+  }
+  const nextState = applyChange(state, change);
+  if (!(await updateEditorState(env, row, token!, nextState, now)))
     return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before editing.");
   const updated = await attemptRow(env, accountId, attemptId);
   if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
@@ -468,17 +704,34 @@ async function writeAttempt(request: Request, env: AttemptEnv, accountId: string
 async function heartbeat(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
   const body = await readBody(request);
   if (body instanceof Response) return body;
-  const row = await attemptRow(env, accountId, attemptId);
-  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
   const token = parseEditorToken(body.editorToken);
   const expectedVersion = parseVersion(body.expectedStateVersion);
   const denied = await validateMutable(row, token, expectedVersion, now);
   if (denied) return denied;
-  const result = await env.DB.prepare("UPDATE learner_attempts SET state_version = state_version + 1, " +
+  let stateJson: string | null = null;
+  if (row.kind === "section_exam") {
+    const state = parseState(row);
+    if (state.phase !== "module") return failure(409, "attempt_changed", "A lease heartbeat is only accepted during a running Module.");
+    const checkpointed = checkpointQuestionTime(state, now, row.deadline_at_ms);
+    checkpointed.questionTimingStartedAtMs = now;
+    stateJson = JSON.stringify(checkpointed);
+  }
+  const statement = stateJson === null
+    ? "UPDATE learner_attempts SET state_version = state_version + 1, " +
       "editor_lease_expires_at_ms = ? WHERE id = ? AND account_id = ? AND status = 'active' " +
       "AND state_version = ? AND editor_token_hash = ? AND editor_lease_expires_at_ms > ? " +
-      "AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
-    .bind(now + EDITOR_LEASE_MS, row.id, accountId, row.state_version, await sha256(token!), now, now).run();
+      "AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)"
+    : "UPDATE learner_attempts SET state_json = ?, state_version = state_version + 1, " +
+      "editor_lease_expires_at_ms = ? WHERE id = ? AND account_id = ? AND status = 'active' " +
+      "AND state_version = ? AND editor_token_hash = ? AND editor_lease_expires_at_ms > ? " +
+      "AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)";
+  const result = await env.DB.prepare(statement)
+    .bind(...(stateJson === null ? [] : [stateJson]), now + EDITOR_LEASE_MS, row.id, accountId, row.state_version,
+      await sha256(token!), now, now).run();
   if (!result.success) return failure(503, "attempt_unavailable", "Whitebook could not renew editing. Try again.");
   if (result.meta.changes !== 1) return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before editing.");
   const updated = await attemptRow(env, accountId, attemptId);
@@ -487,8 +740,10 @@ async function heartbeat(request: Request, env: AttemptEnv, accountId: string, a
 }
 
 async function takeover(env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
-  const row = await attemptRow(env, accountId, attemptId);
-  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
   if (row.status !== "active") return failure(409, "attempt_changed", "This Attempt is no longer editable.");
   if (row.deadline_at_ms !== null && row.deadline_at_ms <= now)
     return failure(409, "attempt_expired", "The timed Attempt has ended.");
@@ -510,8 +765,12 @@ type AnswerRow = { question_id: string; accepted_answers_json: string };
 async function submitAttempt(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
   const body = await readBody(request);
   if (body instanceof Response) return body;
-  const row = await attemptRow(env, accountId, attemptId);
-  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
+  if (row.kind === "section_exam")
+    return failure(409, "attempt_changed", "Finish both Section Exam Modules to complete this Attempt.");
   const token = parseEditorToken(body.editorToken);
   const expectedVersion = parseVersion(body.expectedStateVersion);
   const denied = await validateMutable(row, token, expectedVersion, now);
@@ -545,9 +804,11 @@ async function submitAttempt(request: Request, env: AttemptEnv, accountId: strin
   return json({ ...snapshot(completed, now), result: resultData });
 }
 
-async function getResults(env: AttemptEnv, accountId: string, attemptId: string): Promise<Response> {
-  const row = await attemptRow(env, accountId, attemptId);
-  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+async function getResults(env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const found = await attemptRow(env, accountId, attemptId);
+  if (!found) return failure(404, "not_found", "This Attempt is unavailable.");
+  const row = await enforceSectionDeadline(env, found, now);
+  if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
   if (row.status !== "completed" || !row.result_json)
     return failure(409, "attempt_incomplete", "Results are available after you submit this Attempt.");
   return json({ attemptId, status: row.status, completedAt: row.completed_at_ms,
@@ -568,22 +829,30 @@ export function attemptRoute(request: Request, env: AttemptEnv, now: () => numbe
 
     const serverNow = now();
     if (request.method === "GET" && path === ROOT)
-      return listAttempts(env, session.account_id);
+      return listAttempts(env, session.account_id, serverNow);
     if (request.method === "POST" && path === ROOT)
       return createAttempt(request, env, session.account_id, serverNow);
 
-    const match = new RegExp("^/api/attempts/([0-9a-f-]{36})(?:/(start|write|heartbeat|takeover|submit|results))?$", "i").exec(path);
+    const match = new RegExp("^/api/attempts/([0-9a-f-]{36})(?:/(start|write|heartbeat|takeover|submit|results|finish-module|continue|pause|resume))?$", "i").exec(path);
     if (!match) return failure(404, "not_found", "This Attempt action is unavailable.");
     const attemptId = match[1];
     if (request.method === "GET" && !match[2])
       return getAttempt(env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "start")
       return startAttempt(env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "finish-module")
+      return finishModule(request, env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "continue")
+      return continueSectionExam(request, env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "pause")
+      return pauseSectionExam(request, env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "resume")
+      return resumeSectionExam(request, env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "write") return writeAttempt(request, env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "heartbeat") return heartbeat(request, env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "takeover") return takeover(env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "submit") return submitAttempt(request, env, session.account_id, attemptId, serverNow);
-    if (request.method === "GET" && match[2] === "results") return getResults(env, session.account_id, attemptId);
+    if (request.method === "GET" && match[2] === "results") return getResults(env, session.account_id, attemptId, serverNow);
     return failure(404, "not_found", "This Attempt action is unavailable.");
   })();
 }
