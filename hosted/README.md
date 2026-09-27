@@ -1,5 +1,7 @@
 # Ticket 02: protected staging question
 
+Account export, deletion, encrypted D1 backup, retention, and the disposable restore drill are documented in [RECOVERY.md](RECOVERY.md).
+
 This is a **staging-only** Worker and D1 fixture. It serves one synthetic, reviewed Question Presentation at `/api/staging/questions/v1/fixture-1` and one derived SVG at `/content/v1/fixture-1/triangle.svg`. The accepted answer is seeded in the separate `answer_keys` table and has no response route. The learner-facing build contains only `staging.html`, its JS/CSS, and that SVG; it does not contain the local authoring app or a Source PDF.
 
 Every request runs the Worker first. Only `/staging`, its exact Vite assets, the session endpoint, the fixture endpoint, and the allowlisted visual path can return content. The visual path requires a short-lived HttpOnly, Secure, SameSite cookie backed by a hashed D1 session. The access code is a staging secret; it is never committed or embedded in the frontend. This is a test authorization path for ticket 02, not the Google Learner Account work in ticket 03.

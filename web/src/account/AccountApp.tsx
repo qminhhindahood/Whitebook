@@ -22,6 +22,7 @@ export function AccountApp() {
   const [signInReady, setSignInReady] = useState(true);
   const [nickname, setNickname] = useState("");
   const [timeZone, setTimeZone] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice" | "history" | "progress" | "plan">("dashboard");
   const [practiceRevisionId, setPracticeRevisionId] = useState<string>();
@@ -127,6 +128,42 @@ export function AccountApp() {
     finally { setBusy(false); }
   }
 
+  async function exportData() {
+    setBusy(true);
+    try {
+      const response = await accountFetch("/api/account/export");
+      if (response.status === 401) { setMe(null); setMessage("Your session ended. Sign in again."); return; }
+      if (!response.ok) throw new Error("Export failed");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "whitebook-account-export.json";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setMessage("Your account data download was started.");
+    } catch { setMessage("Your export could not be downloaded. Try again."); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteAccount(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (deleteConfirmation !== "DELETE MY ACCOUNT") return;
+    setBusy(true);
+    try {
+      const response = await mutate("/api/account/delete", { confirmation: deleteConfirmation });
+      if (response.status === 401) { setMe(null); setMessage("Your session ended. Sign in again."); return; }
+      if (!response.ok) throw new Error("Deletion failed");
+      setMe(null);
+      setNickname("");
+      setTimeZone("");
+      setDeleteConfirmation("");
+      setMessage("Your account and study data were deleted.");
+    } catch { setMessage("Your account was not deleted. Try again."); }
+    finally { setBusy(false); }
+  }
+
   const loginError = new URLSearchParams(window.location.search).get("error");
   const handleSessionEnded = useCallback(() => {
     setMe(null);
@@ -187,6 +224,12 @@ export function AccountApp() {
                 <div className="account-row"><input id="time-zone" maxLength={64} value={timeZone} placeholder={deviceZone()} onChange={(event) => setTimeZone(event.target.value)} /><button disabled={busy}>Save time zone</button></div>
               </form>
               <div className="account-actions"><button type="button" disabled={busy} onClick={renew}>Renew session</button><button type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
+              <div className="account-actions"><button type="button" disabled={busy} onClick={exportData}>Download account data</button></div>
+              <form onSubmit={deleteAccount}>
+                <label htmlFor="delete-confirmation">Delete account</label>
+                <p className="account-hint">This permanently removes your study data and signs out every device. Download a copy first if you want to keep it. Type DELETE MY ACCOUNT to confirm.</p>
+                <div className="account-row"><input id="delete-confirmation" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /><button type="submit" disabled={busy || deleteConfirmation !== "DELETE MY ACCOUNT"}>Permanently delete account</button></div>
+              </form>
             </section>
           </>}
       </div> :
