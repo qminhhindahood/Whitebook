@@ -21,6 +21,11 @@ SOURCE_SET = {
     ("Hardest SAT Math Questions", 11), ("September Math", 5),
     ("September R&W", 6),
 }
+READING_CATEGORIES = {"Word in Context", "Main Idea", "Text Structure", "Command of Evidence",
+                      "Inference", "Cross Text", "Grammar", "Transition", "Rhetorical Synthesis",
+                      "Details", "Vocabulary"}
+MATH_CATEGORIES = {"Algebra", "Advanced Math", "Problem-Solving and Data Analysis",
+                   "Geometry and Trigonometry"}
 MIME = {"png": "image/png", "webp": "image/webp", "jpg": "image/jpeg", "jpeg": "image/jpeg"}
 
 
@@ -188,7 +193,12 @@ def prepare(bundle, output, check_only=False):
         check(isinstance(questions, list) and questions, "Empty package")
         package_answer_rows = [answer for answer in answers["answers"] if answer["revisionId"] == revision]
         package_assets = [asset for asset in manifest["assets"] if asset["revisionId"] == revision]
-        package_hash = digest(json.dumps({"package": package, "answers": package_answer_rows,
+        # Category metadata has its own reviewed table and guard. It does not change
+        # the immutable Question Presentation hash, so an existing release can gain it.
+        content_package = {**package, "questions": [
+            {key: value for key, value in item.items() if key != "category"}
+            for item in questions]}
+        package_hash = digest(json.dumps({"package": content_package, "answers": package_answer_rows,
                                          "assets": package_assets}, sort_keys=True,
                                         separators=(",", ":")).encode())
         revision_guards.append(f"(SELECT content_sha256 FROM package_revisions WHERE id = {sql(revision)}) = {sql(package_hash)}")
@@ -198,7 +208,7 @@ def prepare(bundle, output, check_only=False):
         source_question_ids = set()
         for ordinal, item in enumerate(questions, 1):
             required = {"questionId", "sourceQuestionId", "section", "module", "questionNumber", "responseType", "reviewStatus", "presentation"}
-            check(isinstance(item, dict) and required <= set(item) <= required | {"reviewedHelp"},
+            check(isinstance(item, dict) and required <= set(item) <= required | {"reviewedHelp", "category"},
                   "Invalid question fields")
             question = item["questionId"]
             key = (revision, question)
@@ -211,6 +221,10 @@ def prepare(bundle, output, check_only=False):
                   item["module"] > 0 and isinstance(item["questionNumber"], int) and item["questionNumber"] > 0 and
                   item["responseType"] in ("multiple_choice", "student_produced_response") and
                   item["reviewStatus"] in ("reviewed_text", "image_fallback"), "Invalid question metadata")
+            if "category" in item:
+                allowed = MATH_CATEGORIES if item["section"] == "Math" else READING_CATEGORIES
+                check(isinstance(item["category"], str) and item["category"] in allowed,
+                      "Invalid question category")
             presentation = item["presentation"]
             check(isinstance(presentation, dict) and {"version", "stimulus", "stem", "choices"} <= set(presentation) and
                   set(presentation) <= {"version", "stimulus", "stem", "choices", "mode", "mathChoiceMode", "reviewStatus"},
@@ -247,6 +261,9 @@ def prepare(bundle, output, check_only=False):
                 check(len(accepted) == 1 and accepted[0] in "ABCD", "Invalid multiple-choice answer")
             serialized = json.dumps(presentation, separators=(",", ":"), ensure_ascii=False)
             lines.append(f"INSERT OR IGNORE INTO publication_questions VALUES ({sql(revision)}, {sql(question)}, {sql(item['sourceQuestionId'])}, {ordinal}, {sql(item['section'])}, {item['module']}, {item['questionNumber']}, {sql(item['responseType'])}, {sql(serialized)});")
+            if "category" in item:
+                lines.append(f"INSERT OR IGNORE INTO publication_question_categories VALUES ({sql(revision)}, {sql(question)}, {sql(item['category'])});")
+                revision_guards.append(f"(SELECT category FROM publication_question_categories WHERE revision_id = {sql(revision)} AND question_id = {sql(question)}) = {sql(item['category'])}")
             lines.append(f"INSERT OR IGNORE INTO publication_answers VALUES ({sql(revision)}, {sql(question)}, {sql(json.dumps(accepted, separators=(',', ':')))});")
             if "reviewedHelp" in item:
                 guidance = item["reviewedHelp"]

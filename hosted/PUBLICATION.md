@@ -52,6 +52,12 @@ revision or answer row fails the final guard and cannot activate. Prior revision
 rows remain readable for references from Attempts. The importer does not edit the
 active source database.
 
+For Progress, apply migration `0008_progress_evidence.sql` before preparing and
+executing a category-bearing bundle. Re-export from the reviewed migration copy
+and use a new release ID to add category metadata to existing question revisions.
+Missing categories stay visible as unmapped until that owner step is complete;
+see [PROGRESS.md](PROGRESS.md).
+
 ## Local verification on 2026-09-27
 
 The real bundle exported and imported into a disposable local D1 copy. The copy

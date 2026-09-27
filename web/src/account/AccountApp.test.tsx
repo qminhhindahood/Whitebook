@@ -56,7 +56,7 @@ it("shows account data, saves a nickname, renews and clears private state on sig
   expect(await screen.findByRole("link", { name: "Continue with Google" })).toBeTruthy();
   expect(screen.queryByText("Welcome, Sam")).toBeNull();
   expect(calls.map((call) => call.path)).toEqual(expect.arrayContaining([
-    "/api/account/me", "/api/account/sat-dates", "/api/account/scores",
+    "/api/account/me", "/api/account/sat-dates",
     "/api/account/profile", "/api/auth/renew", "/api/auth/signout",
   ]));
   await waitFor(() => {
@@ -64,6 +64,50 @@ it("shows account data, saves a nickname, renews and clears private state on sig
     expect(mutations.map((call) => call.path)).toEqual(["/api/account/profile", "/api/auth/renew", "/api/auth/signout"]);
     expect(mutations.every((call) => call.init?.method === "POST" && call.init?.credentials === "same-origin")).toBe(true);
   });
+});
+
+it("opens Progress with Whitebook evidence separate from learner-entered SAT bands", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string) => {
+    if (path === "/api/account/me") return Response.json({ account: {
+      id: "account-1", email: "learner@example.test", displayName: "Learner", nickname: "", timeZone: "", role: "learner",
+    }, session: { expiresAt: 100 } });
+    if (path === "/api/account/sat-dates") return Response.json({ catalog: { source: "College Board", dates: [] }, selection: { dates: [], primary: null } });
+    if (path === "/api/account/progress") return Response.json({ completedAttempts: 1, excludedAssisted: 0,
+      sections: [{ section: "Math", sampleSize: 2, attemptCount: 1, correct: 1, incorrect: 0, unanswered: 1,
+        rawAccuracy: 50, averageTimeSeconds: 40, timeSampleSize: 2, latestAt: 1_800_000_000_000,
+        recentTrend: "insufficient", recentAccuracy: null, previousAccuracy: null,
+        tentative: true, tentativeReasons: ["Fewer than 10 graded questions"] }],
+      categories: [{ section: "Math", category: "Algebra", sampleSize: 1, attemptCount: 1, correct: 1,
+        incorrect: 0, unanswered: 0, rawAccuracy: 100, averageTimeSeconds: null, timeSampleSize: 0,
+        latestAt: 1_800_000_000_000, recentTrend: "insufficient", recentAccuracy: null, previousAccuracy: null,
+        tentative: true, tentativeReasons: ["Fewer than 10 graded questions"] }],
+      domains: [{ section: "Math", domain: "Algebra", sampleSize: 1, attemptCount: 1, correct: 1,
+        incorrect: 0, unanswered: 0, rawAccuracy: 100, averageTimeSeconds: null, timeSampleSize: 0,
+        latestAt: 1_800_000_000_000, recentTrend: "insufficient", recentAccuracy: null, previousAccuracy: null,
+        tentative: true, tentativeReasons: ["Fewer than 10 graded questions"] }],
+      unmapped: [{ section: "Math", category: "Uncategorized", sampleSize: 1, attemptCount: 1,
+        correct: 0, incorrect: 0, unanswered: 1, rawAccuracy: 0, averageTimeSeconds: null,
+        timeSampleSize: 0, latestAt: 1_800_000_000_000, recentTrend: "insufficient",
+        recentAccuracy: null, previousAccuracy: null, tentative: true,
+        tentativeReasons: ["Fewer than 10 graded questions"] }] });
+    if (path === "/api/account/scores") return Response.json({ results: [{ id: "official-1", administrationDate: "2026-08-23",
+      total: 1310, readingWriting: 610, math: 700, bands: { informationIdeas: 3, craftStructure: null,
+        expressionOfIdeas: null, standardEnglishConventions: null, algebra: 5, advancedMath: null,
+        problemSolvingDataAnalysis: null, geometryTrigonometry: null } }] });
+    throw Error(`Unexpected ${path}`);
+  }));
+  render(<AccountApp />);
+  fireEvent.click(await screen.findByRole("button", { name: "Progress" }));
+  expect(await screen.findByRole("heading", { name: "Whitebook practice evidence" })).toBeTruthy();
+  expect(screen.getByText("50.0%")).toBeTruthy();
+  expect(screen.getAllByText(/Fewer than 10 graded questions/).length).toBeGreaterThan(0);
+  expect(screen.getByRole("heading", { name: "By Question Category" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "By Content Domain" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Unmapped practice questions" })).toBeTruthy();
+  expect(screen.getAllByText(/0 timed of 1/).length).toBeGreaterThan(0);
+  expect(screen.getByRole("heading", { name: "Official SAT Results" })).toBeTruthy();
+  expect(await screen.findByText("Band 3 of 7")).toBeTruthy();
+  expect(screen.queryByText(/predicted SAT|trap susceptibility/i)).toBeNull();
 });
 
 it("opens the Flashcards area from the dashboard navigation and reaches the study day", async () => {

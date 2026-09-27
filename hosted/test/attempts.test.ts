@@ -164,7 +164,7 @@ async function fixture() {
             Object.assign(row, { state_json: String(stateJson), deadline_at_ms: null, state_version: row.state_version + 1 });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
-          if (sql.includes("SET status = 'completed', state_json = ?")) {
+          if (sql.includes("SET status = 'completed', state_json = ?") && sql.includes("deadline_at_ms = NULL")) {
             const [stateJson, completedAt, resultJson, exposedAt, id, accountId, expectedVersion, oldDeadline] = args;
             const row = attempts.get(String(id));
             if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
@@ -197,24 +197,24 @@ async function fixture() {
             Object.assign(row, { state_version: row.state_version + 1, editor_lease_expires_at_ms: Number(leaseExpiry) });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
-          if (sql.includes("SET editor_token_hash = ?, editor_lease_expires_at_ms = ?")) {
-            const [tokenHash, leaseExpiry, id, accountId, expectedVersion] = args;
+          if (sql.includes("SET state_json = ?, editor_token_hash = ?, editor_lease_expires_at_ms = ?")) {
+            const [stateJson, tokenHash, leaseExpiry, id, accountId, expectedVersion] = args;
             const row = attempts.get(String(id));
             if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
                 row.state_version !== Number(expectedVersion))
               return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
-            Object.assign(row, { editor_token_hash: String(tokenHash), editor_lease_expires_at_ms: Number(leaseExpiry),
+            Object.assign(row, { state_json: String(stateJson), editor_token_hash: String(tokenHash), editor_lease_expires_at_ms: Number(leaseExpiry),
               state_version: row.state_version + 1 });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
           if (sql.includes("SET status = 'completed'")) {
-            const [completedAt, exposedAt, resultJson, id, accountId, expectedVersion, tokenHash, now] = args;
+            const [stateJson, completedAt, exposedAt, resultJson, id, accountId, expectedVersion, tokenHash, now] = args;
             const row = attempts.get(String(id));
             if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
                 row.state_version !== Number(expectedVersion) || row.editor_token_hash !== String(tokenHash) ||
                 row.editor_lease_expires_at_ms === null || row.editor_lease_expires_at_ms <= Number(now))
               return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
-            Object.assign(row, { status: "completed", completed_at_ms: Number(completedAt),
+            Object.assign(row, { status: "completed", state_json: String(stateJson), completed_at_ms: Number(completedAt),
               answers_exposed_at_ms: Number(exposedAt), result_json: String(resultJson),
               editor_token_hash: null, editor_lease_expires_at_ms: null, state_version: row.state_version + 1 });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
@@ -819,6 +819,44 @@ it("saves a response with a server version and renews the editor lease", async (
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("records per-question Practice time at navigation and submission for evidence averages", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { attemptId, started } = await startPractice(call, credentials[0]);
+    vi.advanceTimersByTime(10_000);
+    const navigation = await call(`/api/attempts/${attemptId}/write`, { method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+        change: { type: "navigation", questionId: "q2" } } });
+    expect(navigation.status).toBe(200);
+    const navigated = await navigation.json() as { stateVersion: number };
+    vi.advanceTimersByTime(20_000);
+    const submitted = await call(`/api/attempts/${attemptId}/submit`, { method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: navigated.stateVersion } });
+    expect(submitted.status).toBe(200);
+    expect(await submitted.json()).toMatchObject({ state: { questionElapsedMs: { q1: 10_000, q2: 20_000 } } });
+  } finally { vi.useRealTimers(); }
+});
+
+it("does not count a gap after an expired Practice editor lease as question time", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { attemptId } = await startPractice(call, credentials[0]);
+    vi.advanceTimersByTime(300_000);
+    const takeover = await call(`/api/attempts/${attemptId}/takeover`, { method: "POST", who: credentials[2] });
+    expect(takeover.status).toBe(200);
+    const next = await takeover.json() as { editorToken: string; stateVersion: number };
+    vi.advanceTimersByTime(10_000);
+    const submitted = await call(`/api/attempts/${attemptId}/submit`, { method: "POST", who: credentials[2],
+      body: { editorToken: next.editorToken, expectedStateVersion: next.stateVersion } });
+    expect(submitted.status).toBe(200);
+    expect(await submitted.json()).toMatchObject({ state: { questionElapsedMs: { q1: 130_000 } } });
+  } finally { vi.useRealTimers(); }
 });
 
 it("rejects response and elimination values that are not in the published presentation", async () => {

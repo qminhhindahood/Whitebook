@@ -291,7 +291,8 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
     ? { phase: "module", activeModule: 1, lockedModules: [], responses: {}, markedQuestionIds: [],
         eliminatedChoices: {}, currentQuestionId: questionIds[0], remainingSeconds: null, pausedPhase: null,
         calculatorState: null, questionElapsedMs: {} }
-    : { responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: questionIds[0] };
+    : { responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: questionIds[0],
+        questionElapsedMs: {} };
   const result = await env.DB.prepare("INSERT INTO learner_attempts " +
       "(id, account_id, revision_id, kind, status, config_json, questions_json, state_json, state_version, created_at_ms) " +
       "VALUES (?, ?, ?, ?, 'preparing', ?, ?, ?, 0, ?)")
@@ -329,7 +330,7 @@ async function startAttempt(env: AttemptEnv, accountId: string, attemptId: strin
   const token = editorToken();
   const expiresAt = now + EDITOR_LEASE_MS;
   const state = parseState(row);
-  if (row.kind === "section_exam") state.questionTimingStartedAtMs = now;
+  state.questionTimingStartedAtMs = now;
   const result = await env.DB.prepare("UPDATE learner_attempts SET state_json = ?, status = 'active', started_at_ms = ?, " +
       "deadline_at_ms = ?, editor_token_hash = ?, editor_lease_expires_at_ms = ?, state_version = state_version + 1 " +
       "WHERE id = ? AND account_id = ? AND status = 'preparing'")
@@ -679,7 +680,6 @@ async function writeAttempt(request: Request, env: AttemptEnv, accountId: string
   const change = parseChange(body.change, parseQuestions(row));
   if (!change) return failure(400, "invalid_attempt_change", "This Attempt change is invalid.");
   const originalState = parseState(row);
-  let state = originalState;
   if (row.kind === "section_exam") {
     if (originalState.phase !== "module")
       return failure(409, "attempt_changed", "Continue to the active Module before editing.");
@@ -691,9 +691,9 @@ async function writeAttempt(request: Request, env: AttemptEnv, accountId: string
       if (!question || question.module !== Number(originalState.activeModule))
         return failure(400, "invalid_attempt_change", "Only the active Module can be changed.");
     }
-    state = checkpointQuestionTime(originalState, now, row.deadline_at_ms);
-    state.questionTimingStartedAtMs = now;
   }
+  const state = checkpointQuestionTime(originalState, now, row.deadline_at_ms);
+  state.questionTimingStartedAtMs = now;
   const nextState = applyChange(state, change);
   if (!(await updateEditorState(env, row, token!, nextState, now)))
     return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before editing.");
@@ -713,25 +713,16 @@ async function heartbeat(request: Request, env: AttemptEnv, accountId: string, a
   const expectedVersion = parseVersion(body.expectedStateVersion);
   const denied = await validateMutable(row, token, expectedVersion, now);
   if (denied) return denied;
-  let stateJson: string | null = null;
-  if (row.kind === "section_exam") {
-    const state = parseState(row);
-    if (state.phase !== "module") return failure(409, "attempt_changed", "A lease heartbeat is only accepted during a running Module.");
-    const checkpointed = checkpointQuestionTime(state, now, row.deadline_at_ms);
-    checkpointed.questionTimingStartedAtMs = now;
-    stateJson = JSON.stringify(checkpointed);
-  }
-  const statement = stateJson === null
-    ? "UPDATE learner_attempts SET state_version = state_version + 1, " +
+  const state = parseState(row);
+  if (row.kind === "section_exam" && state.phase !== "module")
+    return failure(409, "attempt_changed", "A lease heartbeat is only accepted during a running Module.");
+  const checkpointed = checkpointQuestionTime(state, now, row.deadline_at_ms);
+  checkpointed.questionTimingStartedAtMs = now;
+  const result = await env.DB.prepare("UPDATE learner_attempts SET state_json = ?, state_version = state_version + 1, " +
       "editor_lease_expires_at_ms = ? WHERE id = ? AND account_id = ? AND status = 'active' " +
       "AND state_version = ? AND editor_token_hash = ? AND editor_lease_expires_at_ms > ? " +
-      "AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)"
-    : "UPDATE learner_attempts SET state_json = ?, state_version = state_version + 1, " +
-      "editor_lease_expires_at_ms = ? WHERE id = ? AND account_id = ? AND status = 'active' " +
-      "AND state_version = ? AND editor_token_hash = ? AND editor_lease_expires_at_ms > ? " +
-      "AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)";
-  const result = await env.DB.prepare(statement)
-    .bind(...(stateJson === null ? [] : [stateJson]), now + EDITOR_LEASE_MS, row.id, accountId, row.state_version,
+      "AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
+    .bind(JSON.stringify(checkpointed), now + EDITOR_LEASE_MS, row.id, accountId, row.state_version,
       await sha256(token!), now, now).run();
   if (!result.success) return failure(503, "attempt_unavailable", "Whitebook could not renew editing. Try again.");
   if (result.meta.changes !== 1) return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before editing.");
@@ -750,10 +741,15 @@ async function takeover(env: AttemptEnv, accountId: string, attemptId: string, n
     return failure(409, "attempt_expired", "The timed Attempt has ended.");
   const token = editorToken();
   const tokenHash = await sha256(token);
-  const result = await env.DB.prepare("UPDATE learner_attempts SET editor_token_hash = ?, " +
+  const state = parseState(row);
+  const nextState = row.kind === "practice"
+    ? checkpointQuestionTime(state, Math.min(now, row.editor_lease_expires_at_ms ?? now), row.deadline_at_ms)
+    : state;
+  if (row.kind === "practice") nextState.questionTimingStartedAtMs = now;
+  const result = await env.DB.prepare("UPDATE learner_attempts SET state_json = ?, editor_token_hash = ?, " +
       "editor_lease_expires_at_ms = ?, state_version = state_version + 1 WHERE id = ? AND account_id = ? " +
       "AND status = 'active' AND state_version = ? AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
-    .bind(tokenHash, now + EDITOR_LEASE_MS, row.id, accountId, row.state_version, now).run();
+    .bind(JSON.stringify(nextState), tokenHash, now + EDITOR_LEASE_MS, row.id, accountId, row.state_version, now).run();
   if (!result.success) return failure(503, "attempt_unavailable", "Whitebook could not transfer editing. Try again.");
   if (result.meta.changes !== 1) return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before taking over.");
   const updated = await attemptRow(env, accountId, attemptId);
@@ -783,7 +779,7 @@ async function submitAttempt(request: Request, env: AttemptEnv, accountId: strin
   const answers = new Map(answerRows.map((answer) => [answer.question_id, JSON.parse(answer.accepted_answers_json) as string[]]));
   if (questions.some((question) => !answers.has(question.questionId)))
     return failure(503, "attempt_unavailable", "Whitebook could not grade this Attempt. Try again.");
-  const state = parseState(row) as unknown as AttemptState;
+  const state = checkpointQuestionTime(parseState(row), now, row.deadline_at_ms) as unknown as AttemptState;
   const graded = questions.map((question) => {
     const acceptedAnswers = answers.get(question.questionId)!;
     const response = state.responses[question.questionId] ?? null;
@@ -793,11 +789,11 @@ async function submitAttempt(request: Request, env: AttemptEnv, accountId: strin
   const resultData = { correctCount: graded.filter((question) => question.correct).length,
     questionCount: graded.length, questions: graded };
   const resultJson = JSON.stringify(resultData);
-  const update = await env.DB.prepare("UPDATE learner_attempts SET status = 'completed', completed_at_ms = ?, " +
+  const update = await env.DB.prepare("UPDATE learner_attempts SET status = 'completed', state_json = ?, completed_at_ms = ?, " +
       "answers_exposed_at_ms = ?, result_json = ?, editor_token_hash = NULL, editor_lease_expires_at_ms = NULL, state_version = state_version + 1 " +
       "WHERE id = ? AND account_id = ? AND status = 'active' AND state_version = ? AND editor_token_hash = ? " +
       "AND editor_lease_expires_at_ms > ? AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
-    .bind(now, now, resultJson, row.id, accountId, row.state_version, await sha256(token!), now, now).run();
+    .bind(JSON.stringify(state), now, now, resultJson, row.id, accountId, row.state_version, await sha256(token!), now, now).run();
   if (!update.success) return failure(503, "attempt_unavailable", "Whitebook could not submit this Attempt. Try again.");
   if (update.meta.changes !== 1) return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before submitting.");
   const completed = await attemptRow(env, accountId, attemptId);

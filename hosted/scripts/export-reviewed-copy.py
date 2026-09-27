@@ -90,6 +90,7 @@ def export(data_root, audit_path, output, release_id, check_only=False):
                     original["section"] == question["section"] and
                     original["module"] == question["module"] and
                     original["question_number"] == question["question_number"] and
+                    original.get("category") == question.get("category") and
                     not question.get("regions"), "Question identity or order changed")
             question_id = question["id"]
             require(SAFE_ID.fullmatch(question_id), "Invalid question ID")
@@ -126,6 +127,7 @@ def export(data_root, audit_path, output, release_id, check_only=False):
                 "section": question["section"], "module": question["module"],
                 "questionNumber": question["question_number"],
                 "responseType": question["response_type"],
+                **({"category": question["category"]} if question.get("category") else {}),
                 "reviewStatus": "image_fallback" if presentation.get("mode") == "image_fallback" or
                     presentation.get("mathChoiceMode") == "image_fallback" else "reviewed_text",
                 "presentation": presentation,
