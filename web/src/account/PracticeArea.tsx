@@ -6,7 +6,7 @@ import { HostedAttempt } from "./HostedAttempt";
 type Package = { revisionId: string; title: string; publishedRevision: number; questionCount: number };
 export type QuestionLink = {
   questionId: string; ordinal: number; section: string; module: number;
-  questionNumber: number; responseType: string;
+  questionNumber: number; responseType: string; choiceIds?: string[];
 };
 export type PresentationQuestion = QuestionLink & {
   revisionId: string; presentation: HostedPresentationData;
@@ -179,9 +179,18 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
     setPreparingAttemptId(snapshot.attemptId);
     setLoadError(""); setLoadMessage("Loading selected questions and visuals…");
     try {
-      if (snapshot.status !== "preparing")
-        throw new Error("This Attempt has already started. Resume it from Your Attempts.");
       const prepared = await loadSelectedContent(snapshot);
+      if (snapshot.status !== "preparing") {
+        setActiveQuestions(prepared);
+        setActiveAttempt(snapshot);
+        setPreparingAttemptId(""); setLoadMessage("");
+        setAttempts((current) => [{ attemptId: snapshot.attemptId, revisionId: snapshot.revisionId,
+          status: snapshot.status, section: snapshot.section, questionCount: snapshot.questions.length,
+          createdAt: snapshot.createdAt ?? Date.now(), startedAt: snapshot.startedAt,
+          deadlineAt: snapshot.deadlineAt, completedAt: snapshot.completedAt ?? null },
+        ...current.filter((item) => item.attemptId !== snapshot.attemptId)]);
+        return;
+      }
       setLoadMessage("All selected questions and visuals are ready. Starting your clock…");
       const started = await request<AttemptSnapshot>(`/api/attempts/${snapshot.attemptId}/start`, mutation({}));
       setActiveQuestions(prepared);
@@ -286,9 +295,13 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
                   {sections.map((value) => <option key={value}>{value}</option>)}
                 </select>
               </label>
-              <label className="practice-field" htmlFor="practice-count">Question count
-                <input id="practice-count" type="number" min={1} max={pool.length} value={count}
-                  onChange={(event) => setCount(event.target.value)} />
+      <label className="practice-field" htmlFor="practice-count">Question count
+          <input id="practice-count" type="number" min={1} max={pool.length} value={count}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setCount(value);
+                    if (timing === "sat_paced" && Number(value) !== pool.length) setTiming("elapsed");
+                  }} />
                 <span className="practice-field__hint">{pool.length} questions in this selection</span>
               </label>
             </div>

@@ -98,7 +98,8 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const [snapshot, setSnapshot] = useState(initial);
   const [draftState, setDraftState] = useState(() => emptyState(initial.state));
   const [localQuestionId, setLocalQuestionId] = useState(() => emptyState(initial.state).currentQuestionId);
-  const [editorToken, setEditorToken] = useState(() => initial.editorToken ?? readStoredToken(initial.attemptId));
+  const [editorToken, setEditorToken] = useState(() => initial.status === "completed"
+    ? "" : initial.editorToken ?? readStoredToken(initial.attemptId));
   const [paused, setPaused] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "pending" | "failed">("saved");
   const [syncError, setSyncError] = useState("");
@@ -260,6 +261,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     setFailedChanges([]);
     for (const change of changes) {
       queueRef.current.push({ kind: "change", change });
+      if (change.type === "navigation") setLocalQuestionId(change.questionId);
       setDraftState((currentState) => applyChange(currentState, change));
     }
     setSyncError(""); setSaveStatus("pending");
@@ -316,8 +318,9 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     </header>
 
     {snapshot.status === "active" && !canEdit && <div className="hosted-attempt__lease" role="status">
-      <p>{timeExpired ? "The server deadline has passed. This Attempt is read-only." : snapshot.lease?.held
-        ? "Another device has the editing lease. Your answers are read-only until you take over."
+          <p>{timeExpired ? "The server deadline has passed. This Attempt is read-only." : paused
+        ? "Editing is paused after a sync conflict or save failure. Refresh the latest Attempt state to continue."
+        : snapshot.lease?.held ? "Another device has the editing lease. Your answers are read-only until you take over."
         : "The editing lease expired. Reacquire editing to continue."}</p>
       <button type="button" className="practice-button" disabled={takingOver || timeExpired} onClick={() => void takeOver()}>
         {takingOver ? "Refreshing Attempt…" : snapshot.lease?.held ? "Take over editing" : "Reacquire editing"}
@@ -342,7 +345,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       <nav className="hosted-attempt__navigator" aria-label="Question navigation">
         <h3>Questions</h3>
         <ol>{questionLinks.map((link, index) => {
-          const answered = !!draftState.responses[link.questionId];
+          const answered = Object.prototype.hasOwnProperty.call(draftState.responses, link.questionId);
           const isCurrent = index === currentIndex;
           const markedQuestion = draftState.markedQuestionIds.includes(link.questionId);
           return <li key={link.questionId}><button type="button" aria-current={isCurrent ? "step" : undefined}

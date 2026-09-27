@@ -22,6 +22,7 @@ type QuestionRow = {
   module: number;
   question_number: number;
   response_type: string;
+  presentation_json: string;
 };
 type QuestionLink = {
   questionId: string;
@@ -30,6 +31,7 @@ type QuestionLink = {
   module: number;
   questionNumber: number;
   responseType: string;
+  choiceIds: string[];
 };
 type AttemptRow = {
   id: string;
@@ -218,7 +220,7 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
 
   const placeholders = config.modules.map(() => "?").join(", ");
   const candidates = await rows<QuestionRow>(env.DB.prepare("SELECT question_id, ordinal, section, module, " +
-      "question_number, response_type FROM publication_questions " +
+      "question_number, response_type, presentation_json FROM publication_questions " +
       "WHERE revision_id = ? AND section = ? AND module IN (" + placeholders + ") ORDER BY ordinal")
     .bind(revisionId, config.section, ...config.modules));
   if (config.count > candidates.length)
@@ -233,14 +235,20 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
 
   const selected = config.ordering === "random" ? shuffle(candidates).slice(0, config.count)
     : candidates.slice(0, config.count);
-  const questions: QuestionLink[] = selected.map((question) => ({
-    questionId: question.question_id,
-    ordinal: question.ordinal,
-    section: question.section,
-    module: question.module,
-    questionNumber: question.question_number,
-    responseType: question.response_type,
-  }));
+  const questions: QuestionLink[] = selected.map((question) => {
+    const presentation = JSON.parse(question.presentation_json) as { choices?: { id?: unknown }[] };
+    const choiceIds = Array.isArray(presentation.choices) ? presentation.choices.flatMap((choice) =>
+      typeof choice.id === "string" && /^[A-D]$/.test(choice.id) ? [choice.id] : []) : [];
+    return {
+      questionId: question.question_id,
+      ordinal: question.ordinal,
+      section: question.section,
+      module: question.module,
+      questionNumber: question.question_number,
+      responseType: question.response_type,
+      choiceIds,
+    };
+  });
   const questionIds = questions.map((question) => question.questionId);
   if (new Set(questionIds).size !== questionIds.length)
     return failure(503, "attempt_unavailable", "Whitebook could not prepare this Attempt. Try again.");
@@ -329,16 +337,19 @@ function sameSecret(left: string, right: string): boolean {
 }
 
 function parseChange(value: unknown, questions: QuestionLink[]): AttemptChange | null {
-  if (!isObject(value) || typeof value.questionId !== "string" ||
-      !questions.some((question) => question.questionId === value.questionId)) return null;
-  const questionId = value.questionId;
+  if (!isObject(value) || typeof value.questionId !== "string") return null;
+  const question = questions.find((item) => item.questionId === value.questionId);
+  if (!question) return null;
+  const questionId = question.questionId;
   if (value.type === "response" && (value.response === null ||
-      (typeof value.response === "string" && value.response.length <= 4096)))
+      (typeof value.response === "string" && value.response.length <= 4096 &&
+       (question.responseType !== "multiple_choice" || question.choiceIds.includes(value.response)))))
     return { type: "response", questionId, response: value.response as string | null };
   if (value.type === "mark" && typeof value.marked === "boolean")
     return { type: "mark", questionId, marked: value.marked };
   if (value.type === "elimination" && typeof value.choiceId === "string" &&
-      /^[A-D]$/.test(value.choiceId) && typeof value.eliminated === "boolean")
+      question.responseType === "multiple_choice" && question.choiceIds.includes(value.choiceId) &&
+      typeof value.eliminated === "boolean")
     return { type: "elimination", questionId, choiceId: value.choiceId, eliminated: value.eliminated };
   if (value.type === "navigation") return { type: "navigation", questionId };
   return null;
