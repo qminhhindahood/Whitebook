@@ -13,7 +13,7 @@ function env(accountId = "learner") {
   return {
     APP_ORIGIN: "https://whitebook.test",
     ASSETS: { fetch: assetFetch }, assetFetch,
-    DB: { prepare(sql: string) {
+    DB: { async batch() { return []; }, prepare(sql: string) {
       let values: unknown[] = [];
       return {
         bind(...args: unknown[]) { values = args; return this; },
