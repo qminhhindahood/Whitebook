@@ -29,7 +29,7 @@ export type AttemptResult = {
   questions: { questionId: string; response: string | null; acceptedAnswers: string[]; correct: boolean }[];
 };
 type TimingMode = "elapsed" | "custom" | "sat_paced";
-type PracticeAreaProps = { initialRevisionId?: string; onSessionEnded: () => void };
+type PracticeAreaProps = { initialRevisionId?: string; initialSection?: string; onSessionEnded: () => void };
 
 class RequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -104,7 +104,7 @@ function selectedPool(questions: QuestionLink[], section: string, modules: numbe
   return questions.filter((question) => question.section === section && modules.includes(question.module));
 }
 
-export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeAreaProps) {
+export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded }: PracticeAreaProps) {
   const [packages, setPackages] = useState<Package[]>([]);
   const [attempts, setAttempts] = useState<AttemptSummary[]>([]);
   const [revisionId, setRevisionId] = useState(initialRevisionId ?? "");
@@ -168,7 +168,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
     void request<{ questions: QuestionLink[] }>(`/api/library/${revisionId}/questions`).then((data) => {
       if (!live) return;
       setQuestions(data.questions);
-      const first = data.questions[0];
+      const first = data.questions.find((question) => question.section === initialSection) ?? data.questions[0];
       if (first) {
         setSection(first.section);
         setModules([first.module]);
@@ -183,7 +183,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
       if (cause instanceof RequestError && cause.status === 401) onSessionEnded();
     });
     return () => { live = false; };
-  }, [revisionId, packages, onSessionEnded]);
+  }, [revisionId, packages, initialSection, onSessionEnded]);
 
   function chooseSection(next: string) {
     const nextModules = [...new Set(questions.filter((question) => question.section === next).map((question) => question.module))].sort();

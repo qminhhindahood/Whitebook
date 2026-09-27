@@ -33,7 +33,7 @@ async function request<T>(path: string, method = "GET", payload?: unknown): Prom
 
 function responseText(response: string | null | undefined) { return response || "Unanswered"; }
 
-export function HistoryArea({ onSessionEnded }: { onSessionEnded: () => void }) {
+export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded: () => void; initialTarget?: { attemptId: string; questionId: string } }) {
   const [attempts, setAttempts] = useState<AttemptSummary[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -75,6 +75,16 @@ export function HistoryArea({ onSessionEnded }: { onSessionEnded: () => void }) 
     }
     finally { setBusy(false); }
   }, [onSessionEnded]);
+
+  useEffect(() => {
+    if (!initialTarget || loading) return;
+    const item = attempts.find((attempt) => attempt.attemptId === initialTarget.attemptId);
+    if (!item) { setError("The linked Attempt is no longer available in History."); return; }
+    void run(async () => {
+      const next = await request<Overview>(`/api/review/attempts/${initialTarget.attemptId}`);
+      setOverview(next); setSelectedQuestionId(initialTarget.questionId); setResults(null); setReview(null);
+    });
+  }, [initialTarget, loading, attempts, run]);
 
   useEffect(() => {
     if (!overview || review || results || !selectedQuestionId) return;
