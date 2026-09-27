@@ -156,10 +156,22 @@ it("creates a Section Exam with a section-only payload and prepares its Math too
   }));
   render(<PracticeArea initialRevisionId="math-pack" onSessionEnded={() => {}} />);
   fireEvent.click(await screen.findByRole("button", { name: "Section Exam" }));
+  expect((screen.getByLabelText("Section") as HTMLSelectElement).value).toBe("Math");
+  expect(screen.getByText(/35 minutes per Module/)).toBeTruthy();
   fireEvent.click(await screen.findByRole("button", { name: "Prepare Section Exam" }));
   await screen.findByRole("heading", { name: "Section Exam · Module 1" });
   const createCall = calls.find((call) => call.path === "/api/attempts" && call.init?.method === "POST")!;
   expect(JSON.parse(String(createCall.init?.body))).toEqual({ revisionId: "math-pack", kind: "section_exam", section: "Math" });
   expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
   expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+});
+
+it("keeps Section selection visible and omits Practice-only setup fields for an exam", async () => {
+  apiFixture();
+  render(<PracticeArea initialRevisionId="reviewed-rw" onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Section Exam" }));
+  expect(screen.getByLabelText("Section")).toBeTruthy();
+  expect(screen.queryByLabelText("Question count")).toBeNull();
+  expect(screen.queryByText("Modules")).toBeNull();
+  expect(screen.getByText(/no timed break/i)).toBeTruthy();
 });

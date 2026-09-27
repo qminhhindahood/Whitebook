@@ -206,6 +206,7 @@ it("shows only Module 1 and uses finish-module before the untimed transition", a
   fireEvent.click(screen.getByRole("button", { name: "Finish Module" }));
   await waitFor(() => expect(calls.some((call) => call.path.endsWith("/finish-module"))).toBe(true));
   expect(await screen.findByText(/Module 1 is complete/i)).toBeTruthy();
+  expect(screen.getByText(/4 questions/)).toBeTruthy();
   expect(screen.getByRole("button", { name: "Continue to Module 2" })).toBeTruthy();
   expect(screen.queryByText(/break/i)).toBeNull();
 });
@@ -214,9 +215,11 @@ it("shows a low-time warning at five minutes without making a request", async ()
   vi.useFakeTimers(); vi.setSystemTime(now);
   const { calls, view } = fixture();
   view(attempt({ kind: "section_exam", state: { phase: "module", activeModule: 1 }, serverNow: now, deadlineAt: now + 301_000, startedAt: now }));
+  const requestsBeforeCountdown = calls.length;
   expect(screen.queryByRole("status", { name: /low time/i })).toBeNull();
   await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
   expect(screen.getByRole("status", { name: /low time/i })).toBeTruthy();
+  expect(calls).toHaveLength(requestsBeforeCountdown);
   expect(calls.filter((call) => /\/(?:heartbeat|write)$/.test(call.path))).toHaveLength(0);
 });
 

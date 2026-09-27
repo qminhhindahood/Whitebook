@@ -380,7 +380,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     <header className="hosted-attempt__header">
       <div className="hosted-attempt__title"><button type="button" className="practice-button practice-button--quiet" onClick={onExit}>Back to Practice</button>
         <div><h2 id="hosted-attempt-heading">{sectionExam ? `Section Exam · Module ${activeModule}` : "Practice Attempt"}</h2>
-          <p>{packageTitle} · {snapshot.section} · {questionLinks.length} questions</p></div>
+          <p>{packageTitle} · {snapshot.section} · {snapshot.questions.length} questions</p></div>
       </div>
       <div className="hosted-attempt__header-side">
         <time className={`hosted-attempt__clock${timeExpired ? " hosted-attempt__clock--expired" : ""}`} aria-label="Attempt clock">{clockLabel}</time>

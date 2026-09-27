@@ -133,6 +133,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
   const availableModules = useMemo(() => [...new Set(questions.filter((question) => question.section === section)
     .map((question) => question.module))].sort(), [questions, section]);
   const pool = useMemo(() => selectedPool(questions, section, modules), [questions, section, modules]);
+  const sectionPool = useMemo(() => questions.filter((question) => question.section === section), [questions, section]);
   const selectedPackage = packages.find((item) => item.revisionId === revisionId);
   const satPacedAvailable = modules.length === 1 && pool.length === Number(count) &&
     ((section === "Math" && pool.length === 22) ||
@@ -253,7 +254,9 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
 
   async function prepareAttempt(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (building || !revisionId || !pool.length || !Number.isInteger(Number(count)) || Number(count) < 1 || Number(count) > pool.length)
+    if (building || !revisionId || (sectionExam
+      ? sectionPool.length < (section === "Math" ? 44 : 54)
+      : !pool.length || !Number.isInteger(Number(count)) || Number(count) < 1 || Number(count) > pool.length))
       return;
     setBuilding(true); setGeneralError(""); setLoadError("");
     try {
@@ -338,7 +341,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
             <button type="button" aria-pressed={!sectionExam} onClick={() => setSectionExam(false)}>Practice</button>
             <button type="button" aria-pressed={sectionExam} onClick={() => setSectionExam(true)}>Section Exam</button>
           </div>
-          <p className="practice-helper">{sectionExam ? "Complete both Modules with server timed deadlines." : "Choose one package, then select the questions and timing for this Attempt."}</p>
+          <p className="practice-helper">{sectionExam ? "Complete both Modules with server timed deadlines and no timed break." : "Choose one package, then select the questions and timing for this Attempt."}</p>
           <label className="practice-field" htmlFor="practice-package">Test Package
             <select id="practice-package" value={revisionId} onChange={(event) => setRevisionId(event.target.value)}>
               <option value="">Choose one reviewed package</option>
@@ -350,13 +353,13 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
           {questionsLoading && <p role="status">Loading this package’s questions…</p>}
           {revisionId && !questionsLoading && questions.length === 0 && <p className="practice-empty">This package has no questions available for practice.</p>}
           {revisionId && !questionsLoading && questions.length > 0 && <>
-            {!sectionExam && <div className="practice-form-grid">
+            <div className="practice-form-grid">
               <label className="practice-field" htmlFor="practice-section">Section
                 <select id="practice-section" value={section} onChange={(event) => chooseSection(event.target.value)}>
                   {sections.map((value) => <option key={value}>{value}</option>)}
                 </select>
               </label>
-      <label className="practice-field" htmlFor="practice-count">Question count
+              {!sectionExam && <label className="practice-field" htmlFor="practice-count">Question count
           <input id="practice-count" type="number" min={1} max={pool.length} value={count}
                   onChange={(event) => {
                     const value = event.target.value;
@@ -364,8 +367,8 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
                     if (timing === "sat_paced" && Number(value) !== pool.length) setTiming("elapsed");
                   }} />
                 <span className="practice-field__hint">{pool.length} questions in this selection</span>
-              </label>
-            </div>}
+              </label>}
+            </div>
             {!sectionExam && <fieldset className="practice-modules"><legend>Modules</legend>
               <div className="practice-modules__options">
                 {availableModules.map((module) => <label key={module} className="practice-option">
@@ -396,7 +399,9 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
               <button type="button" className="practice-button practice-button--quiet" disabled={building} onClick={() => void retryLoading()}>Retry loading</button>
             </div>}
             {loadMessage && <p className="practice-loading" role="status">{loadMessage}</p>}
-            <div className="practice-actions"><button type="submit" className="practice-button" disabled={building || pool.length === 0 || (!sectionExam && (Number(count) < 1 || Number(count) > pool.length))}>
+            <div className="practice-actions"><button type="submit" className="practice-button" disabled={building || (sectionExam
+              ? sectionPool.length < (section === "Math" ? 44 : 54)
+              : pool.length === 0 || Number(count) < 1 || Number(count) > pool.length)}>
               {building && !preparingAttemptId ? "Creating Attempt…" : sectionExam ? "Prepare Section Exam" : "Prepare Attempt"}
             </button></div>
           </>}
@@ -404,9 +409,9 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
         <aside className="practice-summary" aria-label="Attempt selection summary">
           <h4>Attempt selection</h4>
           <dl><div><dt>Package</dt><dd>{selectedPackage?.title ?? "Choose a package"}</dd></div>
-            <div><dt>Questions</dt><dd>{pool.length ? `${Math.min(Number(count) || 0, pool.length)} of ${pool.length}` : "—"}</dd></div>
-            <div><dt>Order</dt><dd>{ordering === "source" ? "Package order" : "Random"}</dd></div>
-            <div><dt>Timing</dt><dd>{timing === "elapsed" ? "Elapsed" : timing === "custom" ? "Custom countdown" : "SAT-paced"}</dd></div></dl>
+            <div><dt>Questions</dt><dd>{sectionExam ? `${sectionPool.length} total · ${sectionPool.length / 2} per Module` : pool.length ? `${Math.min(Number(count) || 0, pool.length)} of ${pool.length}` : "—"}</dd></div>
+            <div><dt>Order</dt><dd>{sectionExam ? "Random server selection" : ordering === "source" ? "Package order" : "Random"}</dd></div>
+            <div><dt>Timing</dt><dd>{sectionExam ? `${section === "Math" ? 35 : 32} minutes per Module` : timing === "elapsed" ? "Elapsed" : timing === "custom" ? "Custom countdown" : "SAT-paced"}</dd></div></dl>
           <p>The server clock starts only after every selected question and visual is ready.</p>
         </aside>
       </div>
