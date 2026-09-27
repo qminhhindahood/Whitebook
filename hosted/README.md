@@ -31,6 +31,10 @@ The schema is in `migrations/0007_guided_review_notes.sql`. Publication bundles 
 
 **Progress** shows account-owned Section, Question Category, and mapped Content Domain evidence. Manual Official SAT Results are displayed separately. Apply `migrations/0008_progress_evidence.sql` before importing a reviewed category bundle. The mapping, timing and tentative-label rules, and existing-release backfill path are documented in [PROGRESS.md](PROGRESS.md).
 
+## Study Plan (ticket 13)
+
+**Study Plan** builds an editable weekly schedule from due cards, unfinished missed-question review, and Practice in available Test Packages. It tracks completion across saved versions and offers manageable catch-up moves. Apply `migrations/0009_study_plans.sql` after the prior migrations. The API, scheduling rules, and evidence boundaries are documented in [PLAN.md](PLAN.md).
+
 ## Local verification
 
 From `hosted/`:

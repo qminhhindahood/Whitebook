@@ -8,6 +8,7 @@ import { attemptRoute } from "./attempts";
 import { reviewRoute } from "./review";
 import { mathToolsRoute } from "./mathTools";
 import { progressRoute } from "./progress";
+import { planRoute } from "./plan";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -160,6 +161,8 @@ export default {
       if (scoresResponse) return await scoresResponse;
       const progressResponse = progressRoute(request, env);
       if (progressResponse) return await progressResponse;
+      const planResponse = planRoute(request, env);
+      if (planResponse) return await planResponse;
       const satResponse = satDateRoute(request, env);
       if (satResponse) return await satResponse;
       const accountResponse = accountRoute(request, env);
