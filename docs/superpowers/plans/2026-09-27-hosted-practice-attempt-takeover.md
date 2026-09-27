@@ -238,14 +238,14 @@
 - Modify: hosted/test/worker.test.ts
 - Modify: hosted/README.md
 
-- [ ] **Step 1: Add a Worker journey with two Learner Accounts and two editor tokens**
+- [x] **Step 1: Add a Worker journey with two Learner Accounts and two editor tokens**
   - Account A creates, starts, answers, marks, navigates, and resumes an Attempt.
   - Account B receives no private history and cannot read, mutate, or submit A's Attempt.
   - Device A saves a response; Device B sees read-only state, explicitly takes over, and receives that saved response.
   - A stale write from Device A receives 409; Device B continues without resetting deadlineAt.
   - Submit returns server-graded Results; a later read proves original responses and Result history are unchanged.
 
-- [ ] **Step 2: Run focused hosted and web checks**
+- [x] **Step 2: Run focused hosted and web checks**
 
     cd hosted
     npm test -- test/attempts.test.ts test/worker.test.ts
@@ -255,7 +255,7 @@
     npm --prefix web run typecheck
     npm --prefix web run build
 
-- [ ] **Step 3: Run the hosted Worker suite and web suite requested by the ticket**
+- [x] **Step 3: Run the hosted Worker suite and web suite requested by the ticket**
   - Record any pre-existing failure by its test name and output.
   - Do not claim a suite or build passed without fresh command output.
 
@@ -264,7 +264,7 @@
     cd ..
     npm --prefix web test
 
-- [ ] **Step 4: Review the full branch diff and commit verification evidence**
+- [x] **Step 4: Review the full branch diff and commit verification evidence**
 
     git diff --check
     git status --short

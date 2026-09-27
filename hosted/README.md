@@ -4,6 +4,21 @@ This is a **staging-only** Worker and D1 fixture. It serves one synthetic, revie
 
 Every request runs the Worker first. Only `/staging`, its exact Vite assets, the session endpoint, the fixture endpoint, and the allowlisted visual path can return content. The visual path requires a short-lived HttpOnly, Secure, SameSite cookie backed by a hashed D1 session. The access code is a staging secret; it is never committed or embedded in the frontend. This is a test authorization path for ticket 02, not the Google Learner Account work in ticket 03.
 
+## Hosted account Practice Attempts (ticket 05)
+
+Signed-in learners can open **Practice** from their workspace, or choose **Build Practice Attempt** for a selected Library package revision. Each Attempt uses exactly one entitled, immutable revision. The Builder offers Section, Module, question count, package or random order, and elapsed, custom, or eligible SAT-paced timing. The published catalogue has no Question Category metadata, so the hosted Builder does not offer that filter.
+
+Creating an Attempt leaves it in `preparing`. The Loading Gate fetches all selected Question Presentations and manifest-listed visuals before it calls the start endpoint. The server records `started_at_ms` and any deadline only when start succeeds; retrying a failed presentation or visual load does not run a clock.
+
+Accepted response, mark, elimination, navigation, and heartbeat writes use an expected `stateVersion`. The current editor token is stored in tab-scoped `sessionStorage`; D1 stores only its SHA-256 hash. Accepted writes and the 45-second heartbeat extend the lease to 120 seconds from the Worker clock. A different device can read the Attempt but receives no editor token; **Take over editing** refreshes the saved state and invalidates the previous token without changing the deadline. Failed saves remain visibly unsaved and stop further editing until the learner explicitly refreshes/takes over. Submit grades against `publication_answers`; Results are available only after the Attempt is completed.
+
+The D1 schema is in `migrations/0006_practice_attempts.sql`. Check the Worker API and two-device journey with:
+
+```powershell
+npm test -- test/attempts.test.ts test/worker.test.ts
+npm run typecheck
+```
+
 ## Local verification
 
 From `hosted/`:

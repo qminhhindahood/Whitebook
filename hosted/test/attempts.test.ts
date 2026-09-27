@@ -35,7 +35,8 @@ async function fixture() {
     revision_id: "reviewed-rw", question_id: `q${n}`, ordinal: n,
     section: "Reading and Writing", module: n === 3 ? 2 : 1,
     question_number: n, response_type: "multiple_choice",
-    presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Question ${n}` }], choices: [] }),
+    presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Question ${n}` }],
+      choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
   }));
   const answers = questions.map((question, index) => ({
     question_id: question.question_id,
@@ -287,6 +288,47 @@ it("saves a response with a server version and renews the editor lease", async (
   }
 });
 
+it("rejects response and elimination values that are not in the published presentation", async () => {
+  const { credentials, call } = await fixture();
+  const { attemptId, started } = await startPractice(call, credentials[0]);
+  const invalidResponse = await call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+      change: { type: "response", questionId: "q1", response: "D" } },
+  });
+  expect(invalidResponse.status).toBe(400);
+  expect(await invalidResponse.json()).toMatchObject({ error: { code: "invalid_attempt_change" } });
+
+  const invalidElimination = await call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+      change: { type: "elimination", questionId: "q1", choiceId: "D", eliminated: true } },
+  });
+  expect(invalidElimination.status).toBe(400);
+  const detail = await call(`/api/attempts/${attemptId}`, { who: credentials[0] });
+  expect(await detail.json()).toMatchObject({ stateVersion: started.stateVersion, state: { responses: {}, eliminatedChoices: {} } });
+});
+
+it("persists valid published-choice elimination and question navigation", async () => {
+  const { credentials, call } = await fixture();
+  const { attemptId, started } = await startPractice(call, credentials[0]);
+  const eliminated = await call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+      change: { type: "elimination", questionId: "q1", choiceId: "B", eliminated: true } },
+  });
+  expect(eliminated.status).toBe(200);
+  const afterElimination = await eliminated.json() as { stateVersion: number };
+  const navigated = await call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: afterElimination.stateVersion,
+      change: { type: "navigation", questionId: "q2" } },
+  });
+  expect(navigated.status).toBe(200);
+  expect(await navigated.json()).toMatchObject({ stateVersion: afterElimination.stateVersion + 1,
+    state: { eliminatedChoices: { q1: ["B"] }, currentQuestionId: "q2" } });
+});
+
 it("renews the lease on heartbeat and requires explicit takeover after expiry", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(1_800_000_000_000);
@@ -325,13 +367,13 @@ it("returns the latest state on takeover and rejects the old editor token", asyn
   const { attemptId, started } = await startPractice(call, credentials[0]);
   const save = await call(`/api/attempts/${attemptId}/write`, {
     method: "POST", who: credentials[0],
-    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion, change: { type: "response", questionId: "q1", response: "D" } },
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion, change: { type: "response", questionId: "q1", response: "B" } },
   });
   const saved = await save.json() as { stateVersion: number };
   const takeover = await call(`/api/attempts/${attemptId}/takeover`, { method: "POST", who: credentials[2], body: {} });
   expect(takeover.status).toBe(200);
   const acquired = await takeover.json() as { editorToken: string; stateVersion: number; state: { responses: Record<string, string> }; deadlineAt: number };
-  expect(acquired).toMatchObject({ stateVersion: saved.stateVersion + 1, state: { responses: { q1: "D" } }, deadlineAt: started.deadlineAt });
+  expect(acquired).toMatchObject({ stateVersion: saved.stateVersion + 1, state: { responses: { q1: "B" } }, deadlineAt: started.deadlineAt });
 
   const stale = await call(`/api/attempts/${attemptId}/write`, {
     method: "POST", who: credentials[0],
@@ -344,7 +386,7 @@ it("returns the latest state on takeover and rejects the old editor token", asyn
 it("allows only one write at a state version and preserves the race winner", async () => {
   const { credentials, call } = await fixture();
   const { attemptId, started } = await startPractice(call, credentials[0]);
-  const bodies = ["A", "C"].map((response) => call(`/api/attempts/${attemptId}/write`, {
+  const bodies = ["A", "B"].map((response) => call(`/api/attempts/${attemptId}/write`, {
     method: "POST", who: credentials[0],
     body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion, change: { type: "response", questionId: "q1", response } },
   }));
@@ -384,4 +426,80 @@ it("grades from the published answer key only on submit and freezes completed re
   const reviewAfter = await call(`/api/attempts/${attemptId}/results`, { who: credentials[0] });
   expect(await reviewAfter.json()).toEqual(await reviewBefore.json());
   expect(await call(`/api/attempts/${attemptId}/results`, { who: credentials[1] }).then((response) => response.status)).toBe(404);
+});
+
+it("completes a private two-device handoff with server-graded, unchanged Attempt history", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const owner = credentials[0];
+    const otherLearner = credentials[1];
+    const secondDevice = credentials[2];
+    const { attemptId, started } = await startPractice(call, owner);
+    const firstSave = await call(`/api/attempts/${attemptId}/write`, {
+      method: "POST", who: owner,
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+        change: { type: "response", questionId: "q1", response: "B" } },
+    });
+    const firstSaved = await firstSave.json() as { stateVersion: number; deadlineAt: number };
+    expect(firstSave.status).toBe(200);
+
+    const privateRead = await call(`/api/attempts/${attemptId}`, { who: secondDevice });
+    const privateReadText = await privateRead.text();
+    const beforeTakeover = JSON.parse(privateReadText) as { state: { responses: Record<string, string> }; lease: { held: boolean }; deadlineAt: number };
+    expect(beforeTakeover).toMatchObject({ state: { responses: { q1: "B" } }, lease: { held: true }, deadlineAt: started.deadlineAt });
+    expect(privateReadText).not.toMatch(/acceptedAnswers|answerKey|correctAnswer/);
+
+    const secondLearnerRead = await call(`/api/attempts/${attemptId}`, { who: otherLearner });
+    expect(secondLearnerRead.status).toBe(404);
+    const deniedSubmit = await call(`/api/attempts/${attemptId}/submit`, {
+      method: "POST", who: otherLearner,
+      body: { editorToken: started.editorToken, expectedStateVersion: firstSaved.stateVersion },
+    });
+    expect(deniedSubmit.status).toBe(404);
+
+    const takeover = await call(`/api/attempts/${attemptId}/takeover`, { method: "POST", who: secondDevice, body: {} });
+    expect(takeover.status).toBe(200);
+    const deviceB = await takeover.json() as { editorToken: string; stateVersion: number; state: { responses: Record<string, string> }; deadlineAt: number };
+    expect(deviceB).toMatchObject({ stateVersion: firstSaved.stateVersion + 1,
+      state: { responses: { q1: "B" } }, deadlineAt: started.deadlineAt });
+
+    const staleWrite = await call(`/api/attempts/${attemptId}/write`, {
+      method: "POST", who: owner,
+      body: { editorToken: started.editorToken, expectedStateVersion: deviceB.stateVersion,
+        change: { type: "response", questionId: "q1", response: "A" } },
+    });
+    expect(staleWrite.status).toBe(409);
+    expect(await staleWrite.json()).toMatchObject({ error: { code: "editor_conflict" } });
+
+    const secondSave = await call(`/api/attempts/${attemptId}/write`, {
+      method: "POST", who: secondDevice,
+      body: { editorToken: deviceB.editorToken, expectedStateVersion: deviceB.stateVersion,
+        change: { type: "mark", questionId: "q2", marked: true } },
+    });
+    expect(secondSave.status).toBe(200);
+    const marked = await secondSave.json() as { stateVersion: number };
+    const submit = await call(`/api/attempts/${attemptId}/submit`, {
+      method: "POST", who: secondDevice,
+      body: { editorToken: deviceB.editorToken, expectedStateVersion: marked.stateVersion },
+    });
+    expect(submit.status).toBe(200);
+    const completed = await submit.json() as { state: { responses: Record<string, string>; markedQuestionIds: string[] }; completedAt: number; deadlineAt: number; result: unknown };
+    expect(completed).toMatchObject({ state: { responses: { q1: "B" }, markedQuestionIds: ["q2"] },
+      completedAt: Date.now(), deadlineAt: started.deadlineAt,
+      result: { correctCount: 1, questionCount: 2 } });
+
+    const historyFirst = await call(`/api/attempts/${attemptId}`, { who: owner });
+    const historySecond = await call(`/api/attempts/${attemptId}`, { who: owner });
+    const firstHistory = await historyFirst.json();
+    const secondHistory = await historySecond.json();
+    expect(secondHistory).toEqual(firstHistory);
+    expect(firstHistory).toMatchObject({ status: "completed", completedAt: Date.now(), deadlineAt: started.deadlineAt,
+      state: { responses: { q1: "B" }, markedQuestionIds: ["q2"] } });
+    const accountBList = await call("/api/attempts", { who: otherLearner });
+    expect((await accountBList.json() as { attempts: unknown[] }).attempts).toHaveLength(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
