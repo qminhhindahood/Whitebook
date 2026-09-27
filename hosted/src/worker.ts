@@ -5,6 +5,7 @@ import { scoresRoute } from "./scores";
 import { studyRoute } from "./study";
 import { libraryRoute } from "./library";
 import { attemptRoute } from "./attempts";
+import { mathToolsRoute } from "./mathTools";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -16,6 +17,7 @@ type Env = AccountEnv & {
   DB: { prepare(sql: string): Statement };
   ASSETS: { fetch(request: Request): Promise<Response> };
   STAGING_ACCESS_CODE: string;
+  DESMOS_API_KEY?: string;
 };
 
 const QUESTION_PATH = /^\/api\/staging\/questions\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)$/;
@@ -145,7 +147,7 @@ export default {
       const asset = await env.ASSETS.fetch(new Request(new URL("/app", request.url), request));
       const headers = new Headers(asset.headers);
       headers.set("Cache-Control", "private, no-store");
-      headers.set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+      headers.set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
       return new Response(asset.body, { status: asset.status, headers });
     }
     if (request.method === "GET" && (path === "/staging" || path === "/staging.html" || PUBLIC_ASSET_PATH.test(path)))
@@ -164,6 +166,8 @@ export default {
       if (cardsResponse) return await cardsResponse;
       const libraryResponse = libraryRoute(request, env);
       if (libraryResponse) return await libraryResponse;
+      const mathResponse = mathToolsRoute(request, env);
+      if (mathResponse) return await mathResponse;
       const attemptsResponse = attemptRoute(request, env);
       if (attemptsResponse) return await attemptsResponse;
       if (request.method === "POST" && path === "/api/staging/session")
@@ -173,7 +177,7 @@ export default {
       const contentMatch = request.method === "GET" && CONTENT_PATH.exec(path);
       if (contentMatch) return measured(await content(request, env, meter, contentMatch[1], contentMatch[2], contentMatch[3]), meter);
     } catch {
-      if (path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/cards/") || path.startsWith("/api/library") || path.startsWith("/api/attempts") || path.startsWith("/content/"))
+      if (path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/cards/") || path.startsWith("/api/library") || path.startsWith("/api/attempts") || path.startsWith("/api/math/") || path.startsWith("/content/"))
         return Response.json({ error: { code: "service_unavailable", message: "Whitebook could not reach your account. Try again." } },
           { status: 503, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
       return closed(503);
