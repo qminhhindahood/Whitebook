@@ -94,7 +94,7 @@
 - POST /api/attempts/:id/submit validates the live lease, enforces deadline, grades against publication_answers, and atomically marks the Attempt completed.
 - GET /api/attempts/:id/results returns answers and correctness only after completion. Completed responses and timing history are immutable.
 
-- [ ] **Step 1: Write failing lease, conflict, and grading tests**
+- [x] **Step 1: Write failing lease, conflict, and grading tests**
   - Use an injected server clock.
   - Test a write renews the lease and a heartbeat at 45 seconds extends expiry by 120 seconds.
   - Test a write after expiry fails until explicit takeover or reacquisition.
@@ -111,24 +111,24 @@
     expect(stale.status).toBe(409);
     await expect((await getAttempt(learnerA, attemptId)).json()).resolves.toMatchObject({ responses: { q1: "B" } });
 
-- [ ] **Step 2: Run the focused test and confirm the missing server behavior**
+- [x] **Step 2: Run the focused test and confirm the missing server behavior**
 
     cd hosted
     npm test -- test/attempts.test.ts
 
-- [ ] **Step 3: Implement atomic version checks and lease renewal**
+- [x] **Step 3: Implement atomic version checks and lease renewal**
   - Hash editor tokens at rest.
   - Require matching account, active status, non-expired lease, token, and expected stateVersion for every write.
   - Each accepted mutation increments stateVersion and sets lease expiry from injected server time.
   - Permit takeover only through its explicit endpoint; expired writes do not reacquire automatically.
   - Keep timer fields independent from lease changes.
 
-- [ ] **Step 4: Implement server-only grading and completed Results**
+- [x] **Step 4: Implement server-only grading and completed Results**
   - Load publication_answers only in submit/results server code.
   - Return no answer fields from list, create, start, active read, write, heartbeat, or takeover.
   - Preserve original response and completion timestamp; reject all later edits.
 
-- [ ] **Step 5: Re-run lease and grading tests and commit**
+- [x] **Step 5: Re-run lease and grading tests and commit**
 
     cd hosted
     npm test -- test/attempts.test.ts

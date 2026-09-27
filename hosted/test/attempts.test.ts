@@ -259,3 +259,129 @@ it("starts the server clock and editor lease only after the Loading Gate", async
     vi.useRealTimers();
   }
 });
+
+async function startPractice(call: Awaited<ReturnType<typeof fixture>>["call"], who: Credential) {
+  const created = await call("/api/attempts", {
+    method: "POST", who,
+    body: { revisionId: "reviewed-rw", section: "Reading and Writing", modules: [1], count: 2, ordering: "source", timing: { mode: "custom", durationSeconds: 600 } },
+  });
+  const preparing = await created.json() as { attemptId: string };
+  const started = await call(`/api/attempts/${preparing.attemptId}/start`, { method: "POST", who, body: {} });
+  return { attemptId: preparing.attemptId, started: await started.json() as { editorToken: string; stateVersion: number; deadlineAt: number } };
+}
+
+it("saves a response with a server version and renews the editor lease", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { attemptId, started } = await startPractice(call, credentials[0]);
+    const saved = await call(`/api/attempts/${attemptId}/write`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion, change: { type: "response", questionId: "q1", response: "B" } },
+    });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ stateVersion: 2, saveStatus: "saved", state: { responses: { q1: "B" } }, lease: { expiresAt: Date.now() + 120_000 } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("renews the lease on heartbeat and requires explicit takeover after expiry", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { attemptId, started } = await startPractice(call, credentials[0]);
+    vi.advanceTimersByTime(45_000);
+    const heartbeat = await call(`/api/attempts/${attemptId}/heartbeat`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion },
+    });
+    expect(heartbeat.status).toBe(200);
+    const renewed = await heartbeat.json() as { stateVersion: number; lease: { expiresAt: number } };
+    expect(renewed).toMatchObject({ stateVersion: started.stateVersion + 1, lease: { expiresAt: Date.now() + 120_000 } });
+
+    vi.advanceTimersByTime(121_000);
+    const lateWrite = await call(`/api/attempts/${attemptId}/write`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: renewed.stateVersion, change: { type: "response", questionId: "q1", response: "B" } },
+    });
+    expect(lateWrite.status).toBe(409);
+    expect(await lateWrite.json()).toMatchObject({ error: { code: "editor_lease_expired" } });
+
+    const takeover = await call(`/api/attempts/${attemptId}/takeover`, { method: "POST", who: credentials[2], body: {} });
+    expect(takeover.status).toBe(200);
+    const acquired = await takeover.json() as { editorToken: string; stateVersion: number; deadlineAt: number };
+    expect(acquired.editorToken).not.toBe(started.editorToken);
+    expect(acquired.deadlineAt).toBe(started.deadlineAt);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("returns the latest state on takeover and rejects the old editor token", async () => {
+  const { credentials, call } = await fixture();
+  const { attemptId, started } = await startPractice(call, credentials[0]);
+  const save = await call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion, change: { type: "response", questionId: "q1", response: "D" } },
+  });
+  const saved = await save.json() as { stateVersion: number };
+  const takeover = await call(`/api/attempts/${attemptId}/takeover`, { method: "POST", who: credentials[2], body: {} });
+  expect(takeover.status).toBe(200);
+  const acquired = await takeover.json() as { editorToken: string; stateVersion: number; state: { responses: Record<string, string> }; deadlineAt: number };
+  expect(acquired).toMatchObject({ stateVersion: saved.stateVersion + 1, state: { responses: { q1: "D" } }, deadlineAt: started.deadlineAt });
+
+  const stale = await call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: acquired.stateVersion, change: { type: "response", questionId: "q1", response: "A" } },
+  });
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({ error: { code: "editor_conflict" } });
+});
+
+it("allows only one write at a state version and preserves the race winner", async () => {
+  const { credentials, call } = await fixture();
+  const { attemptId, started } = await startPractice(call, credentials[0]);
+  const bodies = ["A", "C"].map((response) => call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion, change: { type: "response", questionId: "q1", response } },
+  }));
+  const responses = await Promise.all(bodies);
+  expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+  const winner = await Promise.resolve(responses.find((response) => response.status === 200)!.clone().json()) as { state: { responses: Record<string, string> } };
+  const current = await call(`/api/attempts/${attemptId}`, { who: credentials[0] });
+  expect(await current.json()).toMatchObject({ state: { responses: { q1: winner.state.responses.q1 } } });
+});
+
+it("grades from the published answer key only on submit and freezes completed responses", async () => {
+  const { credentials, call } = await fixture();
+  const { attemptId, started } = await startPractice(call, credentials[0]);
+  const before = await call(`/api/attempts/${attemptId}/results`, { who: credentials[0] });
+  expect(before.status).toBe(409);
+  const saved = await call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion, change: { type: "response", questionId: "q1", response: "B" } },
+  });
+  const savedData = await saved.json() as { stateVersion: number };
+  const submitted = await call(`/api/attempts/${attemptId}/submit`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: savedData.stateVersion },
+  });
+  expect(submitted.status).toBe(200);
+  expect(await submitted.json()).toMatchObject({ status: "completed", result: { correctCount: 1, questionCount: 2, questions: [
+    { questionId: "q1", response: "B", correct: true, acceptedAnswers: ["B"] },
+    { questionId: "q2", response: null, correct: false, acceptedAnswers: ["A"] },
+  ] } });
+
+  const laterWrite = await call(`/api/attempts/${attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: savedData.stateVersion, change: { type: "response", questionId: "q1", response: "A" } },
+  });
+  expect(laterWrite.status).toBe(409);
+  const reviewBefore = await call(`/api/attempts/${attemptId}/results`, { who: credentials[0] });
+  const reviewAfter = await call(`/api/attempts/${attemptId}/results`, { who: credentials[0] });
+  expect(await reviewAfter.json()).toEqual(await reviewBefore.json());
+  expect(await call(`/api/attempts/${attemptId}/results`, { who: credentials[1] }).then((response) => response.status)).toBe(404);
+});

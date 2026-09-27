@@ -298,3 +298,247 @@ async function getAttempt(env: AttemptEnv, accountId: string, attemptId: string,
   if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
   return json(snapshot(row, now));
 }
+
+type AttemptState = {
+  responses: Record<string, string>;
+  markedQuestionIds: string[];
+  eliminatedChoices: Record<string, string[]>;
+  currentQuestionId: string;
+};
+
+type AttemptChange =
+  | { type: "response"; questionId: string; response: string | null }
+  | { type: "mark"; questionId: string; marked: boolean }
+  | { type: "elimination"; questionId: string; choiceId: string; eliminated: boolean }
+  | { type: "navigation"; questionId: string };
+
+function parseVersion(value: unknown): number | null {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+function parseEditorToken(value: unknown): string | null {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value) ? value : null;
+}
+
+function sameSecret(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index++)
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+}
+
+function parseChange(value: unknown, questions: QuestionLink[]): AttemptChange | null {
+  if (!isObject(value) || typeof value.questionId !== "string" ||
+      !questions.some((question) => question.questionId === value.questionId)) return null;
+  const questionId = value.questionId;
+  if (value.type === "response" && (value.response === null ||
+      (typeof value.response === "string" && value.response.length <= 4096)))
+    return { type: "response", questionId, response: value.response as string | null };
+  if (value.type === "mark" && typeof value.marked === "boolean")
+    return { type: "mark", questionId, marked: value.marked };
+  if (value.type === "elimination" && typeof value.choiceId === "string" &&
+      /^[A-D]$/.test(value.choiceId) && typeof value.eliminated === "boolean")
+    return { type: "elimination", questionId, choiceId: value.choiceId, eliminated: value.eliminated };
+  if (value.type === "navigation") return { type: "navigation", questionId };
+  return null;
+}
+
+function applyChange(source: Record<string, unknown>, change: AttemptChange): AttemptState {
+  const previous = source as unknown as AttemptState;
+  const state: AttemptState = {
+    responses: { ...previous.responses },
+    markedQuestionIds: [...previous.markedQuestionIds],
+    eliminatedChoices: Object.fromEntries(Object.entries(previous.eliminatedChoices)
+      .map(([questionId, choices]) => [questionId, [...choices]])),
+    currentQuestionId: previous.currentQuestionId,
+  };
+  if (change.type === "response") {
+    if (change.response === null) delete state.responses[change.questionId];
+    else state.responses[change.questionId] = change.response;
+  } else if (change.type === "mark") {
+    state.markedQuestionIds = change.marked
+      ? [...new Set([...state.markedQuestionIds, change.questionId])]
+      : state.markedQuestionIds.filter((id) => id !== change.questionId);
+  } else if (change.type === "elimination") {
+    const choices = new Set(state.eliminatedChoices[change.questionId] ?? []);
+    if (change.eliminated) choices.add(change.choiceId);
+    else choices.delete(change.choiceId);
+    if (choices.size) state.eliminatedChoices[change.questionId] = [...choices].sort();
+    else delete state.eliminatedChoices[change.questionId];
+  } else {
+    state.currentQuestionId = change.questionId;
+  }
+  return state;
+}
+
+async function validateMutable(row: AttemptRow, token: string | null, expectedVersion: number | null, now: number): Promise<Response | null> {
+  if (row.status !== "active") return failure(409, "attempt_changed", "This Attempt is no longer editable.");
+  if (row.deadline_at_ms !== null && row.deadline_at_ms <= now)
+    return failure(409, "attempt_expired", "The timed Attempt has ended.");
+  if (expectedVersion === null || expectedVersion !== row.state_version)
+    return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before editing.");
+  if (row.editor_lease_expires_at_ms === null || row.editor_lease_expires_at_ms <= now)
+    return failure(409, "editor_lease_expired", "Editing is unavailable. Take over editing to continue.");
+  if (!token || !row.editor_token_hash || !sameSecret(await sha256(token), row.editor_token_hash))
+    return failure(409, "editor_conflict", "This Attempt is being edited on another device. Refresh or take over editing.");
+  return null;
+}
+
+async function readBody(request: Request): Promise<Record<string, unknown> | Response> {
+  const body = await bodyObject(request);
+  if (body instanceof Response) return body;
+  return body;
+}
+
+async function updateEditorState(env: AttemptEnv, row: AttemptRow, token: string, state: Record<string, unknown>, now: number): Promise<boolean> {
+  const result = await env.DB.prepare("UPDATE learner_attempts SET state_json = ?, state_version = state_version + 1, " +
+      "editor_lease_expires_at_ms = ? WHERE id = ? AND account_id = ? AND status = 'active' " +
+      "AND state_version = ? AND editor_token_hash = ? AND editor_lease_expires_at_ms > ? " +
+      "AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
+    .bind(JSON.stringify(state), now + EDITOR_LEASE_MS, row.id, row.account_id, row.state_version,
+      await sha256(token), now, now).run();
+  return result.success && result.meta.changes === 1;
+}
+
+async function writeAttempt(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const body = await readBody(request);
+  if (body instanceof Response) return body;
+  const row = await attemptRow(env, accountId, attemptId);
+  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  const token = parseEditorToken(body.editorToken);
+  const expectedVersion = parseVersion(body.expectedStateVersion);
+  const denied = await validateMutable(row, token, expectedVersion, now);
+  if (denied) return denied;
+  const change = parseChange(body.change, parseQuestions(row));
+  if (!change) return failure(400, "invalid_attempt_change", "This Attempt change is invalid.");
+  const state = applyChange(parseState(row), change);
+  if (!(await updateEditorState(env, row, token!, state as unknown as Record<string, unknown>, now)))
+    return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before editing.");
+  const updated = await attemptRow(env, accountId, attemptId);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  return json({ ...snapshot(updated, now), saveStatus: "saved" });
+}
+
+async function heartbeat(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const body = await readBody(request);
+  if (body instanceof Response) return body;
+  const row = await attemptRow(env, accountId, attemptId);
+  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  const token = parseEditorToken(body.editorToken);
+  const expectedVersion = parseVersion(body.expectedStateVersion);
+  const denied = await validateMutable(row, token, expectedVersion, now);
+  if (denied) return denied;
+  const result = await env.DB.prepare("UPDATE learner_attempts SET state_version = state_version + 1, " +
+      "editor_lease_expires_at_ms = ? WHERE id = ? AND account_id = ? AND status = 'active' " +
+      "AND state_version = ? AND editor_token_hash = ? AND editor_lease_expires_at_ms > ? " +
+      "AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
+    .bind(now + EDITOR_LEASE_MS, row.id, accountId, row.state_version, await sha256(token!), now, now).run();
+  if (!result.success) return failure(503, "attempt_unavailable", "Whitebook could not renew editing. Try again.");
+  if (result.meta.changes !== 1) return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before editing.");
+  const updated = await attemptRow(env, accountId, attemptId);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  return json({ ...snapshot(updated, now), saveStatus: "saved" });
+}
+
+async function takeover(env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const row = await attemptRow(env, accountId, attemptId);
+  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  if (row.status !== "active") return failure(409, "attempt_changed", "This Attempt is no longer editable.");
+  if (row.deadline_at_ms !== null && row.deadline_at_ms <= now)
+    return failure(409, "attempt_expired", "The timed Attempt has ended.");
+  const token = editorToken();
+  const tokenHash = await sha256(token);
+  const result = await env.DB.prepare("UPDATE learner_attempts SET editor_token_hash = ?, " +
+      "editor_lease_expires_at_ms = ?, state_version = state_version + 1 WHERE id = ? AND account_id = ? " +
+      "AND status = 'active' AND state_version = ? AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
+    .bind(tokenHash, now + EDITOR_LEASE_MS, row.id, accountId, row.state_version, now).run();
+  if (!result.success) return failure(503, "attempt_unavailable", "Whitebook could not transfer editing. Try again.");
+  if (result.meta.changes !== 1) return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before taking over.");
+  const updated = await attemptRow(env, accountId, attemptId);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  return json({ ...snapshot(updated, now), editorToken: token });
+}
+
+type AnswerRow = { question_id: string; accepted_answers_json: string };
+
+async function submitAttempt(request: Request, env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const body = await readBody(request);
+  if (body instanceof Response) return body;
+  const row = await attemptRow(env, accountId, attemptId);
+  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  const token = parseEditorToken(body.editorToken);
+  const expectedVersion = parseVersion(body.expectedStateVersion);
+  const denied = await validateMutable(row, token, expectedVersion, now);
+  if (denied) return denied;
+
+  const questions = parseQuestions(row);
+  const answerRows = await rows<AnswerRow>(env.DB.prepare("SELECT question_id, accepted_answers_json FROM publication_answers " +
+      "WHERE revision_id = ?").bind(row.revision_id));
+  const answers = new Map(answerRows.map((answer) => [answer.question_id, JSON.parse(answer.accepted_answers_json) as string[]]));
+  if (questions.some((question) => !answers.has(question.questionId)))
+    return failure(503, "attempt_unavailable", "Whitebook could not grade this Attempt. Try again.");
+  const state = parseState(row) as unknown as AttemptState;
+  const graded = questions.map((question) => {
+    const acceptedAnswers = answers.get(question.questionId)!;
+    const response = state.responses[question.questionId] ?? null;
+    const correct = response !== null && acceptedAnswers.some((answer) => answer.trim().toLocaleLowerCase() === response.trim().toLocaleLowerCase());
+    return { questionId: question.questionId, response, acceptedAnswers, correct };
+  });
+  const resultData = { correctCount: graded.filter((question) => question.correct).length,
+    questionCount: graded.length, questions: graded };
+  const resultJson = JSON.stringify(resultData);
+  const update = await env.DB.prepare("UPDATE learner_attempts SET status = 'completed', completed_at_ms = ?, " +
+      "result_json = ?, editor_token_hash = NULL, editor_lease_expires_at_ms = NULL, state_version = state_version + 1 " +
+      "WHERE id = ? AND account_id = ? AND status = 'active' AND state_version = ? AND editor_token_hash = ? " +
+      "AND editor_lease_expires_at_ms > ? AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
+    .bind(now, resultJson, row.id, accountId, row.state_version, await sha256(token!), now, now).run();
+  if (!update.success) return failure(503, "attempt_unavailable", "Whitebook could not submit this Attempt. Try again.");
+  if (update.meta.changes !== 1) return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before submitting.");
+  const completed = await attemptRow(env, accountId, attemptId);
+  if (!completed) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  return json({ ...snapshot(completed, now), result: resultData });
+}
+
+async function getResults(env: AttemptEnv, accountId: string, attemptId: string): Promise<Response> {
+  const row = await attemptRow(env, accountId, attemptId);
+  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  if (row.status !== "completed" || !row.result_json)
+    return failure(409, "attempt_incomplete", "Results are available after you submit this Attempt.");
+  return json({ attemptId, status: row.status, completedAt: row.completed_at_ms,
+    result: JSON.parse(row.result_json) });
+}
+
+export function attemptRoute(request: Request, env: AttemptEnv, now: () => number = Date.now): Promise<Response> | null {
+  const path = new URL(request.url).pathname;
+  if (path !== ROOT && !path.startsWith(ROOT + "/")) return null;
+
+  return (async () => {
+    const session = await currentSession(request, env);
+    if (!session) return failure(401, "signed_out", "Sign in with Google to open your workspace.");
+    if (request.method !== "GET") {
+      const denied = await requireMutation(request, env, session);
+      if (denied) return denied;
+    }
+
+    const serverNow = now();
+    if (request.method === "GET" && path === ROOT)
+      return listAttempts(env, session.account_id);
+    if (request.method === "POST" && path === ROOT)
+      return createAttempt(request, env, session.account_id, serverNow);
+
+    const match = new RegExp("^/api/attempts/([0-9a-f-]{36})(?:/(start|write|heartbeat|takeover|submit|results))?$", "i").exec(path);
+    if (!match) return failure(404, "not_found", "This Attempt action is unavailable.");
+    const attemptId = match[1];
+    if (request.method === "GET" && !match[2])
+      return getAttempt(env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "start")
+      return startAttempt(env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "write") return writeAttempt(request, env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "heartbeat") return heartbeat(request, env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "takeover") return takeover(env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "submit") return submitAttempt(request, env, session.account_id, attemptId, serverNow);
+    if (request.method === "GET" && match[2] === "results") return getResults(env, session.account_id, attemptId);
+    return failure(404, "not_found", "This Attempt action is unavailable.");
+  })();
+}
