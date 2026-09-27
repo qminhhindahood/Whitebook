@@ -76,6 +76,7 @@ async function fixture() {
     accepted_answers_json: JSON.stringify([index === 1 ? "A" : "B"]),
   }));
   const attempts = new Map<string, AttemptRow>();
+  const requestMeasurements: { method: string; path: string; rowsWritten: number }[] = [];
   const publicRevisions = new Set(["reviewed-rw", "reviewed-math", "reviewed-rw-exam", "reviewed-short-math", "reviewed-duplicate-math"]);
   const privateEntitlements = new Set(["learner-a:private-rw"]);
   const db = {
@@ -242,11 +243,17 @@ async function fixture() {
       headers.set("Origin", options.origin ?? origin);
       if (options.csrf !== false && options.who) headers.set("X-CSRF-Token", options.who.csrf);
     }
-    return worker.fetch(new Request(`${origin}${path}`, {
+    const before = new Map([...attempts].map(([id, row]) => [id, JSON.stringify(row)]));
+    const response = await worker.fetch(new Request(`${origin}${path}`, {
       method, headers, ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     }), env as never);
+    let rowsWritten = 0;
+    for (const [id, row] of attempts)
+      if (before.get(id) !== JSON.stringify(row)) rowsWritten++;
+    requestMeasurements.push({ method, path, rowsWritten });
+    return response;
   }
-  return { env, credentials, attempts, call };
+  return { env, credentials, attempts, requestMeasurements, call };
 }
 
 it.each([
@@ -544,6 +551,41 @@ it("grades and exposes Results only after Module 2 closes", async () => {
   const results = await call(`/api/attempts/${started.attemptId}/results`, { who: credentials[0] });
   expect(results.status).toBe(200);
   expect(await results.json()).toMatchObject({ status: "completed", result: { questionCount: 44 } });
+});
+
+it("measures a complete Worker Section Exam lifecycle by request and changed Attempt rows", async () => {
+  const { credentials, call, requestMeasurements } = await fixture();
+  const { preparing, started } = await startSectionExam(call, credentials[0], "Math");
+  const question = started.questions[0];
+  const activeSnapshot = await call(`/api/attempts/${started.attemptId}`, { who: credentials[0] });
+  expect(activeSnapshot.status).toBe(200);
+  expect(JSON.stringify(await activeSnapshot.json())).not.toMatch(/acceptedAnswers|answerKey|correctAnswer/);
+
+  const write = await call(`/api/attempts/${started.attemptId}/write`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+      change: { type: "response", questionId: question.questionId, response: "A" } } });
+  const saved = await write.json() as SectionExamResponse;
+  const heartbeat = await call(`/api/attempts/${started.attemptId}/heartbeat`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: saved.stateVersion } });
+  const beat = await heartbeat.json() as SectionExamResponse;
+  const finish1 = await call(`/api/attempts/${started.attemptId}/finish-module`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: beat.stateVersion } });
+  const transition = await finish1.json() as SectionExamResponse;
+  const continue2 = await call(`/api/attempts/${started.attemptId}/continue`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: transition.stateVersion } });
+  const module2 = await continue2.json() as SectionExamResponse;
+  const finish2 = await call(`/api/attempts/${started.attemptId}/finish-module`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: module2.stateVersion } });
+  expect(finish2.status).toBe(200);
+  expect((await finish2.json()).status).toBe("completed");
+  expect((await call(`/api/attempts/${started.attemptId}/results`, { who: credentials[0] })).status).toBe(200);
+  expect((await call("/api/attempts", { who: credentials[0] })).status).toBe(200);
+
+  const attemptRequests = requestMeasurements.filter((item) => item.path.includes(started.attemptId) || item.path === "/api/attempts");
+  expect(attemptRequests).toHaveLength(10);
+  expect(attemptRequests.reduce((sum, item) => sum + item.rowsWritten, 0)).toBe(7);
+  expect(attemptRequests.filter((item) => item.rowsWritten > 0)).toHaveLength(7);
+  expect(preparing.questions).toHaveLength(44);
 });
 
 it("enforces an expired Module 1 deadline on snapshot reads exactly once", async () => {
