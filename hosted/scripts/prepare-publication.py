@@ -197,7 +197,9 @@ def prepare(bundle, output, check_only=False):
         lines.append(f"INSERT OR IGNORE INTO publication_release_revisions VALUES ({sql(release)}, {sql(revision)});")
         source_question_ids = set()
         for ordinal, item in enumerate(questions, 1):
-            exact(item, ("questionId", "sourceQuestionId", "section", "module", "questionNumber", "responseType", "reviewStatus", "presentation"), "question")
+            required = {"questionId", "sourceQuestionId", "section", "module", "questionNumber", "responseType", "reviewStatus", "presentation"}
+            check(isinstance(item, dict) and required <= set(item) <= required | {"reviewedHelp"},
+                  "Invalid question fields")
             question = item["questionId"]
             key = (revision, question)
             check(isinstance(question, str) and IDS.fullmatch(question) and key not in question_keys, "Duplicate question")
@@ -246,6 +248,20 @@ def prepare(bundle, output, check_only=False):
             serialized = json.dumps(presentation, separators=(",", ":"), ensure_ascii=False)
             lines.append(f"INSERT OR IGNORE INTO publication_questions VALUES ({sql(revision)}, {sql(question)}, {sql(item['sourceQuestionId'])}, {ordinal}, {sql(item['section'])}, {item['module']}, {item['questionNumber']}, {sql(item['responseType'])}, {sql(serialized)});")
             lines.append(f"INSERT OR IGNORE INTO publication_answers VALUES ({sql(revision)}, {sql(question)}, {sql(json.dumps(accepted, separators=(',', ':')))});")
+            if "reviewedHelp" in item:
+                guidance = item["reviewedHelp"]
+                check(isinstance(guidance, dict) and guidance.get("source") == "owner_reviewed" and
+                      set(guidance) <= {"source", "hint", "explanation"} and
+                      any(field in guidance for field in ("hint", "explanation")),
+                      "Invalid reviewed help")
+                for field in ("hint", "explanation"):
+                    if field in guidance:
+                        value = guidance[field]
+                        check(isinstance(value, str) and 0 < len(value.strip()) <= 4000 and
+                              not LOCAL_PATH.search(value), "Invalid reviewed help text")
+                hint = sql(guidance["hint"].strip()) if "hint" in guidance else "NULL"
+                explanation = sql(guidance["explanation"].strip()) if "explanation" in guidance else "NULL"
+                lines.append(f"INSERT OR IGNORE INTO publication_review_help VALUES ({sql(revision)}, {sql(question)}, {hint}, {explanation});")
     check(sources == SOURCE_SET and len(question_keys) == len(answer_map), "Wrong source set or extra answers")
     for path, (asset, count) in assets.items():
         check(count > 0, "Visual not referenced by a question")

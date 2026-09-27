@@ -55,10 +55,10 @@ export function HostedBlocks({ blocks, revisionId, questionId }: {
   </span>;
 }
 
-export function HostedChoices({ presentation, revisionId, questionId, selected, eliminated, onSelect, onEliminate, disabled = false }: {
+export function HostedChoices({ presentation, revisionId, questionId, selected, eliminated, onSelect, onEliminate, disabled = false, showElimination = true }: {
   presentation: HostedPresentationData;
   revisionId: string; questionId: string; selected?: string; eliminated: string[];
-  onSelect: (choice: string) => void; onEliminate: (choice: string) => void; disabled?: boolean;
+  onSelect: (choice: string) => void; onEliminate: (choice: string) => void; disabled?: boolean; showElimination?: boolean;
 }) {
   return <fieldset className="content-choices">
     <legend className="visually-hidden">Select one answer</legend>
@@ -71,8 +71,9 @@ export function HostedChoices({ presentation, revisionId, questionId, selected, 
           <HostedBlocks blocks={choice.content} revisionId={revisionId} questionId={questionId} />
           {excluded && <span className="visually-hidden">Eliminated</span>}
         </label>
-        <button type="button" className="choice-eliminate" aria-label={`${excluded ? "Restore" : "Eliminate"} ${choice.id}`}
+        {showElimination && <button type="button" className="choice-eliminate" aria-label={`${excluded ? "Restore" : "Eliminate"} ${choice.id}`}
           disabled={disabled} onClick={() => onEliminate(choice.id)}>{excluded ? "Restore" : "Eliminate"}</button>
+        }
       </div>;
     })}
   </fieldset>;

@@ -5,6 +5,7 @@ import { FlashcardsArea } from "./FlashcardStudy";
 import { deviceZone } from "./satCountdown";
 import { CuratedLibrary } from "./CuratedLibrary";
 import { PracticeArea } from "./PracticeArea";
+import { HistoryArea } from "./HistoryArea";
 import "./cards.css";
 import { ScoresSection } from "./ScoresSection";
 
@@ -21,7 +22,7 @@ export function AccountApp() {
   const [nickname, setNickname] = useState("");
   const [timeZone, setTimeZone] = useState("");
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice">("dashboard");
+  const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice" | "history">("dashboard");
   const [practiceRevisionId, setPracticeRevisionId] = useState<string>();
 
   async function refresh() {
@@ -142,18 +143,20 @@ export function AccountApp() {
           <button type="button" className={view === "cards" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "cards" ? "page" : undefined} onClick={() => setView("cards")}>Flashcards</button>
           <button type="button" className={view === "library" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "library" ? "page" : undefined} onClick={() => setView("library")}>Library</button>
           <button type="button" className={view === "practice" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "practice" ? "page" : undefined} onClick={() => { setPracticeRevisionId(undefined); setView("practice"); }}>Practice</button>
+          <button type="button" className={view === "history" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "history" ? "page" : undefined} onClick={() => setView("history")}>History</button>
         </nav>
         {view === "cards" ?
           <FlashcardsArea onSessionEnded={handleSessionEnded} /> : view === "library" ?
           <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={(revisionId) => {
             setPracticeRevisionId(revisionId); setView("practice");
           }} /> : view === "practice" ?
-          <PracticeArea initialRevisionId={practiceRevisionId} onSessionEnded={handleSessionEnded} /> :
+          <PracticeArea initialRevisionId={practiceRevisionId} onSessionEnded={handleSessionEnded} /> : view === "history" ?
+          <HistoryArea onSessionEnded={handleSessionEnded} /> :
           <>
             <SatWeekend onSessionEnded={handleSessionEnded} />
             <section className="dashboard-empty" aria-labelledby="activity-heading">
               <h2 id="activity-heading">Your study activity</h2>
-              <p>Nothing to review yet. Your work will appear here as you study.</p>
+              <p>Open History to revisit completed Attempts and review missed questions.</p>
             </section>
             <ScoresSection />
             <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
