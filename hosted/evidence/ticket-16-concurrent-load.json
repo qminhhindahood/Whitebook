@@ -1,0 +1,121 @@
+{
+  "format": "whitebook-ticket-16-concurrent-load-evidence",
+  "schemaVersion": 1,
+  "environment": {
+    "kind": "staging",
+    "origin": "https://whitebook-ticket-03-staging.anothermiralph.workers.dev",
+    "worker": "whitebook-ticket-03-staging",
+    "d1": "whitebook-ticket-03-staging",
+    "paidFallbackEnabled": false
+  },
+  "exercise": {
+    "startedAt": "2026-09-27T11:48:03Z",
+    "finishedAt": "2026-09-27T11:48:54Z",
+    "syntheticConcurrentLearners": 24,
+    "sectionExamAttemptsCreated": 23,
+    "attemptCreationStatuses": {
+      "Math": { "created": 11, "completed": 2 },
+      "Reading and Writing": { "created": 12, "completed": 1 }
+    },
+    "questionsInCreatedAttempts": 1132,
+    "completedQuestionCount": 142,
+    "questionPresentations": { "requested": 1132, "succeeded": 864, "failed": 268 },
+    "protectedVisualFetches": { "requested": 3248, "succeeded": 1357, "failed": 1891 },
+    "workerRequests": 4618,
+    "requestsPerCreatedAttempt": 200.78,
+    "clientLatencyMs": {
+      "p50": 2266.46,
+      "p95": 7462.77,
+      "p99": 7478.2,
+      "max": 12776.15
+    },
+    "httpResponses": {
+      "200": 2432,
+      "201": 23,
+      "409": 3,
+      "503": 2160,
+      "1102": 0
+    },
+    "applicationFailureCode": "service_unavailable",
+    "sensitiveMaterialInLearnerOrErrorResponses": false,
+    "timerDurationChecksPassed": 3,
+    "crossDeviceTakeoverChecksPassed": 3,
+    "syntheticAccountsDeleted": 24,
+    "cleanupVerifiedAt": "2026-09-27T12:11:00Z",
+    "remainingSyntheticAccounts": 0,
+    "remainingSyntheticSessions": 0
+  },
+  "d1": {
+    "duringExerciseImmediateInsights": {
+      "rowsReadBefore": 38984,
+      "rowsReadAfter": 39329,
+      "rowsReadDelta": 345,
+      "rowsWrittenBefore": 181,
+      "rowsWrittenAfter": 208,
+      "rowsWrittenDelta": 27,
+      "note": "Wrangler D1 Insights snapshots lag and cover a rolling 24-hour window; the small immediate delta is not a complete per-exercise query counter."
+    },
+    "latestRolling24HourSnapshot": {
+      "capturedAt": "2026-09-27T12:12:51.003Z",
+      "queryPatterns": 55,
+      "rowsRead": 56010,
+      "rowsWritten": 344,
+      "note": "Includes all staging SQL fingerprints in the rolling window, including earlier rehearsal attempts and cleanup. It cannot be attributed solely to the 24-learner run."
+    },
+    "databaseBytes": {
+      "before": 3338240,
+      "peakDuringExercise": 3624960,
+      "afterCleanup": 3338240,
+      "freeLimitBytes": 500000000,
+      "afterCleanupHeadroomBytes": 496661760
+    }
+  },
+  "freePlanDailyProjection": {
+    "scenario": "100 learners per day, two 67-minute Section Exam attempts per learner (200 attempts total); a deliberately simple extrapolation from this staging exercise, not a qualified capacity result.",
+    "workerInvocations": {
+      "measuredBaseRequestsPerAttempt": 200.78,
+      "estimated45SecondHeartbeatsPer67MinuteAttempt": 89.33,
+      "projectedDailyInvocations": 58023,
+      "freeDailyLimit": 100000,
+      "headroom": 41977,
+      "headroomPercent": 41.98,
+      "caveat": "Does not add sign-in, navigation, retries, or other product use; the concurrent exercise itself had a 46.77% service-error rate."
+    },
+    "d1RowsRead": {
+      "projectedDailyRows": 522777,
+      "freeDailyLimit": 5000000,
+      "headroom": 4477223,
+      "headroomPercent": 89.54,
+      "method": "Scale the entire observed 24-hour read aggregate of 56,010 by 200/23, attributing all of it to the 23 created Attempts, then add two row reads per timed heartbeat for each projected Attempt.",
+      "caveat": "This intentionally conservative attribution is only a rough upper extrapolation. Insights aggregation is delayed and includes other staging activity; a successful 200-Attempt measurement is still required."
+    },
+    "d1RowsWritten": {
+      "projectedDailyRows": 20858,
+      "freeDailyLimit": 100000,
+      "headroom": 79142,
+      "headroomPercent": 79.14,
+      "method": "Scale the entire observed 24-hour write aggregate of 344 by 200/23, then add one row written per projected heartbeat.",
+      "caveat": "Rough upper extrapolation from the delayed aggregate; the failed exercise did not measure 200 completed timed Attempts."
+    },
+    "d1Storage": {
+      "currentBytesAfterCleanup": 3338240,
+      "peakBytesDuringExercise": 3624960,
+      "freeLimitBytes": 500000000,
+      "currentUsagePercent": 0.67,
+      "currentHeadroomBytes": 496661760,
+      "peakUsagePercent": 0.72,
+      "peakHeadroomBytes": 496375040,
+      "dailyGrowthProjection": null,
+      "caveat": "Only transient staging size was measured; a retained daily growth rate was not established."
+    },
+    "workerCpu": {
+      "freeLimitMsPerInvocation": 10,
+      "observedHttp1102Errors": 0,
+      "p95CpuMs": null,
+      "p99CpuMs": null,
+      "caveat": "Worker CPU percentiles were not captured. Zero client-observed 1102 errors does not prove CPU headroom."
+    }
+  },
+  "verdict": "NO-GO",
+  "reason": "The 24-learner rehearsal produced 2160 generic 503 service_unavailable responses and completed only 3 of 23 created Attempts."
+}
