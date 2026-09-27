@@ -21,7 +21,7 @@ export type AttemptSnapshot = {
 };
 export type AttemptSummary = {
   attemptId: string; revisionId: string; status: AttemptSnapshot["status"];
-  section: string; questionCount: number; createdAt: number; startedAt: number | null;
+  kind?: "practice" | "section_exam"; section: string; questionCount: number; createdAt: number; startedAt: number | null;
   deadlineAt: number | null; completedAt: number | null;
 };
 export type AttemptResult = {
@@ -230,7 +230,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
         setActiveAttempt(snapshot);
         setPreparingAttemptId(""); setLoadMessage("");
         setAttempts((current) => [{ attemptId: snapshot.attemptId, revisionId: snapshot.revisionId,
-          status: snapshot.status, section: snapshot.section, questionCount: snapshot.questions.length,
+          kind: snapshot.kind, status: snapshot.status, section: snapshot.section, questionCount: snapshot.questions.length,
           createdAt: snapshot.createdAt ?? Date.now(), startedAt: snapshot.startedAt,
           deadlineAt: snapshot.deadlineAt, completedAt: snapshot.completedAt ?? null },
         ...current.filter((item) => item.attemptId !== snapshot.attemptId)]);
@@ -242,7 +242,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
       setActiveAttempt(started);
       setPreparingAttemptId("");
       setLoadMessage("");
-      setAttempts((current) => [{ attemptId: started.attemptId, revisionId: started.revisionId, status: started.status,
+      setAttempts((current) => [{ attemptId: started.attemptId, revisionId: started.revisionId, kind: started.kind, status: started.status,
         section: started.section, questionCount: started.questions.length, createdAt: Date.now(), startedAt: started.startedAt,
         deadlineAt: started.deadlineAt, completedAt: null }, ...current.filter((item) => item.attemptId !== started.attemptId)]);
     } catch (cause: unknown) {
@@ -420,7 +420,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
         {attempts.length === 0 ? <p className="practice-empty">Your saved Practice Attempts will appear here.</p> :
           <ul>{attempts.map((attempt) => <li key={attempt.attemptId}>
             <div><strong>{packages.find((item) => item.revisionId === attempt.revisionId)?.title ?? "Reviewed Test Package"}</strong>
-              <span>{attempt.section} · {attempt.questionCount} questions · {attempt.status}</span></div>
+              <span>{attempt.section} · {attempt.kind === "section_exam" ? "Section Exam" : "Practice"} · {attempt.questionCount} questions · {attempt.status}</span></div>
             {attempt.status !== "expired" && <button type="button" className="practice-button practice-button--quiet"
               disabled={building} onClick={() => void openAttempt(attempt.attemptId)}>
               {attempt.status === "preparing" ? "Continue setup" : attempt.status === "completed" ? "Review results" : "Resume Attempt"}

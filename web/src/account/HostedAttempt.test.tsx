@@ -224,13 +224,16 @@ it("shows a low-time warning at five minutes without making a request", async ()
 });
 
 it("pauses and resumes through the Section Exam lifecycle endpoints", async () => {
-  const base = attempt({ kind: "section_exam", state: { phase: "module", activeModule: 1, responses: {},
+  vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close() {} })));
+  const base = attempt({ kind: "section_exam", section: "Math", state: { phase: "module", activeModule: 1, responses: {},
     markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" } });
   const { calls, view } = fixture(async (path) => {
     if (path.endsWith("/pause")) return Response.json({ ...base, stateVersion: 2, state: { ...base.state,
       phase: "paused", pausedPhase: "module", remainingSeconds: 540 }, deadlineAt: null });
     if (path.endsWith("/resume")) return Response.json({ ...base, stateVersion: 3, state: { ...base.state,
       phase: "module", pausedPhase: null }, deadlineAt: now + 540_000, serverNow: now + 1_000 });
+    if (path === "/api/math/calculator-config") return Response.json({ configured: false, scriptUrl: null });
+    if (path === "/api/math/reference-sheet.png") return new Response("sheet", { headers: { "Content-Type": "image/png" } });
     throw new Error(path);
   });
   view(base);
@@ -240,6 +243,10 @@ it("pauses and resumes through the Section Exam lifecycle endpoints", async () =
   fireEvent.click(screen.getByRole("button", { name: "Resume through Loading Gate" }));
   await screen.findByRole("button", { name: "Pause Section Exam" });
   expect(calls.some((call) => call.path.endsWith("/resume"))).toBe(true);
+  expect(calls.findIndex((call) => call.path === "/api/math/calculator-config"))
+    .toBeLessThan(calls.findIndex((call) => call.path.endsWith("/resume")));
+  expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png"))
+    .toBeLessThan(calls.findIndex((call) => call.path.endsWith("/resume")));
 });
 
 it("preserves calculator state access and the Reference Sheet control in Math", () => {
@@ -249,4 +256,32 @@ it("preserves calculator state access and the Reference Sheet control in Math", 
   expect(screen.getByRole("region", { name: "Math tools" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Reference Sheet" })).toBeTruthy();
+});
+
+it("waits for calculator readiness before resuming and falls back to the scientific calculator", async () => {
+  vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close() {} })));
+  const base = attempt({ kind: "section_exam", section: "Math", state: { phase: "paused", pausedPhase: "module",
+    activeModule: 1, remainingSeconds: 540, responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" } });
+  const { calls, view } = fixture(async (path) => {
+    if (path === "/api/math/calculator-config") return Response.json({ configured: true,
+      scriptUrl: "https://www.desmos.com/api/v1.12/calculator.js?apiKey=fixture" });
+    if (path === "/api/math/reference-sheet.png") return new Response("sheet", { headers: { "Content-Type": "image/png" } });
+    if (path.endsWith("/resume")) return Response.json({ ...base, stateVersion: 4, state: { ...base.state,
+      phase: "module", pausedPhase: null }, deadlineAt: now + 540_000, serverNow: now + 1_000 });
+    throw new Error(path);
+  });
+  view(base);
+  fireEvent.click(screen.getByRole("button", { name: "Resume through Loading Gate" }));
+  const frame = await screen.findByTitle("Desmos graphing calculator");
+  expect(calls.some((call) => call.path.endsWith("/resume"))).toBe(false);
+  await act(async () => {
+    window.dispatchEvent(new MessageEvent("message", { source: (frame as HTMLIFrameElement).contentWindow, data: {
+      whitebookCalculator: true, type: "ready", payload: { scriptLoaded: false, constructorAvailable: false,
+        instanceCreated: false, stateReadable: false, usableSize: false },
+    } }));
+  });
+  await screen.findByRole("button", { name: "Pause Section Exam" });
+  expect(calls.some((call) => call.path.endsWith("/resume"))).toBe(true);
+  expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Graphing calculator" })).toBeNull();
 });

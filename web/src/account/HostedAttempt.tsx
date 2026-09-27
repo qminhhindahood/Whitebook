@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import { HostedBlocks, HostedChoices } from "./HostedPresentation";
 import { DesmosCalculatorPanel, ScientificCalculator } from "../calculator";
+import { DesmosReadinessProbe, loadDesmos } from "../calculator";
 import { ReferenceSheet } from "../ReferenceSheet";
 import type { AttemptResult, AttemptSnapshot, PresentationQuestion } from "./PracticeArea";
 
@@ -120,6 +121,9 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const [lifecycleError, setLifecycleError] = useState("");
   const [showReference, setShowReference] = useState(false);
   const [calculatorMode, setCalculatorMode] = useState<"desmos" | "scientific">(desmosScriptUrl ? "desmos" : "scientific");
+  const [readyDesmosUrl, setReadyDesmosUrl] = useState<string | null>(desmosScriptUrl ?? null);
+  const [resumeProbeUrl, setResumeProbeUrl] = useState("");
+  const resumeProbeResolver = useRef<((ready: boolean) => void) | null>(null);
   const [clockNow, setClockNow] = useState(() => performance.now());
   const snapshotRef = useRef(snapshot);
   const tokenRef = useRef(editorToken);
@@ -347,11 +351,28 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     setLifecycleBusy(true); setLifecycleError("");
     try {
       if (action === "resume" && snapshot.section === "Math" && snapshot.state.pausedPhase === "module") {
-        await request("/api/math/calculator-config");
+        const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
+        let readyUrl: string | null = null;
+        if (calculator.scriptUrl) {
+          await loadDesmos(calculator.scriptUrl);
+          const ready = await new Promise<boolean>((resolve) => {
+            resumeProbeResolver.current = resolve;
+            setResumeProbeUrl(calculator.scriptUrl!);
+          });
+          if (ready) readyUrl = calculator.scriptUrl;
+        }
+        setReadyDesmosUrl(readyUrl);
+        setCalculatorMode(readyUrl ? "desmos" : "scientific");
         const sheet = await accountFetch("/api/math/reference-sheet.png", { credentials: "same-origin", cache: "no-store" });
         if (!sheet.ok) throw new Error("The Math Reference Sheet could not be prepared. Retry resuming when it is available.");
         const blob = await sheet.blob();
         if (typeof createImageBitmap === "function") { const image = await createImageBitmap(blob); image.close(); }
+        else await new Promise<void>((resolve, reject) => {
+          const image = new Image(); const objectUrl = URL.createObjectURL(blob);
+          image.onload = () => { URL.revokeObjectURL(objectUrl); resolve(); };
+          image.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("The Math Reference Sheet could not be decoded. Retry resuming when it is available.")); };
+          image.src = objectUrl;
+        });
       }
       const next = await request<AttemptSnapshot>(`/api/attempts/${snapshot.attemptId}/${action}`, mutation({
         editorToken, expectedStateVersion: snapshot.stateVersion,
@@ -411,6 +432,12 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     </section>}
     {sectionExam && phase === "paused" && <section className="hosted-attempt__transition" aria-label="Paused Section Exam">
       <h3>Section Exam paused</h3><p>The remaining time is held by the server. Reload the Math tools before resuming.</p>
+      {resumeProbeUrl && <><p role="status">Checking the graphing calculator. The scientific calculator will be used if Desmos is unavailable.</p>
+        <DesmosReadinessProbe options={{ expressions: true, settingsMenu: false }} onResult={(checks) => {
+          const resolve = resumeProbeResolver.current;
+          if (resolve) { resumeProbeResolver.current = null; setResumeProbeUrl(""); resolve(Object.values(checks).every(Boolean)); }
+        }} />
+      </>}
       {canControl && <button type="button" className="practice-button" disabled={lifecycleBusy}
         onClick={() => void sectionAction("resume")}>{lifecycleBusy ? "Checking resources…" : "Resume through Loading Gate"}</button>}
     </section>}
@@ -423,13 +450,13 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     {sectionExam && snapshot.section === "Math" && phase === "module" && <section className="hosted-attempt__math-tools" aria-label="Math tools">
       <div className="hosted-attempt__module-actions">
         <span>Math tools</span>
-        {desmosScriptUrl && <button type="button" className="practice-button practice-button--quiet"
+        {readyDesmosUrl && <button type="button" className="practice-button practice-button--quiet"
           aria-pressed={calculatorMode === "desmos"} onClick={() => setCalculatorMode("desmos")}>Graphing calculator</button>}
         <button type="button" className="practice-button practice-button--quiet"
           aria-pressed={calculatorMode === "scientific"} onClick={() => setCalculatorMode("scientific")}>Scientific calculator</button>
         <button type="button" className="practice-button practice-button--quiet" onClick={() => setShowReference(true)}>Reference Sheet</button>
       </div>
-      {calculatorMode === "desmos" && desmosScriptUrl ? <DesmosCalculatorPanel options={{ expressions: true, settingsMenu: false }}
+      {calculatorMode === "desmos" && readyDesmosUrl ? <DesmosCalculatorPanel options={{ expressions: true, settingsMenu: false }}
         savedState={(snapshot.state.calculatorState as Record<string, unknown> | undefined) ?? null}
         onSave={(state) => enqueue({ type: "calculator_state", state })} /> : <ScientificCalculator />}
     </section>}

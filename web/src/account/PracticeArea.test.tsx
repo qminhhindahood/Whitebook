@@ -164,6 +164,8 @@ it("creates a Section Exam with a section-only payload and prepares its Math too
   expect(JSON.parse(String(createCall.init?.body))).toEqual({ revisionId: "math-pack", kind: "section_exam", section: "Math" });
   expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
   expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  expect(await screen.findByText(/Section Exam.*44 questions.*active/)).toBeTruthy();
 });
 
 it("keeps Section selection visible and omits Practice-only setup fields for an exam", async () => {
