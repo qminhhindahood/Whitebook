@@ -31,19 +31,53 @@ async function fixture() {
     token_hash: await sha256(item.token), csrf_hash: await sha256(item.csrf),
     account_id: item.accountId, expires_at: Math.floor(Date.now() / 1000) + 3600,
   });
-  const questions: QuestionRow[] = [1, 2, 3].map((n) => ({
+  const practiceQuestions: QuestionRow[] = [1, 2, 3].map((n) => ({
     revision_id: "reviewed-rw", question_id: `q${n}`, ordinal: n,
     section: "Reading and Writing", module: n === 3 ? 2 : 1,
     question_number: n, response_type: "multiple_choice",
     presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Question ${n}` }],
       choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
   }));
+  const sectionExamQuestions: QuestionRow[] = [
+    ...Array.from({ length: 44 }, (_, index) => ({
+      revision_id: "reviewed-math", question_id: `math-q${index + 1}`, ordinal: index + 1,
+      section: "Math" as const, module: 1, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Math question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+    ...Array.from({ length: 54 }, (_, index) => ({
+      revision_id: "reviewed-math", question_id: `cross-rw-q${index + 1}`, ordinal: index + 45,
+      section: "Reading and Writing" as const, module: 2, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Other Section question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+    ...Array.from({ length: 54 }, (_, index) => ({
+      revision_id: "reviewed-rw-exam", question_id: `rw-exam-q${index + 1}`, ordinal: index + 1,
+      section: "Reading and Writing" as const, module: 2, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Reading question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+    ...Array.from({ length: 43 }, (_, index) => ({
+      revision_id: "reviewed-short-math", question_id: `short-math-q${index + 1}`, ordinal: index + 1,
+      section: "Math" as const, module: 1, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Short pool question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+    ...Array.from({ length: 44 }, (_, index) => ({
+      revision_id: "reviewed-duplicate-math", question_id: `duplicate-math-q${Math.min(index + 1, 43)}`, ordinal: index + 1,
+      section: "Math" as const, module: 1, question_number: index + 1, response_type: "multiple_choice",
+      presentation_json: JSON.stringify({ version: 1, stimulus: [], stem: [{ kind: "text", text: `Duplicate pool question ${index + 1}` }],
+        choices: [{ id: "A", content: [] }, { id: "B", content: [] }] }),
+    })),
+  ];
+  const questions: QuestionRow[] = [...practiceQuestions, ...sectionExamQuestions];
   const answers = questions.map((question, index) => ({
     question_id: question.question_id,
     accepted_answers_json: JSON.stringify([index === 1 ? "A" : "B"]),
   }));
   const attempts = new Map<string, AttemptRow>();
-  const publicRevisions = new Set(["reviewed-rw"]);
+  const requestMeasurements: { method: string; path: string; rowsWritten: number }[] = [];
+  const publicRevisions = new Set(["reviewed-rw", "reviewed-math", "reviewed-rw-exam", "reviewed-short-math", "reviewed-duplicate-math"]);
   const privateEntitlements = new Set(["learner-a:private-rw"]);
   const db = {
     async batch() { throw new Error("Unexpected D1 batch"); },
@@ -73,7 +107,9 @@ async function fixture() {
             const revisionId = String(args[0]);
             const section = String(args[1]);
             const modules = args.slice(2).map(Number);
-            const rows = questions.filter((row) => row.revision_id === revisionId && row.section === section && modules.includes(row.module));
+            const filtersModules = sql.includes("module IN (");
+            const rows = questions.filter((row) => row.revision_id === revisionId && row.section === section &&
+              (!filtersModules || modules.includes(row.module)));
             return { results: rows, meta: { rows_read: rows.length, rows_written: 0 } };
           }
           if (sql.includes("FROM learner_attempts")) {
@@ -88,10 +124,10 @@ async function fixture() {
         },
         async run() {
           if (sql.includes("INSERT INTO learner_attempts")) {
-            const [id, accountId, revisionId, configJson, questionsJson, stateJson, createdAt] = args;
+            const [id, accountId, revisionId, kind, configJson, questionsJson, stateJson, createdAt] = args;
             attempts.set(String(id), {
               id: String(id), account_id: String(accountId), revision_id: String(revisionId),
-              kind: "practice", status: "preparing", config_json: String(configJson),
+              kind: String(kind), status: "preparing", config_json: String(configJson),
               questions_json: String(questionsJson), state_json: String(stateJson), state_version: 0,
               created_at_ms: Number(createdAt), started_at_ms: null, deadline_at_ms: null,
               completed_at_ms: null, result_json: null, editor_token_hash: null,
@@ -99,7 +135,39 @@ async function fixture() {
             });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
-          if (sql.includes("UPDATE learner_attempts SET state_json =")) {
+          if (sql.includes("SET state_json = ?, deadline_at_ms = ?")) {
+            const [stateJson, deadlineAt, leaseExpiry, id, accountId, expectedVersion, tokenHash, now, oldDeadline] = args;
+            const row = attempts.get(String(id));
+            if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
+                row.state_version !== Number(expectedVersion) || row.editor_token_hash !== String(tokenHash) ||
+                row.editor_lease_expires_at_ms === null || row.editor_lease_expires_at_ms <= Number(now) ||
+                row.deadline_at_ms !== (oldDeadline === null ? null : Number(oldDeadline)))
+              return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
+            Object.assign(row, { state_json: String(stateJson), deadline_at_ms: deadlineAt === null ? null : Number(deadlineAt),
+              editor_lease_expires_at_ms: Number(leaseExpiry), state_version: row.state_version + 1 });
+            return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
+          }
+          if (sql.includes("SET state_json = ?, deadline_at_ms = NULL")) {
+            const [stateJson, id, accountId, expectedVersion, oldDeadline] = args;
+            const row = attempts.get(String(id));
+            if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
+                row.state_version !== Number(expectedVersion) || row.deadline_at_ms !== Number(oldDeadline))
+              return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
+            Object.assign(row, { state_json: String(stateJson), deadline_at_ms: null, state_version: row.state_version + 1 });
+            return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
+          }
+          if (sql.includes("SET status = 'completed', state_json = ?")) {
+            const [stateJson, completedAt, resultJson, id, accountId, expectedVersion, oldDeadline] = args;
+            const row = attempts.get(String(id));
+            if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
+                row.state_version !== Number(expectedVersion) || row.deadline_at_ms !== Number(oldDeadline))
+              return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
+            Object.assign(row, { status: "completed", state_json: String(stateJson), deadline_at_ms: null,
+              completed_at_ms: Number(completedAt), result_json: String(resultJson), editor_token_hash: null,
+              editor_lease_expires_at_ms: null, state_version: row.state_version + 1 });
+            return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
+          }
+          if (sql.includes("SET state_json = ?, state_version = state_version + 1, editor_lease_expires_at_ms")) {
             const [stateJson, leaseExpiry, id, accountId, expectedVersion, tokenHash, now] = args;
             const row = attempts.get(String(id));
             if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
@@ -141,12 +209,13 @@ async function fixture() {
               editor_token_hash: null, editor_lease_expires_at_ms: null, state_version: row.state_version + 1 });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
-          if (sql.includes("UPDATE learner_attempts SET status = 'active'")) {
-            const [startedAt, deadlineAt, tokenHash, leaseExpiresAt, id, accountId] = args;
+          if (sql.includes("SET state_json = ?, status = 'active'")) {
+            const [stateJson, startedAt, deadlineAt, tokenHash, leaseExpiresAt, id, accountId] = args;
             const row = attempts.get(String(id));
             if (!row || row.account_id !== String(accountId) || row.status !== "preparing")
               return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
             Object.assign(row, {
+              state_json: String(stateJson),
               status: "active", started_at_ms: Number(startedAt),
               deadline_at_ms: deadlineAt === null ? null : Number(deadlineAt),
               editor_token_hash: String(tokenHash), editor_lease_expires_at_ms: Number(leaseExpiresAt),
@@ -174,12 +243,104 @@ async function fixture() {
       headers.set("Origin", options.origin ?? origin);
       if (options.csrf !== false && options.who) headers.set("X-CSRF-Token", options.who.csrf);
     }
-    return worker.fetch(new Request(`${origin}${path}`, {
+    const before = new Map([...attempts].map(([id, row]) => [id, JSON.stringify(row)]));
+    const response = await worker.fetch(new Request(`${origin}${path}`, {
       method, headers, ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     }), env as never);
+    let rowsWritten = 0;
+    for (const [id, row] of attempts)
+      if (before.get(id) !== JSON.stringify(row)) rowsWritten++;
+    requestMeasurements.push({ method, path, rowsWritten });
+    return response;
   }
-  return { env, credentials, attempts, call };
+  return { env, credentials, attempts, requestMeasurements, call };
 }
+
+it.each([
+  ["Math", "reviewed-math", 44, 22],
+  ["Reading and Writing", "reviewed-rw-exam", 54, 27],
+] as const)("creates a %s Section Exam with two unique generated Modules", async (section, revisionId, total, perModule) => {
+  const { credentials, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId, kind: "section_exam", section },
+  });
+
+  expect(response.status).toBe(201);
+  const created = await response.json() as {
+    kind: string; status: string; questions: { questionId: string; module: number }[];
+    state: Record<string, unknown>;
+  };
+  expect(created).toMatchObject({ kind: "section_exam", status: "preparing" });
+  expect(created.questions).toHaveLength(total);
+  expect(new Set(created.questions.map((question) => question.questionId)).size).toBe(total);
+  expect(created.questions.filter((question) => question.module === 1)).toHaveLength(perModule);
+  expect(created.questions.filter((question) => question.module === 2)).toHaveLength(perModule);
+  expect(created.state).toMatchObject({ phase: "module", activeModule: 1, lockedModules: [] });
+  expect(JSON.stringify(created)).not.toMatch(/acceptedAnswers|answerKey|correctAnswer/);
+});
+
+it("allows later Section Exam Attempts to select questions used by an earlier Attempt", async () => {
+  const { credentials, call } = await fixture();
+  const create = () => call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-math", kind: "section_exam", section: "Math" },
+  });
+  const firstResponse = await create();
+  const secondResponse = await create();
+  expect(firstResponse.status).toBe(201);
+  expect(secondResponse.status).toBe(201);
+  const first = await firstResponse.json() as { questionIds: string[] };
+  const second = await secondResponse.json() as { questionIds: string[] };
+  expect(new Set(first.questionIds)).toEqual(new Set(second.questionIds));
+});
+
+it("rejects unsupported Section Exam Sections with an actionable validation error", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-math", kind: "section_exam", section: "Science" },
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { message: expect.stringMatching(/supported Section/i) } });
+  expect(attempts.size).toBe(0);
+});
+
+it("rejects a Section Exam pool below the required question count", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-short-math", kind: "section_exam", section: "Math" },
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { message: expect.stringMatching(/44.*question|question.*44/i) } });
+  expect(attempts.size).toBe(0);
+});
+
+it("rejects a Section Exam pool whose rows repeat question identities", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-duplicate-math", kind: "section_exam", section: "Math" },
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { message: expect.stringMatching(/44.*question|question.*44/i) } });
+  expect(attempts.size).toBe(0);
+});
+
+it("checks package entitlement before creating a Section Exam", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const response = await call("/api/attempts", {
+    method: "POST", who: credentials[1],
+    body: { revisionId: "private-rw", kind: "section_exam", section: "Reading and Writing" },
+  });
+
+  expect(response.status).toBe(404);
+  expect(attempts.size).toBe(0);
+});
 
 it("requires same-origin CSRF protection for Attempt creation", async () => {
   const { credentials, call } = await fixture();
@@ -270,6 +431,368 @@ async function startPractice(call: Awaited<ReturnType<typeof fixture>>["call"], 
   const started = await call(`/api/attempts/${preparing.attemptId}/start`, { method: "POST", who, body: {} });
   return { attemptId: preparing.attemptId, started: await started.json() as { editorToken: string; stateVersion: number; deadlineAt: number } };
 }
+
+type SectionExamResponse = {
+  attemptId: string;
+  kind: string;
+  status: string;
+  stateVersion: number;
+  deadlineAt: number | null;
+  startedAt: number | null;
+  serverNow: number;
+  editorToken?: string;
+  questions: { questionId: string; module: number }[];
+  state: {
+    phase: string;
+    activeModule: number;
+    lockedModules: number[];
+    responses: Record<string, string>;
+    currentQuestionId: string;
+    remainingSeconds: number | null;
+    pausedPhase: string | null;
+    questionElapsedMs: Record<string, number>;
+    calculatorState?: Record<string, unknown> | null;
+  };
+  result?: { correctCount: number; questionCount: number };
+};
+
+async function startSectionExam(
+  call: Awaited<ReturnType<typeof fixture>>["call"],
+  who: Credential,
+  section: "Math" | "Reading and Writing" = "Math",
+  revisionId = section === "Math" ? "reviewed-math" : "reviewed-rw-exam",
+) {
+  const created = await call("/api/attempts", {
+    method: "POST", who, body: { revisionId, kind: "section_exam", section },
+  });
+  const preparing = await created.json() as SectionExamResponse;
+  const startedResponse = await call(`/api/attempts/${preparing.attemptId}/start`, { method: "POST", who, body: {} });
+  return { preparing, response: startedResponse, started: await startedResponse.json() as SectionExamResponse };
+}
+
+it.each([
+  ["Math", "reviewed-math", 35],
+  ["Reading and Writing", "reviewed-rw-exam", 32],
+] as const)("starts a %s Section Exam Module with its fixed server deadline", async (section, revisionId, minutes) => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { response, started } = await startSectionExam(call, credentials[0], section, revisionId);
+    expect(response.status).toBe(200);
+    expect(started).toMatchObject({ kind: "section_exam", status: "active", startedAt: Date.now(),
+      deadlineAt: Date.now() + minutes * 60_000, serverNow: Date.now(),
+      state: { phase: "module", activeModule: 1, lockedModules: [] } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("locks Module 1 at an untimed transition and starts Module 2 only on explicit continue", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { started } = await startSectionExam(call, credentials[0]);
+    const finished = await call(`/api/attempts/${started.attemptId}/finish-module`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion },
+    });
+    expect(finished.status).toBe(200);
+    const transition = await finished.json() as SectionExamResponse;
+    expect(transition).toMatchObject({ status: "active", deadlineAt: null,
+      state: { phase: "transition", activeModule: 1, lockedModules: [1] } });
+    expect(transition.state).not.toHaveProperty("breakRemaining");
+    expect(await call(`/api/attempts/${started.attemptId}/results`, { who: credentials[0] }).then((r) => r.status)).toBe(409);
+
+    const continued = await call(`/api/attempts/${started.attemptId}/continue`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: transition.stateVersion },
+    });
+    expect(continued.status).toBe(200);
+    const module2 = await continued.json() as SectionExamResponse;
+    expect(module2).toMatchObject({ deadlineAt: Date.now() + 35 * 60_000,
+      state: { phase: "module", activeModule: 2, lockedModules: [1] } });
+    expect(module2.questions.find((question) => question.questionId === module2.state.currentQuestionId)?.module).toBe(2);
+
+    const lateModule1Write = await call(`/api/attempts/${started.attemptId}/write`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: module2.stateVersion,
+        change: { type: "response", questionId: started.questions[0].questionId, response: "A" } },
+    });
+    expect(lateModule1Write.status).toBe(400);
+    expect(await lateModule1Write.json()).toMatchObject({ error: { code: "invalid_attempt_change" } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("grades and exposes Results only after Module 2 closes", async () => {
+  const { credentials, call } = await fixture();
+  const { started } = await startSectionExam(call, credentials[0]);
+  const finished1 = await call(`/api/attempts/${started.attemptId}/finish-module`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion },
+  });
+  const transition = await finished1.json() as SectionExamResponse;
+  const continued = await call(`/api/attempts/${started.attemptId}/continue`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: transition.stateVersion },
+  });
+  const module2 = await continued.json() as SectionExamResponse;
+  const finished2 = await call(`/api/attempts/${started.attemptId}/finish-module`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: module2.stateVersion },
+  });
+
+  expect(finished2.status).toBe(200);
+  expect(await finished2.json()).toMatchObject({ status: "completed", deadlineAt: null,
+    state: { activeModule: 2, lockedModules: [1, 2] }, result: { correctCount: 0, questionCount: 44 } });
+  const results = await call(`/api/attempts/${started.attemptId}/results`, { who: credentials[0] });
+  expect(results.status).toBe(200);
+  expect(await results.json()).toMatchObject({ status: "completed", result: { questionCount: 44 } });
+});
+
+it("measures a complete Worker Section Exam lifecycle by request and changed Attempt rows", async () => {
+  const { credentials, call, requestMeasurements } = await fixture();
+  const { preparing, started } = await startSectionExam(call, credentials[0], "Math");
+  const question = started.questions[0];
+  const activeSnapshot = await call(`/api/attempts/${started.attemptId}`, { who: credentials[0] });
+  expect(activeSnapshot.status).toBe(200);
+  expect(JSON.stringify(await activeSnapshot.json())).not.toMatch(/acceptedAnswers|answerKey|correctAnswer/);
+
+  const write = await call(`/api/attempts/${started.attemptId}/write`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+      change: { type: "response", questionId: question.questionId, response: "A" } } });
+  const saved = await write.json() as SectionExamResponse;
+  const heartbeat = await call(`/api/attempts/${started.attemptId}/heartbeat`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: saved.stateVersion } });
+  const beat = await heartbeat.json() as SectionExamResponse;
+  const finish1 = await call(`/api/attempts/${started.attemptId}/finish-module`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: beat.stateVersion } });
+  const transition = await finish1.json() as SectionExamResponse;
+  const continue2 = await call(`/api/attempts/${started.attemptId}/continue`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: transition.stateVersion } });
+  const module2 = await continue2.json() as SectionExamResponse;
+  const finish2 = await call(`/api/attempts/${started.attemptId}/finish-module`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: module2.stateVersion } });
+  expect(finish2.status).toBe(200);
+  expect((await finish2.json()).status).toBe("completed");
+  expect((await call(`/api/attempts/${started.attemptId}/results`, { who: credentials[0] })).status).toBe(200);
+  expect((await call("/api/attempts", { who: credentials[0] })).status).toBe(200);
+
+  const attemptRequests = requestMeasurements.filter((item) => item.path.includes(started.attemptId) || item.path === "/api/attempts");
+  expect(attemptRequests).toHaveLength(10);
+  expect(attemptRequests.reduce((sum, item) => sum + item.rowsWritten, 0)).toBe(7);
+  expect(attemptRequests.filter((item) => item.rowsWritten > 0)).toHaveLength(7);
+  expect(preparing.questions).toHaveLength(44);
+});
+
+it("enforces an expired Module 1 deadline on snapshot reads exactly once", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { started } = await startSectionExam(call, credentials[0]);
+    vi.advanceTimersByTime(35 * 60_000);
+    const first = await call(`/api/attempts/${started.attemptId}`, { who: credentials[0] });
+    const transition = await first.json() as SectionExamResponse;
+    expect(transition).toMatchObject({ status: "active", deadlineAt: null,
+      state: { phase: "transition", activeModule: 1, lockedModules: [1] } });
+    const second = await call(`/api/attempts/${started.attemptId}`, { who: credentials[0] });
+    expect(await second.json()).toMatchObject({ stateVersion: transition.stateVersion, state: transition.state });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("completes and grades Module 2 when a Results read observes its expired deadline", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { started } = await startSectionExam(call, credentials[0]);
+    const finished = await call(`/api/attempts/${started.attemptId}/finish-module`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion },
+    });
+    const transition = await finished.json() as SectionExamResponse;
+    const continued = await call(`/api/attempts/${started.attemptId}/continue`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: transition.stateVersion },
+    });
+    const module2 = await continued.json() as SectionExamResponse;
+    vi.setSystemTime(module2.deadlineAt!);
+    const results = await call(`/api/attempts/${started.attemptId}/results`, { who: credentials[0] });
+    expect(results.status).toBe(200);
+    expect(await results.json()).toMatchObject({ status: "completed", completedAt: module2.deadlineAt,
+      result: { correctCount: 0, questionCount: 44 } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("pauses with server-computed whole seconds and resumes from a fresh deadline", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { started } = await startSectionExam(call, credentials[0]);
+    vi.advanceTimersByTime(50_000);
+    const pausedResponse = await call(`/api/attempts/${started.attemptId}/pause`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion },
+    });
+    expect(pausedResponse.status).toBe(200);
+    const paused = await pausedResponse.json() as SectionExamResponse;
+    expect(paused).toMatchObject({ deadlineAt: null,
+      state: { phase: "paused", activeModule: 1, pausedPhase: "module", remainingSeconds: 2050 } });
+    vi.advanceTimersByTime(20_000);
+    const resumedResponse = await call(`/api/attempts/${started.attemptId}/resume`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: paused.stateVersion },
+    });
+    expect(resumedResponse.status).toBe(200);
+    expect(await resumedResponse.json()).toMatchObject({ deadlineAt: Date.now() + 2050_000,
+      state: { phase: "module", activeModule: 1, pausedPhase: null, remainingSeconds: null } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("preserves an untimed transition through pause and resume", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { started } = await startSectionExam(call, credentials[0]);
+    const finished = await call(`/api/attempts/${started.attemptId}/finish-module`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion },
+    });
+    const transition = await finished.json() as SectionExamResponse;
+    const pausedResponse = await call(`/api/attempts/${started.attemptId}/pause`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: transition.stateVersion },
+    });
+    const paused = await pausedResponse.json() as SectionExamResponse;
+    expect(paused).toMatchObject({ deadlineAt: null,
+      state: { phase: "paused", pausedPhase: "transition", remainingSeconds: null } });
+    vi.advanceTimersByTime(10 * 60_000);
+    const takeoverResponse = await call(`/api/attempts/${started.attemptId}/takeover`, {
+      method: "POST", who: credentials[2], body: {},
+    });
+    const takeover = await takeoverResponse.json() as SectionExamResponse;
+    expect(takeoverResponse.status).toBe(200);
+    const resumed = await call(`/api/attempts/${started.attemptId}/resume`, {
+      method: "POST", who: credentials[2],
+      body: { editorToken: takeover.editorToken, expectedStateVersion: takeover.stateVersion },
+    });
+    expect(await resumed.json()).toMatchObject({ deadlineAt: null,
+      state: { phase: "transition", activeModule: 1, lockedModules: [1] } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("transfers a running Section Exam without changing its deadline or accepting the stale token", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { started } = await startSectionExam(call, credentials[0]);
+    vi.advanceTimersByTime(45_000);
+    const takeover = await call(`/api/attempts/${started.attemptId}/takeover`, {
+      method: "POST", who: credentials[2], body: {},
+    });
+    expect(takeover.status).toBe(200);
+    const acquired = await takeover.json() as SectionExamResponse;
+    expect(acquired.deadlineAt).toBe(started.deadlineAt);
+    expect(acquired.editorToken).not.toBe(started.editorToken);
+    const staleWrite = await call(`/api/attempts/${started.attemptId}/write`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: acquired.stateVersion,
+        change: { type: "response", questionId: started.questions[0].questionId, response: "A" } },
+    });
+    expect(staleWrite.status).toBe(409);
+    const latest = await call(`/api/attempts/${started.attemptId}`, { who: credentials[2] });
+    expect(await latest.json()).toMatchObject({ deadlineAt: started.deadlineAt, state: { responses: {} } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("rejects a response arriving at the deadline and applies Module expiry first", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { started } = await startSectionExam(call, credentials[0]);
+    vi.setSystemTime(started.deadlineAt!);
+    const write = await call(`/api/attempts/${started.attemptId}/write`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+        change: { type: "response", questionId: started.questions[0].questionId, response: "A" } },
+    });
+    expect(write.status).toBe(409);
+    const current = await call(`/api/attempts/${started.attemptId}`, { who: credentials[0] });
+    expect(await current.json()).toMatchObject({ state: { phase: "transition", responses: {} } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("checkpoints per-question time on accepted changes and coarse heartbeats", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_000);
+  try {
+    const { credentials, call } = await fixture();
+    const { started } = await startSectionExam(call, credentials[0]);
+    const module1 = started.questions.filter((question) => question.module === 1);
+    vi.advanceTimersByTime(12_000);
+    const navigatedResponse = await call(`/api/attempts/${started.attemptId}/write`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+        change: { type: "navigation", questionId: module1[1].questionId } },
+    });
+    const navigated = await navigatedResponse.json() as SectionExamResponse;
+    expect(navigated.state.questionElapsedMs[module1[0].questionId]).toBe(12_000);
+    vi.advanceTimersByTime(17_000);
+    const heartbeat = await call(`/api/attempts/${started.attemptId}/heartbeat`, {
+      method: "POST", who: credentials[0],
+      body: { editorToken: started.editorToken, expectedStateVersion: navigated.stateVersion },
+    });
+    expect(await heartbeat.json()).toMatchObject({ state: {
+      questionElapsedMs: { [module1[0].questionId]: 12_000, [module1[1].questionId]: 17_000 },
+    } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("persists calculator state through the same versioned write path", async () => {
+  const { credentials, call } = await fixture();
+  const { started } = await startSectionExam(call, credentials[0]);
+  const graphState = { version: 1, expressions: [{ id: "line", latex: "y=x" }] };
+  const saved = await call(`/api/attempts/${started.attemptId}/write`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+      change: { type: "calculator_state", state: graphState } },
+  });
+  expect(saved.status).toBe(200);
+  expect(await saved.json()).toMatchObject({ state: { calculatorState: graphState } });
+});
+
+it("does not submit a Section Exam before both Modules are closed", async () => {
+  const { credentials, call } = await fixture();
+  const { started } = await startSectionExam(call, credentials[0]);
+  const submit = await call(`/api/attempts/${started.attemptId}/submit`, {
+    method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion },
+  });
+  expect(submit.status).toBe(409);
+  expect(await submit.json()).toMatchObject({ error: { code: "attempt_changed" } });
+});
 
 it("saves a response with a server version and renews the editor lease", async () => {
   vi.useFakeTimers();

@@ -6,7 +6,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "dev": "wrangler dev --local",
-    "build": "npm --prefix ../web run build:staging",
+    "build": "npm --prefix ../web run build:staging && node scripts/stage-reference-sheet.mjs",
     "probe": "node scripts/probe.mjs"
   },
   "devDependencies": {
