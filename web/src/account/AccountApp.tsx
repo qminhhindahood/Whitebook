@@ -7,7 +7,7 @@ import { CuratedLibrary } from "./CuratedLibrary";
 import { PracticeArea } from "./PracticeArea";
 import { HistoryArea } from "./HistoryArea";
 import "./cards.css";
-import { ScoresSection } from "./ScoresSection";
+import { ProgressArea } from "./ProgressArea";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; timeZone: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
@@ -22,7 +22,7 @@ export function AccountApp() {
   const [nickname, setNickname] = useState("");
   const [timeZone, setTimeZone] = useState("");
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice" | "history">("dashboard");
+  const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice" | "history" | "progress">("dashboard");
   const [practiceRevisionId, setPracticeRevisionId] = useState<string>();
 
   async function refresh() {
@@ -144,6 +144,7 @@ export function AccountApp() {
           <button type="button" className={view === "library" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "library" ? "page" : undefined} onClick={() => setView("library")}>Library</button>
           <button type="button" className={view === "practice" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "practice" ? "page" : undefined} onClick={() => { setPracticeRevisionId(undefined); setView("practice"); }}>Practice</button>
           <button type="button" className={view === "history" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "history" ? "page" : undefined} onClick={() => setView("history")}>History</button>
+          <button type="button" className={view === "progress" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "progress" ? "page" : undefined} onClick={() => setView("progress")}>Progress</button>
         </nav>
         {view === "cards" ?
           <FlashcardsArea onSessionEnded={handleSessionEnded} /> : view === "library" ?
@@ -151,14 +152,14 @@ export function AccountApp() {
             setPracticeRevisionId(revisionId); setView("practice");
           }} /> : view === "practice" ?
           <PracticeArea initialRevisionId={practiceRevisionId} onSessionEnded={handleSessionEnded} /> : view === "history" ?
-          <HistoryArea onSessionEnded={handleSessionEnded} /> :
+          <HistoryArea onSessionEnded={handleSessionEnded} /> : view === "progress" ?
+          <ProgressArea onSessionEnded={handleSessionEnded} /> :
           <>
             <SatWeekend onSessionEnded={handleSessionEnded} />
             <section className="dashboard-empty" aria-labelledby="activity-heading">
               <h2 id="activity-heading">Your study activity</h2>
               <p>Open History to revisit completed Attempts and review missed questions.</p>
             </section>
-            <ScoresSection />
             <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
               <h2 id="account-heading">Account</h2>
               <p>Signed in as {me.account.email}</p>

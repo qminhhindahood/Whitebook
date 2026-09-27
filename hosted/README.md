@@ -6,7 +6,7 @@ Every request runs the Worker first. Only `/staging`, its exact Vite assets, the
 
 ## Hosted account Practice Attempts (ticket 05)
 
-Signed-in learners can open **Practice** from their workspace, or choose **Build Practice Attempt** for a selected Library package revision. Each Attempt uses exactly one entitled, immutable revision. The Builder offers Section, Module, question count, package or random order, and elapsed, custom, or eligible SAT-paced timing. The published catalogue has no Question Category metadata, so the hosted Builder does not offer that filter.
+Signed-in learners can open **Practice** from their workspace, or choose **Build Practice Attempt** for a selected Library package revision. Each Attempt uses exactly one entitled, immutable revision. The Builder offers Section, Module, question count, package or random order, and elapsed, custom, or eligible SAT-paced timing. The hosted Builder does not yet offer a Question Category filter.
 
 Creating an Attempt leaves it in `preparing`. The Loading Gate fetches all selected Question Presentations and manifest-listed visuals before it calls the start endpoint. The server records `started_at_ms` and any deadline only when start succeeds; retrying a failed presentation or visual load does not run a clock.
 
@@ -26,6 +26,10 @@ The hosted workspace has a **History** area. `GET /api/review/attempts/:attemptI
 After reveal, `POST /api/review/:reviewId/notes` creates a private note; `PATCH` and `DELETE /api/review/:reviewId/notes/:noteId` edit and remove it. Notes are keyed by account, question, and immutable package revision, so a later completed review can load them from another device. Every route resolves account ownership and rejects review access while a Section Exam is active. Mutations require the account CSRF token. Results access is recorded as answer exposure; older Results views without a record are labeled as possible exposure rather than a blind retry.
 
 The schema is in `migrations/0007_guided_review_notes.sql`. Publication bundles can add `reviewedHelp` to a reviewed question with `source: "owner_reviewed"` and a nonempty `hint` and/or `explanation`. The publisher validates it and stores it apart from the active Question Presentation. No AI endpoint or control is part of this feature.
+
+## Progress evidence (ticket 12)
+
+**Progress** shows account-owned Section, Question Category, and mapped Content Domain evidence. Manual Official SAT Results are displayed separately. Apply `migrations/0008_progress_evidence.sql` before importing a reviewed category bundle. The mapping, timing and tentative-label rules, and existing-release backfill path are documented in [PROGRESS.md](PROGRESS.md).
 
 ## Local verification
 

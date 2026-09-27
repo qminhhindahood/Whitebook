@@ -66,6 +66,58 @@ def fixture(root):
 
 
 class PublicationTests(unittest.TestCase):
+    def test_publishes_reviewed_question_categories_without_guessing_missing_ones(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            packages = fixture(bundle)
+            packages[0]["questions"][0]["category"] = "Algebra"
+            packages[1]["questions"][0]["category"] = "Not a reviewed category"
+            presentation_bytes = encoded({"packages": packages})
+            (bundle / "presentations.json").write_bytes(presentation_bytes)
+            manifest = json.loads((bundle / "manifest.json").read_text())
+            manifest["presentationsSha256"] = hash_bytes(presentation_bytes)
+            (bundle / "manifest.json").write_bytes(encoded(manifest))
+            with self.assertRaisesRegex(ValueError, "Invalid question category"):
+                publication.prepare(bundle, root / "invalid", check_only=True)
+
+            packages[1]["questions"][0].pop("category")
+            presentation_bytes = encoded({"packages": packages})
+            (bundle / "presentations.json").write_bytes(presentation_bytes)
+            manifest["presentationsSha256"] = hash_bytes(presentation_bytes)
+            (bundle / "manifest.json").write_bytes(encoded(manifest))
+            publication.prepare(bundle, root / "prepared")
+            db = sqlite3.connect(":memory:")
+            for name in ("0002_learner_accounts.sql", "0004_curated_library.sql", "0008_progress_evidence.sql"):
+                db.executescript((ROOT / "migrations" / name).read_text())
+            db.executescript((root / "prepared/publication.sql").read_text())
+            self.assertEqual(db.execute("SELECT revision_id, category FROM publication_question_categories").fetchall(),
+                             [("revision-0", "Algebra")])
+
+    def test_reviewed_categories_can_fill_an_existing_immutable_release(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            packages = fixture(bundle)
+            publication.prepare(bundle, root / "first")
+            db = sqlite3.connect(":memory:")
+            for name in ("0002_learner_accounts.sql", "0004_curated_library.sql", "0008_progress_evidence.sql"):
+                db.executescript((ROOT / "migrations" / name).read_text())
+            db.executescript((root / "first/publication.sql").read_text())
+            self.assertEqual(db.execute("SELECT count(*) FROM publication_question_categories").fetchone()[0], 0)
+
+            packages[0]["questions"][0]["category"] = "Algebra"
+            presentation_bytes = encoded({"packages": packages})
+            (bundle / "presentations.json").write_bytes(presentation_bytes)
+            manifest = json.loads((bundle / "manifest.json").read_text())
+            manifest.update({"releaseId": "reviewed-five-v2", "presentationsSha256": hash_bytes(presentation_bytes)})
+            (bundle / "manifest.json").write_bytes(encoded(manifest))
+            publication.prepare(bundle, root / "second")
+            db.executescript((root / "second/publication.sql").read_text())
+            self.assertEqual(db.execute("SELECT release_id FROM active_publication").fetchone()[0], "reviewed-five-v2")
+            self.assertEqual(db.execute("SELECT revision_id, category FROM publication_question_categories").fetchall(),
+                             [("revision-0", "Algebra")])
+
     def test_publishes_only_explicit_owner_reviewed_help(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
