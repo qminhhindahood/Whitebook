@@ -19,6 +19,14 @@ npm test -- test/attempts.test.ts test/worker.test.ts
 npm run typecheck
 ```
 
+## History guided review and Study Notes (ticket 11)
+
+The hosted workspace has a **History** area. `GET /api/review/attempts/:attemptId` lists completed question outcomes without accepted answers. `POST /api/review/attempts/:attemptId/questions/:questionId` starts a separate review for a wrong or unanswered question. Its response stays answer-hidden. `POST /api/review/:reviewId/retry` records one retry response and reveals the answer; `POST /api/review/:reviewId/reveal` skips directly to the answer. `POST /api/review/:reviewId/hint` works only when an owner-reviewed non-AI hint was published. `POST /api/review/:reviewId/label` saves the learner's optional mistake label. `GET /api/review/:reviewId` resumes that review. The original Attempt result and Raw Accuracy are never rewritten by these routes.
+
+After reveal, `POST /api/review/:reviewId/notes` creates a private note; `PATCH` and `DELETE /api/review/:reviewId/notes/:noteId` edit and remove it. Notes are keyed by account, question, and immutable package revision, so a later completed review can load them from another device. Every route resolves account ownership and rejects review access while a Section Exam is active. Mutations require the account CSRF token. Results access is recorded as answer exposure; older Results views without a record are labeled as possible exposure rather than a blind retry.
+
+The schema is in `migrations/0007_guided_review_notes.sql`. Publication bundles can add `reviewedHelp` to a reviewed question with `source: "owner_reviewed"` and a nonempty `hint` and/or `explanation`. The publisher validates it and stores it apart from the active Question Presentation. No AI endpoint or control is part of this feature.
+
 ## Local verification
 
 From `hosted/`:

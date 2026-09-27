@@ -11,7 +11,7 @@ type AttemptRow = {
   id: string; account_id: string; revision_id: string; kind: string; status: string;
   config_json: string; questions_json: string; state_json: string; state_version: number;
   created_at_ms: number; started_at_ms: number | null; deadline_at_ms: number | null;
-  completed_at_ms: number | null; result_json: string | null;
+  completed_at_ms: number | null; result_json: string | null; answers_exposed_at_ms: number | null;
   editor_token_hash: string | null; editor_lease_expires_at_ms: number | null;
 };
 
@@ -123,6 +123,14 @@ async function fixture() {
           return { results: [], meta: { rows_read: 0, rows_written: 0 } };
         },
         async run() {
+          if (sql.includes("SET answers_exposed_at_ms = ?")) {
+            const [at, id, accountId] = args;
+            const row = attempts.get(String(id));
+            if (!row || row.account_id !== String(accountId) || row.status !== "completed" || row.answers_exposed_at_ms !== null)
+              return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
+            row.answers_exposed_at_ms = Number(at);
+            return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
+          }
           if (sql.includes("INSERT INTO learner_attempts")) {
             const [id, accountId, revisionId, kind, configJson, questionsJson, stateJson, createdAt] = args;
             attempts.set(String(id), {
@@ -130,7 +138,7 @@ async function fixture() {
               kind: String(kind), status: "preparing", config_json: String(configJson),
               questions_json: String(questionsJson), state_json: String(stateJson), state_version: 0,
               created_at_ms: Number(createdAt), started_at_ms: null, deadline_at_ms: null,
-              completed_at_ms: null, result_json: null, editor_token_hash: null,
+              completed_at_ms: null, result_json: null, answers_exposed_at_ms: null, editor_token_hash: null,
               editor_lease_expires_at_ms: null,
             });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
@@ -157,13 +165,14 @@ async function fixture() {
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
           if (sql.includes("SET status = 'completed', state_json = ?")) {
-            const [stateJson, completedAt, resultJson, id, accountId, expectedVersion, oldDeadline] = args;
+            const [stateJson, completedAt, resultJson, exposedAt, id, accountId, expectedVersion, oldDeadline] = args;
             const row = attempts.get(String(id));
             if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
                 row.state_version !== Number(expectedVersion) || row.deadline_at_ms !== Number(oldDeadline))
               return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
             Object.assign(row, { status: "completed", state_json: String(stateJson), deadline_at_ms: null,
-              completed_at_ms: Number(completedAt), result_json: String(resultJson), editor_token_hash: null,
+              completed_at_ms: Number(completedAt), result_json: String(resultJson),
+              answers_exposed_at_ms: exposedAt === null ? null : Number(exposedAt), editor_token_hash: null,
               editor_lease_expires_at_ms: null, state_version: row.state_version + 1 });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
@@ -199,13 +208,14 @@ async function fixture() {
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
           if (sql.includes("SET status = 'completed'")) {
-            const [completedAt, resultJson, id, accountId, expectedVersion, tokenHash, now] = args;
+            const [completedAt, exposedAt, resultJson, id, accountId, expectedVersion, tokenHash, now] = args;
             const row = attempts.get(String(id));
             if (!row || row.account_id !== String(accountId) || row.status !== "active" ||
                 row.state_version !== Number(expectedVersion) || row.editor_token_hash !== String(tokenHash) ||
                 row.editor_lease_expires_at_ms === null || row.editor_lease_expires_at_ms <= Number(now))
               return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
-            Object.assign(row, { status: "completed", completed_at_ms: Number(completedAt), result_json: String(resultJson),
+            Object.assign(row, { status: "completed", completed_at_ms: Number(completedAt),
+              answers_exposed_at_ms: Number(exposedAt), result_json: String(resultJson),
               editor_token_hash: null, editor_lease_expires_at_ms: null, state_version: row.state_version + 1 });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }

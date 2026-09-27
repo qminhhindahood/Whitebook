@@ -378,6 +378,7 @@ async function closeSectionExamModule(
   row: AttemptRow,
   now: number,
   closedAt: number,
+  exposeAnswers = false,
 ): Promise<AttemptRow | null> {
   const state = parseState(row);
   if (row.kind !== "section_exam" || state.phase !== "module" || row.deadline_at_ms === null) return row;
@@ -404,10 +405,10 @@ async function closeSectionExamModule(
   const result = await gradeSectionExam(env, row, closedState);
   if (!result) return null;
   const update = await env.DB.prepare("UPDATE learner_attempts SET status = 'completed', state_json = ?, " +
-      "deadline_at_ms = NULL, completed_at_ms = ?, result_json = ?, editor_token_hash = NULL, " +
+      "deadline_at_ms = NULL, completed_at_ms = ?, result_json = ?, answers_exposed_at_ms = ?, editor_token_hash = NULL, " +
       "editor_lease_expires_at_ms = NULL, state_version = state_version + 1 WHERE id = ? AND account_id = ? " +
       "AND status = 'active' AND state_version = ? AND deadline_at_ms = ?")
-    .bind(JSON.stringify(closedState), closeTime, JSON.stringify(result), row.id, row.account_id,
+    .bind(JSON.stringify(closedState), closeTime, JSON.stringify(result), exposeAnswers ? now : null, row.id, row.account_id,
       row.state_version, row.deadline_at_ms).run();
   if (!update.success) return null;
   return attemptRow(env, row.account_id, row.id);
@@ -572,7 +573,7 @@ async function finishModule(request: Request, env: AttemptEnv, accountId: string
   if (denied) return denied;
   if (parseState(row).phase !== "module")
     return failure(409, "attempt_changed", "There is no running Module to finish.");
-  const updated = await closeSectionExamModule(env, row, now, now);
+  const updated = await closeSectionExamModule(env, row, now, now, true);
   if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not close this Module. Try again.");
   const result = updated.status === "completed" && updated.result_json ? { result: JSON.parse(updated.result_json) } : {};
   return json({ ...snapshot(updated, now), ...result });
@@ -793,10 +794,10 @@ async function submitAttempt(request: Request, env: AttemptEnv, accountId: strin
     questionCount: graded.length, questions: graded };
   const resultJson = JSON.stringify(resultData);
   const update = await env.DB.prepare("UPDATE learner_attempts SET status = 'completed', completed_at_ms = ?, " +
-      "result_json = ?, editor_token_hash = NULL, editor_lease_expires_at_ms = NULL, state_version = state_version + 1 " +
+      "answers_exposed_at_ms = ?, result_json = ?, editor_token_hash = NULL, editor_lease_expires_at_ms = NULL, state_version = state_version + 1 " +
       "WHERE id = ? AND account_id = ? AND status = 'active' AND state_version = ? AND editor_token_hash = ? " +
       "AND editor_lease_expires_at_ms > ? AND (deadline_at_ms IS NULL OR deadline_at_ms > ?)")
-    .bind(now, resultJson, row.id, accountId, row.state_version, await sha256(token!), now, now).run();
+    .bind(now, now, resultJson, row.id, accountId, row.state_version, await sha256(token!), now, now).run();
   if (!update.success) return failure(503, "attempt_unavailable", "Whitebook could not submit this Attempt. Try again.");
   if (update.meta.changes !== 1) return failure(409, "editor_conflict", "This Attempt changed on another device. Refresh before submitting.");
   const completed = await attemptRow(env, accountId, attemptId);
@@ -811,6 +812,9 @@ async function getResults(env: AttemptEnv, accountId: string, attemptId: string,
   if (!row) return failure(503, "attempt_unavailable", "Whitebook could not refresh this Attempt. Try again.");
   if (row.status !== "completed" || !row.result_json)
     return failure(409, "attempt_incomplete", "Results are available after you submit this Attempt.");
+  await env.DB.prepare("UPDATE learner_attempts SET answers_exposed_at_ms = ? " +
+    "WHERE id = ? AND account_id = ? AND status = 'completed' AND answers_exposed_at_ms IS NULL")
+    .bind(now, attemptId, accountId).run();
   return json({ attemptId, status: row.status, completedAt: row.completed_at_ms,
     result: JSON.parse(row.result_json) });
 }

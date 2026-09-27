@@ -66,6 +66,31 @@ def fixture(root):
 
 
 class PublicationTests(unittest.TestCase):
+    def test_publishes_only_explicit_owner_reviewed_help(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            packages = fixture(bundle)
+            packages[0]["questions"][0]["reviewedHelp"] = {
+                "source": "owner_reviewed", "hint": "Look for the contrast.",
+                "explanation": "The contrast supports B.",
+            }
+            presentation_bytes = encoded({"packages": packages})
+            (bundle / "presentations.json").write_bytes(presentation_bytes)
+            manifest = json.loads((bundle / "manifest.json").read_text())
+            manifest["presentationsSha256"] = hash_bytes(presentation_bytes)
+            (bundle / "manifest.json").write_bytes(encoded(manifest))
+            publication.prepare(bundle, root / "prepared")
+            generated = (root / "prepared/publication.sql").read_text()
+            self.assertIn("INSERT OR IGNORE INTO publication_review_help", generated)
+            db = sqlite3.connect(":memory:")
+            for name in ("0002_learner_accounts.sql", "0004_curated_library.sql",
+                         "0006_practice_attempts.sql", "0007_guided_review_notes.sql"):
+                db.executescript((ROOT / "migrations" / name).read_text())
+            db.executescript(generated)
+            self.assertEqual(db.execute("SELECT reviewed_hint, reviewed_explanation FROM publication_review_help").fetchone(),
+                             ("Look for the contrast.", "The contrast supports B."))
+
     def test_reviewed_v3_bundle_binds_audit_and_image_asset(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
