@@ -1,26 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import type { HostedBlock, HostedPresentationData } from "./HostedPresentation";
+import { HostedAttempt } from "./HostedAttempt";
 
 type Package = { revisionId: string; title: string; publishedRevision: number; questionCount: number };
-type QuestionLink = {
+export type QuestionLink = {
   questionId: string; ordinal: number; section: string; module: number;
   questionNumber: number; responseType: string;
 };
-type PresentationQuestion = QuestionLink & {
+export type PresentationQuestion = QuestionLink & {
   revisionId: string; presentation: HostedPresentationData;
 };
-type AttemptSnapshot = {
+export type AttemptSnapshot = {
   attemptId: string; revisionId: string; status: "preparing" | "active" | "completed" | "expired";
   section: string; modules: number[]; questionIds: string[]; questions: QuestionLink[];
   state: Record<string, unknown>; stateVersion: number; createdAt?: number; startedAt: number | null;
   deadlineAt: number | null; serverNow?: number; completedAt?: number | null;
   editorToken?: string; lease?: { held: boolean; expiresAt: number | null };
 };
-type AttemptSummary = {
+export type AttemptSummary = {
   attemptId: string; revisionId: string; status: AttemptSnapshot["status"];
   section: string; questionCount: number; createdAt: number; startedAt: number | null;
   deadlineAt: number | null; completedAt: number | null;
+};
+export type AttemptResult = {
+  correctCount: number; questionCount: number;
+  questions: { questionId: string; response: string | null; acceptedAnswers: string[]; correct: boolean }[];
 };
 type TimingMode = "elapsed" | "custom" | "sat_paced";
 type PracticeAreaProps = { initialRevisionId?: string; onSessionEnded: () => void };
@@ -58,7 +63,7 @@ function visualPaths(presentation: HostedPresentationData, revisionId: string, q
   }))];
 }
 
-async function loadSelectedContent(snapshot: AttemptSnapshot): Promise<PresentationQuestion[]> {
+export async function loadSelectedContent(snapshot: AttemptSnapshot): Promise<PresentationQuestion[]> {
   const presentations = await Promise.all(snapshot.questions.map(async (question) => {
     const item = await request<PresentationQuestion>(
       `/api/library/${snapshot.revisionId}/questions/${question.questionId}`,
@@ -98,6 +103,7 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
   const [generalError, setGeneralError] = useState("");
   const [preparingAttemptId, setPreparingAttemptId] = useState("");
   const [activeAttempt, setActiveAttempt] = useState<AttemptSnapshot | null>(null);
+  const [activeQuestions, setActiveQuestions] = useState<PresentationQuestion[]>([]);
 
   const sections = useMemo(() => [...new Set(questions.map((question) => question.section))], [questions]);
   const availableModules = useMemo(() => [...new Set(questions.filter((question) => question.section === section)
@@ -175,9 +181,10 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
     try {
       if (snapshot.status !== "preparing")
         throw new Error("This Attempt has already started. Resume it from Your Attempts.");
-      await loadSelectedContent(snapshot);
+      const prepared = await loadSelectedContent(snapshot);
       setLoadMessage("All selected questions and visuals are ready. Starting your clock…");
       const started = await request<AttemptSnapshot>(`/api/attempts/${snapshot.attemptId}/start`, mutation({}));
+      setActiveQuestions(prepared);
       setActiveAttempt(started);
       setPreparingAttemptId("");
       setLoadMessage("");
@@ -221,12 +228,37 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
     } finally { setBuilding(false); }
   }
 
-  if (activeAttempt) return <section className="practice-area" aria-labelledby="practice-ready-heading">
-    <header className="practice-area__heading"><div><h2 id="practice-ready-heading">Attempt is ready</h2>
-      <p>{selectedPackage?.title ?? "Reviewed Test Package"} · {activeAttempt.section} · {activeAttempt.questions.length} questions</p></div>
-      <span className="practice-chip practice-chip--ready">Clock started</span></header>
-    <p role="status">Your Attempt is ready to continue. You can resume it from Your Attempts on this or another device.</p>
-  </section>;
+  async function openAttempt(attemptId: string) {
+    if (building) return;
+    setBuilding(true); setGeneralError("");
+    try {
+      const snapshot = await request<AttemptSnapshot>(`/api/attempts/${attemptId}`);
+      if (snapshot.status === "preparing") {
+        await openLoadingGate(snapshot);
+        return;
+      }
+      setLoadMessage("Loading this Attempt and its visuals…");
+      const prepared = await loadSelectedContent(snapshot);
+      setActiveQuestions(prepared);
+      setActiveAttempt(snapshot);
+      setLoadMessage("");
+    } catch (cause: unknown) {
+      setLoadMessage("");
+      setGeneralError(cause instanceof Error ? cause.message : "This Attempt could not be opened. Try again.");
+      if (cause instanceof RequestError && cause.status === 401) onSessionEnded();
+    } finally { setBuilding(false); }
+  }
+
+  const handleSnapshotChange = useCallback((next: AttemptSnapshot) => {
+    setAttempts((current) => current.map((item) => item.attemptId === next.attemptId
+      ? { ...item, status: next.status, startedAt: next.startedAt, deadlineAt: next.deadlineAt, completedAt: next.completedAt ?? null }
+      : item));
+  }, []);
+
+  if (activeAttempt) return <HostedAttempt initial={activeAttempt} questions={activeQuestions}
+    packageTitle={packages.find((item) => item.revisionId === activeAttempt.revisionId)?.title ?? "Reviewed Test Package"}
+    onSessionEnded={onSessionEnded} onExit={() => { setActiveAttempt(null); setActiveQuestions([]); }}
+    onSnapshotChange={handleSnapshotChange} />;
 
   return <section className="practice-area" aria-labelledby="practice-heading">
     <header className="practice-area__heading"><div><h2 id="practice-heading">Practice</h2>
@@ -310,6 +342,10 @@ export function PracticeArea({ initialRevisionId, onSessionEnded }: PracticeArea
           <ul>{attempts.map((attempt) => <li key={attempt.attemptId}>
             <div><strong>{packages.find((item) => item.revisionId === attempt.revisionId)?.title ?? "Reviewed Test Package"}</strong>
               <span>{attempt.section} · {attempt.questionCount} questions · {attempt.status}</span></div>
+            {attempt.status !== "expired" && <button type="button" className="practice-button practice-button--quiet"
+              disabled={building} onClick={() => void openAttempt(attempt.attemptId)}>
+              {attempt.status === "preparing" ? "Continue setup" : attempt.status === "completed" ? "Review results" : "Resume Attempt"}
+            </button>}
           </li>)}</ul>}
       </section>
     </>}

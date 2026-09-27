@@ -197,7 +197,7 @@
 - The active editor sends a heartbeat every 45 seconds. Any accepted write renews the lease. On 409, 401, offline failure, expiry, or stale token, editing stops until fresh state and a valid token are obtained through explicit action.
 - A local countdown may update each second from serverNow and deadlineAt but sends no per-second request.
 
-- [ ] **Step 1: Write failing Player tests for saves, read-only state, takeover refresh, and timer continuity**
+- [x] **Step 1: Write failing Player tests for saves, read-only state, takeover refresh, and timer continuity**
   - A response action shows pending and then saved only after server acknowledgement.
   - Parameterized response, mark, elimination, and navigation actions each show pending, then saved after server acknowledgement.
   - A failed request shows failed and preserves the response visibly without claiming it saved.
@@ -211,19 +211,19 @@
     expect(screen.getByRole("status")).toHaveTextContent(/saved/i);
     expect(takeoverState.deadlineAt).toBe(before.deadlineAt);
 
-- [ ] **Step 2: Run the focused test and confirm it fails against the preview-only Library**
+- [x] **Step 2: Run the focused test and confirm it fails against the preview-only Library**
 
     cd web
     npm test -- src/account/HostedAttempt.test.tsx
 
-- [ ] **Step 3: Implement the Player controls and explicit editor transfer**
+- [x] **Step 3: Implement the Player controls and explicit editor transfer**
   - Reuse HostedBlocks and HostedChoices for the existing presentation and response contracts.
   - Store the editor token in tab-scoped sessionStorage so refresh in the same tab can resume; never put answer keys or Attempt state in localStorage.
   - Serialize local saves so multiple edits do not send the same stateVersion concurrently.
   - Show explicit Take over editing or Reacquire editing action when the lease is unavailable or expired.
   - Keep the displayed timer anchored to serverNow/deadlineAt and never reset it on heartbeat or takeover.
 
-- [ ] **Step 4: Re-run Player tests and commit the hosted Player**
+- [x] **Step 4: Re-run Player tests and commit the hosted Player**
 
     cd web
     npm test -- src/account/HostedAttempt.test.tsx
