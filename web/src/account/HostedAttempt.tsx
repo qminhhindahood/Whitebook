@@ -4,6 +4,9 @@ import { HostedBlocks, HostedChoices } from "./HostedPresentation";
 import { DesmosCalculatorPanel, ScientificCalculator } from "../calculator";
 import { DesmosReadinessProbe, loadDesmos } from "../calculator";
 import { ReferenceSheet } from "../ReferenceSheet";
+import "../player.css";
+import "../player-math.css";
+import "./hosted-practice-player.css";
 import type { AttemptResult, AttemptSnapshot, PresentationQuestion } from "./PracticeArea";
 
 type AttemptState = {
@@ -117,6 +120,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [resultLoading, setResultLoading] = useState(initial.status === "completed");
+  const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState("");
   const [showReference, setShowReference] = useState(false);
@@ -389,6 +393,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     const question = questionLinks[index];
     if (!question || question.questionId === localQuestionId) return;
     setLocalQuestionId(question.questionId);
+    setNavigatorOpen(false);
     if (canEdit) enqueue({ type: "navigation", questionId: question.questionId });
   }
 
@@ -396,6 +401,106 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const clockLabel = completed ? "Submitted" : sectionExam && phase === "transition" ? "Module 1 complete"
     : sectionExam && phase === "paused" ? "Paused" : snapshot.deadlineAt === null
     ? `Elapsed ${formatClock(clockNow)}` : timeExpired ? "Time ended" : `Time left ${formatClock(clockNow)}`;
+
+  if (!sectionExam) {
+    const stimulus = current?.presentation.stimulus ?? [];
+    const questionPanel = current ? <section className="response-panel" aria-label="Question and answers">
+      <div className="question-banner">
+        <span className="question-banner__number" aria-hidden="true">{currentIndex + 1}</span>
+        <button type="button" className="hosted-attempt__mark" disabled={!canEdit} aria-pressed={marked}
+          onClick={() => enqueue({ type: "mark", questionId: current.questionId, marked: !marked })}>
+          {marked ? "Remove review mark" : "Mark for review"}
+        </button>
+        <span className="question-banner__meta">{current.category ?? "All Questions"}</span>
+      </div>
+      <div className="hosted-practice-player__question-content">
+        <HostedBlocks blocks={current.presentation.stem} revisionId={snapshot.revisionId} questionId={current.questionId} />
+        {current.responseType === "multiple_choice" ? <HostedChoices presentation={current.presentation}
+          revisionId={snapshot.revisionId} questionId={current.questionId}
+          selected={draftState.responses[current.questionId]} eliminated={eliminated}
+          onSelect={(response) => enqueue({ type: "response", questionId: current.questionId, response })}
+          onEliminate={(choiceId) => enqueue({ type: "elimination", questionId: current.questionId,
+            choiceId, eliminated: !eliminated.includes(choiceId) })} disabled={!canEdit} /> :
+          <label className="spr-entry">Your response
+            <input value={draftState.responses[current.questionId] ?? ""} maxLength={4096} disabled={!canEdit}
+              onChange={(event) => enqueue({ type: "response", questionId: current.questionId, response: event.target.value })} />
+          </label>}
+        {completed && currentResult && <div className={`hosted-attempt__answer hosted-attempt__answer--${currentResult.correct ? "correct" : "incorrect"}`}>
+          <strong>{currentResult.correct ? "Correct" : "Review this answer"}</strong>
+          <span>Your response: {currentResult.response ?? "No response"}</span>
+          <span>Accepted answer: {currentResult.acceptedAnswers.join(" or ")}</span>
+        </div>}
+      </div>
+    </section> : <p role="status">The selected Question Presentation is unavailable.</p>;
+
+    return <main className="player-shell hosted-practice-player" aria-labelledby="hosted-attempt-heading">
+      <header className="player-header">
+        <div className="player-header__section"><h2 id="hosted-attempt-heading">Practice Attempt</h2>
+          <span>{packageTitle} · {snapshot.section}</span></div>
+        <div className="player-header__timer"><time className="player-timer" aria-label="Attempt clock">{clockLabel}</time></div>
+        <div className="player-header__tools"><span className={`practice-chip ${completed || canEdit ? "practice-chip--ready" : "practice-chip--locked"}`}>
+          {completed ? "Submitted" : canEdit ? "Editing here" : "Read only"}</span></div>
+      </header>
+      <div className="accent-strip" aria-hidden="true" />
+      <div className="hosted-practice-player__notices">
+        {snapshot.status === "active" && !canEdit && <div className="hosted-attempt__lease" role="status">
+          <p>{timeExpired ? "The server deadline has passed. This Attempt is read-only." : paused
+            ? "Editing is paused after a sync conflict or save failure. Refresh the latest Attempt state to continue."
+            : snapshot.lease?.held ? "Another device has the editing lease. Your answers are read-only until you take over."
+            : "The editing lease expired. Reacquire editing to continue."}</p>
+          <button type="button" className="practice-button" disabled={takingOver || timeExpired} onClick={() => void takeOver()}>
+            {takingOver ? "Refreshing Attempt…" : snapshot.lease?.held ? "Take over editing" : "Reacquire editing"}</button>
+        </div>}
+        {syncError && <p className="practice-error" role="alert">{syncError}</p>}
+        {failedChanges.length > 0 && <div className="hosted-attempt__unsaved" role="group" aria-label="Unsaved changes">
+          <p>{failedChanges.length === 1 ? "One change was not saved." : `${failedChanges.length} changes were not saved.`} The latest server answers are shown below.</p>
+          {canEdit && <button type="button" className="practice-button practice-button--quiet" onClick={reapplyFailedChanges}>Reapply unsaved changes</button>}
+        </div>}
+        <p className={`hosted-attempt__save hosted-attempt__save--${saveStatus}`} role="status" aria-label="Save status">
+          {saveStatus === "pending" ? "Pending · Saving changes…" : saveStatus === "failed" ? "Failed · Changes not saved" : "Saved"}</p>
+      </div>
+      {navigatorOpen && <div className="modal-backdrop" role="presentation" onClick={() => setNavigatorOpen(false)}>
+        <section className="navigator" role="dialog" aria-modal="true" aria-label="Question navigator"
+          onClick={(event) => event.stopPropagation()}>
+          <header><h2>Practice Questions</h2><button type="button" className="dialog-close" aria-label="Close navigator"
+            onClick={() => setNavigatorOpen(false)}>Close</button></header>
+          <div className="navigator__grid">{questionLinks.map((link, index) => {
+            const answered = Object.prototype.hasOwnProperty.call(draftState.responses, link.questionId);
+            const markedQuestion = draftState.markedQuestionIds.includes(link.questionId);
+            return <button type="button" key={link.questionId}
+              className={`${index === currentIndex ? "current" : ""} ${answered ? "answered" : ""} ${markedQuestion ? "marked" : ""}`}
+              aria-label={`Question ${index + 1}, ${answered ? "answered" : "unanswered"}${markedQuestion ? ", marked for review" : ""}`}
+              onClick={() => { goTo(index); setNavigatorOpen(false); }}>{index + 1}</button>;
+          })}</div>
+        </section>
+      </div>}
+      <div className="player-workspace">
+        {completed && <section className="hosted-attempt__results" aria-labelledby="hosted-results-heading">
+          <h3 id="hosted-results-heading">Results</h3>
+          {resultLoading ? <p role="status">Loading completed Results…</p> : result ?
+            <p>{result.correctCount} of {result.questionCount} correct</p> : <p>Results could not be loaded. Return to Your Attempts and try again.</p>}
+        </section>}
+        <div className={`player-body ${stimulus.length ? "player-body--split" : "player-body--centered"}`}>
+          {stimulus.length > 0 && current && <section className="player-pane player-pane--left" aria-label="Question passage">
+            <div className="player-pane__scroll"><HostedBlocks blocks={stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} /></div>
+          </section>}
+          {questionPanel}
+        </div>
+      </div>
+      <footer className="player-footer">
+        <button type="button" className="pill pill--soft" disabled={saveStatus !== "saved" && !completed} onClick={onExit}>Back to Practice</button>
+        <button type="button" className="position-pill" aria-expanded={navigatorOpen}
+          onClick={() => setNavigatorOpen((open) => !open)}>Question {currentIndex + 1} of {questionLinks.length}</button>
+        <div className="player-footer__actions">
+          {!completed && <button type="button" className="pill pill--soft" disabled={!canEdit || saveStatus !== "saved" || submitting}
+            onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit Attempt"}</button>}
+          <button type="button" className="pill pill--outline" disabled={currentIndex === 0} onClick={() => goTo(currentIndex - 1)}>Previous question</button>
+          <button type="button" className="pill pill--primary" disabled={currentIndex === questionLinks.length - 1} onClick={() => goTo(currentIndex + 1)}>Next question</button>
+        </div>
+      </footer>
+      <div className="accent-strip" aria-hidden="true" />
+    </main>;
+  }
 
   return <section className="hosted-attempt" aria-labelledby="hosted-attempt-heading">
     <header className="hosted-attempt__header">

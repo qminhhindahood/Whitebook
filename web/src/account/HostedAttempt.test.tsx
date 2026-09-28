@@ -53,6 +53,20 @@ it("shows pending until the server confirms a response save", async () => {
   expect((screen.getByRole("radio", { name: /AOption A/ }) as HTMLInputElement).checked).toBe(true);
 });
 
+it("uses the familiar player shell for Practice while keeping its hosted save contract", async () => {
+  const { calls, view } = fixture(async (path) => path.endsWith("/write")
+    ? savedResponse(2, { responses: { q1: "A" }, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" })
+    : Promise.reject(new Error(path)));
+  const { container } = view();
+  expect(container.querySelector(".player-shell")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(screen.getByText("Question 1 of 2")).toBeTruthy();
+  fireEvent.click(screen.getByRole("radio", { name: /AOption A/ }));
+  await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
+  expect(JSON.parse(String(calls.find((call) => call.path.endsWith("/write"))?.init?.body)))
+    .toMatchObject({ editorToken: token, expectedStateVersion: 1, change: { type: "response", questionId: "q1", response: "A" } });
+});
+
 it("keeps rapid edits serialized and sends the next write with the acknowledged version", async () => {
   const resolvers: ((response: Response) => void)[] = [];
   const { calls, view } = fixture((path) => path.endsWith("/write")
@@ -121,6 +135,7 @@ it("keeps a second device read-only until explicit takeover refreshes state with
   view(before);
   expect((screen.getByRole("radio", { name: /AOption A/ }) as HTMLInputElement).disabled).toBe(true);
   const clockBefore = screen.getByLabelText("Attempt clock").textContent;
+  fireEvent.click(screen.getByRole("button", { name: "Question 1 of 2" }));
   fireEvent.click(screen.getByRole("button", { name: "Question 2, unanswered" }));
   expect(screen.getAllByText("Question 2").length).toBeGreaterThan(0);
   expect(calls.some((call) => call.path.endsWith("/write"))).toBe(false);

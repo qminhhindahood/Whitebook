@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { accountFetch, csrfToken } from "./accountClient";
 import type { HostedBlock, HostedPresentationData } from "./HostedPresentation";
 import { HostedAttempt } from "./HostedAttempt";
@@ -103,6 +104,9 @@ export async function loadSelectedContent(snapshot: AttemptSnapshot): Promise<Pr
       await retryTransientContent(async () => {
         const response = await accountFetch(path, { method: "GET", credentials: "same-origin", cache: "no-store" });
         if (!response.ok) throw new RequestError("A required visual could not be loaded.", response.status);
+        const expectedType = path.endsWith(".png") ? "image/png" : path.endsWith(".webp") ? "image/webp" : "image/jpeg";
+        if (response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== expectedType)
+          throw new RequestError("A required visual has an invalid content type.", 422);
         if (!(await response.arrayBuffer()).byteLength) throw new RequestError("A required visual is empty.", 503);
       });
     } catch {
@@ -358,10 +362,13 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
       : item));
   }, []);
 
-  if (activeAttempt) return <HostedAttempt initial={activeAttempt} questions={activeQuestions} desmosScriptUrl={desmosScriptUrl}
+  if (activeAttempt) {
+    const player = <HostedAttempt initial={activeAttempt} questions={activeQuestions} desmosScriptUrl={desmosScriptUrl}
     packageTitle={packages.find((item) => item.revisionId === activeAttempt.revisionId)?.title ?? "Reviewed Test Package"}
     onSessionEnded={onSessionEnded} onExit={() => { setActiveAttempt(null); setActiveQuestions([]); }}
     onSnapshotChange={handleSnapshotChange} />;
+    return activeAttempt.kind === "section_exam" ? player : createPortal(player, document.body);
+  }
 
   return <section className="practice-area" aria-labelledby="practice-heading">
     {calculatorProbeUrl && <div className="practice-loading" role="status">

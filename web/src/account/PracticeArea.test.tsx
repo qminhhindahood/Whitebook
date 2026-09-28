@@ -24,7 +24,7 @@ function presentation(questionId: string) {
   } };
 }
 
-function apiFixture(visual: () => Response = () => new Response("image", { status: 200 }),
+function apiFixture(visual: () => Response = () => new Response("image", { status: 200, headers: { "Content-Type": "image/png" } }),
   listedQuestions = questionLinks) {
   const calls: { path: string; init?: RequestInit }[] = [];
   const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
@@ -103,7 +103,7 @@ it("leaves the clock unstarted and offers a retry when a selected visual fails",
   let visualCalls = 0;
   const { calls } = apiFixture(() => {
     visualCalls++;
-    return visualCalls <= 3 ? new Response("", { status: 503 }) : new Response("image", { status: 200 });
+    return visualCalls <= 3 ? new Response("", { status: 503 }) : new Response("image", { status: 200, headers: { "Content-Type": "image/png" } });
   });
   render(<PracticeArea initialRevisionId="reviewed-rw" onSessionEnded={() => {}} />);
   fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
@@ -114,6 +114,14 @@ it("leaves the clock unstarted and offers a retry when a selected visual fails",
   expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
   expect(calls.filter((call) => call.path === "/api/attempts" && call.init?.method === "POST")).toHaveLength(1);
   await waitFor(() => expect(calls.filter((call) => call.path.endsWith("/start"))).toHaveLength(1));
+});
+
+it("keeps the clock stopped when a protected visual route returns non-image content", async () => {
+  const { calls } = apiFixture(() => new Response("<html>missing</html>", { status: 200, headers: { "Content-Type": "text/html" } }));
+  render(<PracticeArea initialRevisionId="reviewed-rw" onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
+  expect((await screen.findByRole("alert")).textContent).toMatch(/visual.*timer has not started/i);
+  expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
 });
 
 it("resumes an active Attempt from the server snapshot without restarting its clock", async () => {
@@ -134,7 +142,7 @@ it("resumes an active Attempt from the server snapshot without restarting its cl
     if (path === "/api/attempts/attempt-1") return Response.json(activeSnapshot);
     if (path === "/api/library/reviewed-rw/questions/q1") return Response.json(presentation("q1"));
     if (path === "/api/library/reviewed-rw/questions/q2") return Response.json(presentation("q2"));
-    if (path.startsWith("/content/")) return new Response("image", { status: 200 });
+    if (path.startsWith("/content/")) return new Response("image", { status: 200, headers: { "Content-Type": "image/png" } });
     throw new Error(`Unexpected route ${path} ${String(init?.method)}`);
   }));
   render(<PracticeArea onSessionEnded={() => {}} />);
@@ -144,6 +152,9 @@ it("resumes an active Attempt from the server snapshot without restarting its cl
   expect(screen.getByText("Editing here")).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
   expect(calls.some((call) => call.path.endsWith("/takeover"))).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  expect(await screen.findByRole("heading", { name: "Your Attempts" })).toBeTruthy();
+  expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(false);
 });
 
 it("creates a Section Exam with a section-only payload and prepares its Math tools before starting", async () => {
@@ -195,4 +206,74 @@ it("keeps Section selection visible and omits Practice-only setup fields for an 
   expect(screen.queryByLabelText("Question count")).toBeNull();
   expect(screen.queryByText("Modules")).toBeNull();
   expect(screen.getByText(/no timed break/i)).toBeTruthy();
+});
+
+it.each([
+  { section: "Reading and Writing", responseType: "multiple_choice", answer: "B", expected: "B" },
+  { section: "Math", responseType: "student_produced_response", answer: "12", expected: "12" },
+])("completes a $section Practice journey from loading gate to graded Results", async ({ section, responseType, answer, expected }) => {
+  const revisionId = section === "Math" ? "math-revision" : "reading-revision";
+  const link = { questionId: "q1", ordinal: 1, section, module: 1, questionNumber: 1, responseType };
+  const visualPath = `/content/${revisionId}/q1/diagram.png`;
+  const calls: { path: string; init?: RequestInit }[] = [];
+  const base = { attemptId: "journey-1", revisionId, kind: "practice", section, modules: [1],
+    questionIds: ["q1"], questions: [link], createdAt: 1_800_000_000_000 };
+  let savedResponse = "";
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
+    calls.push({ path, init });
+    if (path === "/api/library") return Response.json({ packages: [{ revisionId, title: "Reviewed Package", publishedRevision: 1, questionCount: 1 }] });
+    if (path === "/api/attempts" && !init?.method) return Response.json({ attempts: [] });
+    if (path === `/api/library/${revisionId}/questions`) return Response.json({ questions: [link] });
+    if (path === `/api/library/${revisionId}/questions/q1`) return Response.json({ ...link, revisionId, presentation: {
+      version: 3, stimulus: section === "Reading and Writing" ? [{ kind: "reviewed_text", runs: [{ text: "Read this passage." }] }] : [],
+      stem: section === "Math" ? [{ kind: "latex", latex: "6+6" }, { kind: "asset", src: visualPath, alt: "Diagram" }] :
+        [{ kind: "text", text: "Choose the best answer." }],
+      choices: responseType === "multiple_choice" ? "ABCD".split("").map((id) => ({ id, content: [{ kind: "text", text: `Option ${id}` }] })) : [],
+    } });
+    if (path === visualPath) return new Response("image", { status: 200, headers: { "Content-Type": "image/png" } });
+    if (path === "/api/attempts" && init?.method === "POST") return Response.json({ ...base, status: "preparing", state: {},
+      stateVersion: 0, startedAt: null, deadlineAt: null }, { status: 201 });
+    if (path === "/api/attempts/journey-1/start") return Response.json({ ...base, status: "active", state: { responses: {}, currentQuestionId: "q1" },
+      stateVersion: 1, startedAt: 1_800_000_000_000, serverNow: 1_800_000_000_000, deadlineAt: null,
+      editorToken: "a".repeat(64), lease: { held: true, expiresAt: 1_800_000_120_000 } });
+    if (path === "/api/attempts/journey-1/write") {
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({ expectedStateVersion: 1, editorToken: "a".repeat(64), change: { type: "response", questionId: "q1" } });
+      savedResponse = body.change.response;
+      return Response.json({ ...base, status: "active", state: { responses: { q1: savedResponse }, currentQuestionId: "q1" },
+        stateVersion: 2, startedAt: 1_800_000_000_000, serverNow: 1_800_000_000_100, deadlineAt: null,
+        editorToken: "a".repeat(64), lease: { held: true, expiresAt: 1_800_000_120_000 } });
+    }
+    if (path === "/api/attempts/journey-1/submit") {
+      expect(JSON.parse(String(init?.body))).toMatchObject({ expectedStateVersion: 2, editorToken: "a".repeat(64) });
+      return Response.json({ ...base, status: "completed", state: { responses: { q1: savedResponse }, currentQuestionId: "q1" },
+        stateVersion: 3, startedAt: 1_800_000_000_000, serverNow: 1_800_000_000_200, deadlineAt: null,
+        completedAt: 1_800_000_000_200, result: { correctCount: 1, questionCount: 1,
+          questions: [{ questionId: "q1", response: savedResponse, acceptedAnswers: [expected], correct: true }] } });
+    }
+    if (path === "/api/attempts/journey-1/results") return Response.json({ result: { correctCount: 1, questionCount: 1,
+      questions: [{ questionId: "q1", response: savedResponse, acceptedAnswers: [expected], correct: true }] } });
+    throw new Error(`Unexpected route ${path}`);
+  }));
+  render(<PracticeArea initialRevisionId={revisionId} onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
+  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(calls.findIndex((call) => call.path.endsWith("/start"))).toBeGreaterThan(calls.findIndex((call) => call.path.endsWith("/questions/q1")));
+  if (section === "Math") {
+    expect(document.querySelector(".katex")).toBeTruthy();
+    expect(screen.getByAltText("Diagram")).toBeTruthy();
+    expect(calls.findIndex((call) => call.path === visualPath)).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+    fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: answer } });
+  } else {
+    expect(screen.getByText("Read this passage.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: /BOption B/ }));
+  }
+  expect(screen.queryByText(`Accepted answer: ${expected}`)).toBeNull();
+  await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
+  fireEvent.click(screen.getByRole("button", { name: "Submit Attempt" }));
+  expect(await screen.findByText("1 of 1 correct")).toBeTruthy();
+  expect(screen.getByText(`Accepted answer: ${expected}`)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  expect(await screen.findByRole("heading", { name: "Build a Practice Attempt" })).toBeTruthy();
+  expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(false);
 });

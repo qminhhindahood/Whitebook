@@ -1,0 +1,135 @@
+.player-shell.hosted-practice-player {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  min-width: 0;
+  width: 100%;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+}
+
+.hosted-practice-player .player-header__section h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+}
+
+.hosted-practice-player .player-header__section span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.hosted-practice-player .player-header__tools {
+  justify-content: end;
+}
+
+.hosted-practice-player__notices {
+  padding: 0 26px;
+}
+
+.hosted-practice-player__notices .hosted-attempt__lease,
+.hosted-practice-player__notices .hosted-attempt__unsaved {
+  margin: 8px 0;
+}
+
+.hosted-practice-player__notices .hosted-attempt__save {
+  margin: 7px 0;
+}
+
+.hosted-practice-player .player-workspace {
+  display: flex;
+  flex-direction: column;
+}
+
+.hosted-practice-player .hosted-attempt__results {
+  flex: none;
+  margin: 8px 26px;
+}
+
+.hosted-practice-player .player-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.hosted-practice-player .player-body--split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.hosted-practice-player .player-body--split > .response-panel {
+  min-width: 0;
+  overflow: auto;
+}
+
+.hosted-practice-player .player-body--centered > .response-panel {
+  width: min(100% - 48px, 760px);
+  margin: 24px auto 36px;
+}
+
+.hosted-practice-player__question-content {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding: 24px 28px 48px;
+}
+
+.hosted-practice-player__question-content > .question-content {
+  display: block;
+  line-height: 1.6;
+}
+
+.hosted-practice-player__question-content .content-choices {
+  margin-top: 22px;
+}
+
+.hosted-practice-player .player-footer > button {
+  justify-self: start;
+}
+
+.hosted-practice-player .player-footer__actions {
+  justify-self: end;
+}
+
+@media (max-width: 760px) {
+  .hosted-practice-player .player-header,
+  .hosted-practice-player .player-footer {
+    padding-inline: 14px;
+  }
+
+  .hosted-practice-player .player-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .hosted-practice-player .player-header__tools {
+    grid-column: 1 / -1;
+    justify-content: start;
+  }
+
+  .hosted-practice-player__notices {
+    padding-inline: 14px;
+  }
+
+  .hosted-practice-player .player-body--split {
+    display: block;
+    overflow: auto;
+  }
+
+  .hosted-practice-player .player-pane--left,
+  .hosted-practice-player .player-body--split > .response-panel {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .hosted-practice-player .player-pane--left .player-pane__scroll,
+  .hosted-practice-player__question-content {
+    padding: 18px 16px;
+  }
+
+  .hosted-practice-player .player-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .hosted-practice-player .player-footer__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
