@@ -17,7 +17,11 @@ type Review = { reviewId: string; attemptId: string; revisionId: string; questio
   priorAnswerExposure: "seen" | "possible"; hintAvailable: boolean;
   hintUsed: boolean; revealed: boolean; mistakeLabel: string | null;
   originalResponse?: string | null; retryResponse?: string | null; acceptedAnswers?: string[];
-  retryCorrect?: boolean | null; explanation?: string | null; notes?: Note[] };
+   retryCorrect?: boolean | null; explanation?: string | null; notes?: Note[] };
+type GuidedProvider = { route: "shared_gemini" | "personal_gemini"; model: string; languages: string[]; healthy: boolean };
+type GuidedOptions = { options: GuidedProvider[] };
+type GuidedPreview = { previewId: string; expiresAt: number; provider: GuidedProvider; payload: string; revealed: boolean; fallbackHint: string | null };
+type GuidedReply = { text?: string; withheld?: boolean; answerWithheld?: boolean; hint?: string | null; message?: string; label?: string };
 
 async function request<T>(path: string, method = "GET", payload?: unknown): Promise<T> {
   const response = await accountFetch(path, method === "GET" ? undefined : {
@@ -51,6 +55,16 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [guidedOpen, setGuidedOpen] = useState(false);
+  const [guidedLocale, setGuidedLocale] = useState<"en" | "vi">("en");
+  const [guidedStage, setGuidedStage] = useState<"reasoning_steps" | "reading_help" | "follow_up">("reasoning_steps");
+  const [guidedProvider, setGuidedProvider] = useState("");
+  const [guidedMessage, setGuidedMessage] = useState("Identify the task and the evidence needed to solve it.");
+  const [guidedPreview, setGuidedPreview] = useState<GuidedPreview | null>(null);
+  const [guidedReply, setGuidedReply] = useState<GuidedReply | null>(null);
+  const [guidedOptions, setGuidedOptions] = useState<GuidedOptions | null>(null);
+  const [guidedVisitId] = useState(() => crypto.randomUUID());
+  const aiEnabled = import.meta.env.VITE_AI_RELEASE_ENABLED === "true";
 
   useEffect(() => {
     let live = true;
@@ -121,9 +135,34 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
       const next = await request<Review>(`/api/review/attempts/${overview.attemptId}/questions/${questionId}`, "POST", {});
       const question = await request<PresentationQuestion>(`/api/library/${overview.revisionId}/questions/${questionId}`);
       setSelectedQuestionId(questionId); setReview(next); setPresentation(question); setResultPresentation(null);
-      setResults(null); setRetrying(false); setRetryResponse(""); setHint("");
+      setResults(null); setRetrying(false); setRetryResponse(""); setHint(""); setGuidedOpen(false); setGuidedPreview(null); setGuidedReply(null);
       setLabel(next.mistakeLabel ?? ""); setNoteDraft(""); setEditingNoteId("");
     });
+  }
+
+  function openGuidedReasoning() {
+    if (!review || !presentation || !aiEnabled) return;
+    void run(async () => {
+      const options = await request<GuidedOptions>("/api/assistant/options");
+      setGuidedOptions(options); setGuidedProvider(`${options.options[0]?.route ?? ""}/${options.options[0]?.model ?? ""}`); setGuidedOpen(true);
+    });
+  }
+
+  function guidedRequest() {
+    if (!review || !guidedProvider || !guidedMessage.trim()) return;
+    const [route, model] = guidedProvider.split("/");
+    void run(async () => {
+      const preview = await request<GuidedPreview>("/api/assistant/reasoning-preview", "POST", {
+        visitId: guidedVisitId, reviewId: review.reviewId, route, model, locale: guidedLocale, stage: guidedStage, message: guidedMessage,
+      });
+      setGuidedPreview(preview); setGuidedReply(null);
+    });
+  }
+
+  async function guidedSend() {
+    if (!guidedPreview) return;
+    const approved = guidedPreview; setGuidedPreview(null);
+    await run(async () => setGuidedReply(await request<GuidedReply>("/api/assistant/reasoning-send", "POST", { previewId: approved.previewId, visitId: guidedVisitId, consent: true })));
   }
 
   function reviewAction(action: "retry" | "reveal" | "hint") {
@@ -188,14 +227,22 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
         }}>Back to questions</button>}
       </div>
       <p>{overview.correctCount} of {overview.questionCount} correct · Raw Accuracy is unchanged by review.</p>
-      {reviewPath ? <article className="history-area__review" aria-label="Guided review">
+      {reviewPath ? <article className={`history-area__review${guidedOpen ? " history-area__review--guided" : ""}`} aria-label="Guided review">
         <h3>{selected?.section} · Module {selected?.module} · Question {selected?.questionNumber}</h3>
         <p className="history-area__exposure">{review.priorAnswerExposure === "seen"
           ? "The answer was available in an earlier Results view. This retry is not blind."
           : "No prior answer view was recorded. Earlier Results may still have shown the answer."}</p>
-        <HostedBlocks blocks={presentation.presentation.stimulus} revisionId={review.revisionId} questionId={review.questionId} />
-        <HostedBlocks blocks={presentation.presentation.stem} revisionId={review.revisionId} questionId={review.questionId} />
-        {!review.revealed && <>
+        {aiEnabled && <button type="button" className="practice-button" disabled={busy} onClick={openGuidedReasoning}>Open Guided Reasoning</button>}
+        {guidedOpen ? <div className="guided-reasoning" aria-label="Guided Reasoning">
+          <div className="guided-reasoning__switch" role="tablist" aria-label="Review workspace"><button type="button" role="tab" aria-selected="true">Question</button><button type="button" role="tab" aria-selected="false" onClick={() => document.getElementById("guided-guidance")?.focus()}>Guidance</button></div>
+          <section className="guided-reasoning__question" aria-labelledby="guided-question-heading"><h4 id="guided-question-heading" tabIndex={-1}>Question Presentation</h4><HostedBlocks blocks={presentation.presentation.stimulus} revisionId={review.revisionId} questionId={review.questionId} /><HostedBlocks blocks={presentation.presentation.stem} revisionId={review.revisionId} questionId={review.questionId} />{presentation.responseType === "multiple_choice" && <HostedChoices presentation={presentation.presentation} revisionId={review.revisionId} questionId={review.questionId} selected={review.originalResponse ?? undefined} eliminated={[]} onSelect={() => {}} onEliminate={() => {}} disabled showElimination={false} />}</section>
+          <section className="guided-reasoning__guidance" aria-labelledby="guided-guidance" tabIndex={-1}><h4 id="guided-guidance">Guidance</h4><p className="history-area__exposure">{review.revealed ? "The answer is revealed. Generated guidance remains separate from grading." : "Answer hidden. Generated guidance must remain answer-neutral until you choose Show answer."}</p>
+            {guidedOptions && <div className="guided-reasoning__controls"><label>Language<select value={guidedLocale} onChange={event => { setGuidedLocale(event.target.value as "en" | "vi"); setGuidedPreview(null); }}><option value="en">English</option><option value="vi">Vietnamese</option></select></label><label>Gemini model<select value={guidedProvider} onChange={event => { setGuidedProvider(event.target.value); setGuidedPreview(null); }}>{guidedOptions.options.map(option => <option key={`${option.route}/${option.model}`} value={`${option.route}/${option.model}`}>{option.model}</option>)}</select></label><label>Stage<select value={guidedStage} onChange={event => { setGuidedStage(event.target.value as typeof guidedStage); setGuidedPreview(null); }}><option value="reasoning_steps">Reasoning Steps</option><option value="reading_help">Reading Help</option><option value="follow_up">Follow-up</option></select></label></div>}
+            <label>Your guidance request<textarea value={guidedMessage} onChange={event => { setGuidedMessage(event.target.value); setGuidedPreview(null); }} /></label>{guidedReply?.withheld ? <p className="history-area__hint" role="status"><strong>Answer withheld:</strong> {guidedReply.hint ?? guidedReply.message}</p> : guidedReply?.text && <div className="guided-reasoning__reply" role="status"><p>{guidedReply.text}</p><small>{guidedReply.label}</small></div>}
+            {guidedPreview ? <div className="guided-reasoning__preview"><h5>Review this send</h5><pre>{JSON.stringify(JSON.parse(guidedPreview.payload), null, 2)}</pre><button type="button" className="practice-button" disabled={busy} onClick={() => void guidedSend()}>I consent — send guidance</button><button type="button" className="practice-button practice-button--quiet" onClick={() => setGuidedPreview(null)}>Cancel preview</button></div> : <button type="button" className="practice-button" disabled={busy || !guidedMessage.trim()} onClick={guidedRequest}>Preview guidance</button>}{!review.revealed && <button type="button" className="practice-button practice-button--quiet" disabled={busy} onClick={() => reviewAction("reveal")}>Show answer</button>}
+          </section>
+        </div> : <><HostedBlocks blocks={presentation.presentation.stimulus} revisionId={review.revisionId} questionId={review.questionId} /><HostedBlocks blocks={presentation.presentation.stem} revisionId={review.revisionId} questionId={review.questionId} /></>}
+        {!review.revealed && !guidedOpen && <>
           {!retrying ? <div className="history-area__actions">
             <button type="button" className="practice-button" disabled={busy} onClick={() => setRetrying(true)}>Try again</button>
             {review.hintAvailable && <button type="button" className="practice-button practice-button--quiet" disabled={busy}
@@ -215,7 +262,7 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
           </div>}
           {hint && <p className="history-area__hint" role="status"><strong>Reviewed hint:</strong> {hint}</p>}
         </>}
-        {review.revealed && <>
+        {review.revealed && !guidedOpen && <>
           <div className="history-area__answer"><h4>Answer review</h4>
             <dl><div><dt>Original Attempt response</dt><dd>{responseText(review.originalResponse)}</dd></div>
               <div><dt>Retry response</dt><dd>{review.retryResponse === null ? "Skipped" : responseText(review.retryResponse)}</dd></div>

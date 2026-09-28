@@ -11,7 +11,7 @@ export type AssistantEnv = AccountEnv & {
   GEMINI_SHARED_KEY?: string;
 };
 type Option = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: ("en" | "vi")[]; vision: boolean; quota: string; healthy: boolean };
-type Snapshot = { id: string; account: string; session: string; visit: string; expires: number; provider: Option; credentialVersion: string; payload: string; tokens: number; attachmentReviewId?: string; attachmentVisuals?: boolean };
+type Snapshot = { id: string; account: string; session: string; visit: string; expires: number; provider: Option; credentialVersion: string; payload: string; tokens: number; attachmentReviewId?: string; attachmentVisuals?: boolean; flow?: "tutor" | "reasoning"; reviewId?: string; revealed?: boolean; acceptedAnswers?: string[]; questionText?: string[]; fallbackHint?: string | null };
 type Credential = { version: string; ciphertext: string; last_four: string };
 type Attachment = { reviewId: string; revisionId: string; questionId: string; section: string; module: number; questionNumber: number; response: string | null; acceptedAnswers: string[]; presentation: unknown; visuals: { path: string; width: number; height: number; alt: string }[] };
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -98,6 +98,98 @@ function payloadOf(body: Record<string, unknown>, attachment: Attachment | null)
   while (contents.length > 1 && new TextEncoder().encode(serialize()).length > MAX_PAYLOAD) contents.shift();
   const result = serialize();
   return new TextEncoder().encode(result).length <= MAX_PAYLOAD ? result : null;
+}
+
+type ReasoningContext = { reviewId: string; revisionId: string; questionId: string; revealed: boolean; response: string | null; acceptedAnswers: string[]; presentation: unknown; questionText: string[]; fallbackHint: string | null };
+
+function presentationText(value: unknown): string[] {
+  if (!value || typeof value !== "object") return [];
+  const blocks: unknown[] = [];
+  const presentation = value as { stimulus?: unknown[]; stem?: unknown[]; choices?: { content?: unknown[] }[] };
+  blocks.push(...(presentation.stimulus ?? []), ...(presentation.stem ?? []), ...(presentation.choices ?? []).flatMap(choice => choice.content ?? []));
+  return blocks.flatMap((block) => {
+    if (!block || typeof block !== "object") return [];
+    const item = block as { text?: unknown; latex?: unknown; runs?: { text?: unknown }[] };
+    if (typeof item.text === "string") return [item.text];
+    if (typeof item.latex === "string") return [item.latex];
+    return Array.isArray(item.runs) ? item.runs.flatMap(run => typeof run.text === "string" ? [run.text] : []) : [];
+  });
+}
+
+function normalized(value: string): string { return value.toLocaleLowerCase().replace(/\\frac\s*\{([^}]*)\}\s*\{([^}]*)\}/g, "$1/$2").replace(/[^a-z0-9.+/=\-]/g, ""); }
+
+function unsafeReasoning(text: string, context: ReasoningContext): boolean {
+  const value = normalized(text);
+  const answerVariants = context.acceptedAnswers.flatMap(answer => [answer, answer.replace(/\$/g, ""), answer.replace(/\s+/g, "")]);
+  if (answerVariants.some(answer => answer.trim() && value.includes(normalized(answer)))) return true;
+  const choices = context.questionText.map(normalized).filter(Boolean);
+  if (choices.some(choice => choice.length >= 12 && value.includes(choice))) return true;
+  if (/\b(answer|correct|choose|select|pick|option|đáp án|chọn)\b.{0,24}\b[a-d]\b/i.test(text)) return true;
+  if (context.acceptedAnswers.some(answer => /^[-+]?\d+(?:\.\d+)?$/.test(answer.trim()) && value.includes(normalized(answer)))) return true;
+  return false;
+}
+
+async function reasoningContext(env: AssistantEnv, accountId: string, reviewId: string): Promise<ReasoningContext | Response> {
+  const review = await env.DB.prepare("SELECT id, attempt_id, revision_id, question_id, revealed_at_ms FROM guided_reviews WHERE id = ? AND account_id = ?")
+    .bind(reviewId, accountId).first<{ id: string; attempt_id: string; revision_id: string; question_id: string; revealed_at_ms: number | null }>();
+  if (!review) return failure(404, "not_found", "This reviewed question is unavailable.");
+  if (!await hasPackageEntitlement(env, accountId, review.revision_id)) return failure(404, "not_found", "This reviewed question is unavailable.");
+  const attempt = await env.DB.prepare("SELECT status, result_json FROM learner_attempts WHERE id = ? AND account_id = ?")
+    .bind(review.attempt_id, accountId).first<{ status: string; result_json: string | null }>();
+  const question = await env.DB.prepare("SELECT presentation_json FROM publication_questions WHERE revision_id = ? AND question_id = ?")
+    .bind(review.revision_id, review.question_id).first<{ presentation_json: string }>();
+  if (!attempt || attempt.status !== "completed" || !attempt.result_json || !question) return failure(409, "review_incomplete", "Guided Reasoning is available after this Attempt is complete.");
+  const grade = (JSON.parse(attempt.result_json) as { questions: { questionId: string; response: string | null; acceptedAnswers: string[] }[] }).questions.find(item => item.questionId === review.question_id);
+  if (!grade) return failure(404, "not_found", "This reviewed question is unavailable.");
+  const presentation = JSON.parse(question.presentation_json);
+  const help = await env.DB.prepare("SELECT reviewed_hint FROM publication_review_help WHERE revision_id = ? AND question_id = ?")
+    .bind(review.revision_id, review.question_id).first<{ reviewed_hint: string | null }>();
+  const questionText = presentationText(presentation);
+  const fallbackHint = help?.reviewed_hint && !unsafeReasoning(help.reviewed_hint, { reviewId, revisionId: review.revision_id, questionId: review.question_id, revealed: false, response: grade.response, acceptedAnswers: grade.acceptedAnswers, presentation, questionText, fallbackHint: null }) ? help.reviewed_hint : null;
+  return { reviewId, revisionId: review.revision_id, questionId: review.question_id, revealed: review.revealed_at_ms !== null,
+    response: grade.response, acceptedAnswers: grade.acceptedAnswers, presentation, questionText, fallbackHint };
+}
+
+async function reasoningPreview(body: Record<string, unknown>, env: AssistantEnv, session: Session, options: Option[], now: number): Promise<Response> {
+  if (!exact(body, ["visitId", "reviewId", "route", "model", "locale", "stage", "message"]) || typeof body.visitId !== "string" || !UUID.test(body.visitId) || typeof body.reviewId !== "string" || typeof body.message !== "string" || !body.message.trim() || body.message.length > 4000 || !["en", "vi"].includes(String(body.locale)) || !["reasoning_steps", "reading_help", "follow_up"].includes(String(body.stage))) return invalid();
+  const provider = options.find(item => item.route === body.route && item.model === body.model);
+  if (!provider || !provider.healthy || !provider.languages.includes(body.locale as "en" | "vi")) return failure(400, "model_unavailable", "Choose an available Gemini route and model.");
+  const context = await reasoningContext(env, session.account_id, body.reviewId);
+  if (context instanceof Response) return context;
+  const answer = context.revealed ? `\nAccepted answer (server verified; do not regrade): ${JSON.stringify(context.acceptedAnswers)}` : "";
+  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are Guided Reasoning for a reviewed Whitebook question. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Before reveal, provide only answer-neutral reasoning steps and never identify, quote, paraphrase, or narrow to the accepted answer. After reveal, explain the answer but do not claim grading authority.` }] }, contents: [{ role: "user", parts: [{ text: `${body.stage}: ${body.message}\nQuestion presentation text: ${JSON.stringify(context.questionText)}\nLearner response: ${context.response ?? "unanswered"}${answer}` }] }], generationConfig: { maxOutputTokens: MAX_OUTPUT }, store: false });
+  if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return invalid();
+  const key = await routeKey(env, session.account_id, provider);
+  if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
+  if (!await reserve(env, `preview:${session.account_id}`, 0, 60, 1, now)) return wait("rate_limited", Math.ceil((HOUR - now % HOUR) / 1000), now);
+  const snapshot: Snapshot = { id: crypto.randomUUID(), account: session.account_id, session: session.token_hash, visit: body.visitId, expires: now + 5 * 60000, provider, credentialVersion: key.version, payload, tokens: new TextEncoder().encode(payload).length + MAX_OUTPUT, flow: "reasoning", reviewId: context.reviewId, revealed: context.revealed, acceptedAnswers: context.acceptedAnswers, questionText: context.questionText, fallbackHint: context.fallbackHint };
+  const previewId = await seal(JSON.stringify(snapshot), env.ASSISTANT_SNAPSHOT_KEY!, "tutor-preview");
+  await env.DB.prepare("DELETE FROM assistant_previews WHERE expires_at_ms <= ?").bind(now).run();
+  await env.DB.prepare("INSERT INTO assistant_previews (id, account_id, session_hash, visit_id, expires_at_ms) VALUES (?, ?, ?, ?, ?)").bind(snapshot.id, session.account_id, session.token_hash, body.visitId, snapshot.expires).run();
+  return json({ previewId, expiresAt: snapshot.expires, provider, payload, revealed: context.revealed, question: { revisionId: context.revisionId, questionId: context.questionId, presentation: context.presentation }, fallbackHint: context.fallbackHint });
+}
+
+async function reasoningSend(body: Record<string, unknown>, env: AssistantEnv, session: Session, options: Option[], adapter: GeminiAdapter, now: number): Promise<Response> {
+  if (!exact(body, ["previewId", "visitId", "consent"]) || body.consent !== true || typeof body.previewId !== "string" || typeof body.visitId !== "string") return consentRequired();
+  let snapshot: Snapshot;
+  try { snapshot = JSON.parse(await unseal(body.previewId, env.ASSISTANT_SNAPSHOT_KEY!, "tutor-preview")); } catch { return consentRequired(); }
+  if (snapshot.flow !== "reasoning" || snapshot.account !== session.account_id || snapshot.session !== session.token_hash || snapshot.visit !== body.visitId || snapshot.expires <= now) return consentRequired();
+  const provider = options.find(item => item.route === snapshot.provider.route && item.model === snapshot.provider.model);
+  const key = provider && await routeKey(env, session.account_id, provider);
+  if (!provider || JSON.stringify(provider) !== JSON.stringify(snapshot.provider) || !key || key.version !== snapshot.credentialVersion) return consentRequired();
+  const current = await reasoningContext(env, session.account_id, snapshot.reviewId!);
+  if (current instanceof Response || current.revealed !== snapshot.revealed) return consentRequired();
+  const consumed = await env.DB.prepare("DELETE FROM assistant_previews WHERE id = ? AND account_id = ? AND session_hash = ? AND visit_id = ? AND expires_at_ms > ? RETURNING id").bind(snapshot.id, session.account_id, session.token_hash, body.visitId, now).first();
+  if (!consumed) return consentRequired();
+  const retry = Math.ceil((HOUR - now % HOUR) / 1000);
+  if (!await reserve(env, `send:${session.account_id}`, snapshot.tokens, 20, 80000, now)) return wait("rate_limited", retry, now);
+  if (provider.route === "shared_gemini" && !await reserve(env, "shared", snapshot.tokens, 100, 400000, now)) return wait("quota_exhausted", retry, now);
+  try {
+    const text = await adapter(snapshot.payload, provider.model, key.key);
+    if (!text.trim() || text.length > 8000 || text.includes(key.key)) return failure(502, "provider_error", "Guided Reasoning could not produce a safe explanation.");
+    if (!snapshot.revealed && unsafeReasoning(text, current)) return json({ withheld: true, answerWithheld: true, hint: snapshot.fallbackHint, message: snapshot.fallbackHint ? "A reviewed hint is available instead of generated text." : "This generated step was withheld because its answer safety could not be verified." });
+    return json({ text, verified: false, label: "Not verified against the answer key" });
+  } catch { return failure(502, "provider_error", "Guided Reasoning could not complete this request. Your draft is preserved."); }
 }
 
 async function attachment(env: AssistantEnv, accountId: string, reviewId: string, includeVisuals: boolean): Promise<Attachment | Response> {
@@ -214,8 +306,10 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
      if (request.method === "GET" && path === "/api/assistant/attachments") return attachmentList(env, session.account_id);
     if (request.method !== "POST") return failure(405, "method_not_allowed", "This Tutor Chat action is unavailable.");
     const body = await bodyOf(request); if (!body) return invalid();
-    if (path === "/api/assistant/preview") return preview(body, env, session, options, time);
-    if (path === "/api/assistant/send") return send(body, env, session, options, adapter, time);
+     if (path === "/api/assistant/preview") return preview(body, env, session, options, time);
+     if (path === "/api/assistant/reasoning-preview") return reasoningPreview(body, env, session, options, time);
+     if (path === "/api/assistant/send") return send(body, env, session, options, adapter, time);
+     if (path === "/api/assistant/reasoning-send") return reasoningSend(body, env, session, options, adapter, time);
     if (path === "/api/assistant/credential") {
       if (!exact(body, ["key"]) || typeof body.key !== "string" || !/^[A-Za-z0-9_-]{20,256}$/.test(body.key)) return invalid();
       const encrypted = await seal(body.key, env.ASSISTANT_KEY_KEK!, `credential:${session.account_id}`);
