@@ -5,7 +5,7 @@
   "compatibility_date": "2026-09-26",
   "workers_dev": true,
   "vars": {
-    "AI_RELEASE_ENABLED": "false",
+    "AI_RELEASE_ENABLED": "true",
     "APP_ORIGIN": "https://whitebook.docai.dpdns.org"
   },
   "routes": [
