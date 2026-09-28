@@ -3,6 +3,8 @@ import { hasPackageEntitlement } from "./library";
 import { seal, unseal } from "./assistantSecrets";
 import { geminiAdapter, GeminiFailure, type GeminiAdapter } from "./gemini";
 import { isValidZone, localCalendarDate } from "./schedule";
+import { acceptProposals, completedReviewKeys, parseProposals, planEnvelope, validateProposals, type PlanEnvelope, type Proposal } from "./planAssistant";
+import type { PlanSettings } from "./plan";
 
 export type AssistantEnv = AccountEnv & {
   ASSETS: { fetch(request: Request): Promise<Response> };
@@ -13,13 +15,17 @@ export type AssistantEnv = AccountEnv & {
   GEMINI_SHARED_KEY?: string;
 };
 type Option = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: ("en" | "vi")[]; vision: boolean; quota: string; healthy: boolean };
-type Snapshot = { id: string; account: string; session: string; visit: string; expires: number; provider: Option; credentialVersion: string; payload: string; tokens: number; attachmentReviewId?: string; attachmentVisuals?: boolean; attachmentHash?: string; flow?: "tutor" | "reasoning" | "flashcards"; reviewId?: string; stage?: string; revealed?: boolean; acceptedAnswers?: string[]; questionText?: string[]; correctChoiceText?: string[]; section?: string; fallbackHint?: string | null };
+type Snapshot = { id: string; account: string; session: string; visit: string; expires: number; provider: Option; credentialVersion: string; payload: string; tokens: number; attachmentReviewId?: string; attachmentVisuals?: boolean; attachmentHash?: string; flow?: "tutor" | "reasoning" | "flashcards" | "plan"; reviewId?: string; stage?: string; revealed?: boolean; acceptedAnswers?: string[]; questionText?: string[]; correctChoiceText?: string[]; section?: string; fallbackHint?: string | null;
+  plan?: { selection: { official: boolean; whitebook: boolean }; settings: PlanSettings; expectedVersionId: string | null; envelope: PlanEnvelope } };
+type PlanProposal = { id: string; account: string; session: string; visit: string; expires: number; selection: { official: boolean; whitebook: boolean };
+  settings: PlanSettings; expectedVersionId: string | null; envelope: PlanEnvelope; proposals: Proposal[] };
 type Credential = { version: string; ciphertext: string; last_four: string };
 type AttachmentVisual = { path: string; width: number; height: number; alt: string; mimeType: string; data: string };
 type Attachment = { reviewId: string; revisionId: string; questionId: string; section: string; module: number; questionNumber: number; response: string | null; acceptedAnswers: string[]; presentation: unknown; visuals: AttachmentVisual[] };
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const HOUR = 3600000;
 const MAX_OUTPUT = 1024;
+const PLAN_OUTPUT = 4096;
 const MAX_PAYLOAD = 16000;
 const MAX_MULTIMODAL_PAYLOAD = 4_100_000;
 const MAX_ATTACHMENT_BYTES = 3_000_000;
@@ -443,6 +449,87 @@ async function send(body: Record<string, unknown>, env: AssistantEnv, session: S
   }
 }
 
+async function planPreview(body: Record<string, unknown>, request: Request, env: AssistantEnv, session: Session, options: Option[], now: number): Promise<Response> {
+  if (!bodyHasExactly(body, ["visitId", "route", "model", "locale", "official", "whitebook", "settings", "expectedVersionId"]) ||
+    typeof body.visitId !== "string" || !UUID.test(body.visitId) || typeof body.official !== "boolean" || typeof body.whitebook !== "boolean" ||
+    !(body.expectedVersionId === null || typeof body.expectedVersionId === "string")) return invalid();
+  const provider = options.find(option => option.route === body.route && option.model === body.model);
+  if (!provider || !provider.healthy || !provider.languages.includes(body.locale as "en" | "vi"))
+    return failure(400, "model_unavailable", "Choose an available Gemini route and model.");
+  const selection = { official: body.official, whitebook: body.whitebook };
+  const assembled = await planEnvelope(request, env, session.account_id, now, selection, body.settings);
+  if (assembled instanceof Response) return assembled;
+  const latest = await env.DB.prepare("SELECT id FROM study_plan_versions WHERE account_id = ? ORDER BY version DESC LIMIT 1")
+    .bind(session.account_id).first<{ id: string }>();
+  if ((latest?.id ?? null) !== body.expectedVersionId) return failure(409, "plan_changed", "Reload the latest Study Plan before previewing suggestions.");
+  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are a Study Plan assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Return exactly one JSON array of 1 to 20 proposed tasks, with no markdown or extra prose. Each task must contain date, kind, title, minutes, action, and explanation. Use kind "cards" only when dueCardTotal is positive, with action {"area":"cards"}; or kind "practice" with action {"area":"practice","revisionId":"an activityCatalog revisionId","section":"its section"}. Select only real activityCatalog pairs. Do not propose review tasks because individual review links are not shared. Use study days before the Primary SAT Target and stay within dailyMinutes. Never predict SAT point gains, invent packages or questions, or equate Whitebook Raw Accuracy with SAT points. Do not save the plan.` }] },
+    contents: [{ role: "user", parts: [{ text: JSON.stringify(assembled.envelope) }] }], generationConfig: { maxOutputTokens: PLAN_OUTPUT }, store: false });
+  if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return failure(413, "too_large", "The selected evidence is too large to preview.");
+  const key = await routeKey(env, session.account_id, provider);
+  if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
+  if (!await reserve(env, `preview:${session.account_id}`, 0, 60, 1, now))
+    return rateLimitedResponse("rate_limited", Math.ceil((HOUR - now % HOUR) / 1000), now);
+  const snapshot: Snapshot = { id: crypto.randomUUID(), account: session.account_id, session: session.token_hash, visit: body.visitId,
+    expires: now + 5 * 60000, provider, credentialVersion: key.version, payload, tokens: new TextEncoder().encode(payload).length + PLAN_OUTPUT,
+    flow: "plan", plan: { selection, settings: assembled.settings, expectedVersionId: body.expectedVersionId, envelope: assembled.envelope } };
+  const previewId = await seal(JSON.stringify(snapshot), env.ASSISTANT_SNAPSHOT_KEY!, "tutor-preview");
+  await env.DB.prepare("DELETE FROM assistant_previews WHERE expires_at_ms <= ?").bind(now).run();
+  await env.DB.prepare("INSERT INTO assistant_previews (id, account_id, session_hash, visit_id, expires_at_ms) VALUES (?, ?, ?, ?, ?)")
+    .bind(snapshot.id, session.account_id, session.token_hash, body.visitId, snapshot.expires).run();
+  return json({ previewId, expiresAt: snapshot.expires, provider, payload, content: assembled.envelope });
+}
+
+async function planSend(body: Record<string, unknown>, request: Request, env: AssistantEnv, session: Session, options: Option[], adapter: GeminiAdapter, now: number): Promise<Response> {
+  if (!bodyHasExactly(body, ["previewId", "visitId", "consent"]) || body.consent !== true ||
+    typeof body.previewId !== "string" || typeof body.visitId !== "string") return consentRequired();
+  let snapshot: Snapshot;
+  try { snapshot = JSON.parse(await unseal(body.previewId, env.ASSISTANT_SNAPSHOT_KEY!, "tutor-preview")); } catch { return consentRequired(); }
+  if (snapshot.flow !== "plan" || !snapshot.plan || snapshot.account !== session.account_id || snapshot.session !== session.token_hash ||
+    snapshot.visit !== body.visitId || snapshot.expires <= now) return consentRequired();
+  const provider = options.find(option => option.route === snapshot.provider.route && option.model === snapshot.provider.model);
+  const key = provider && await routeKey(env, session.account_id, provider);
+  if (!provider || JSON.stringify(provider) !== JSON.stringify(snapshot.provider) || !key || key.version !== snapshot.credentialVersion) return consentRequired();
+  const current = await planEnvelope(request, env, session.account_id, now, snapshot.plan.selection, snapshot.plan.settings);
+  if (current instanceof Response || JSON.stringify(current.envelope) !== JSON.stringify(snapshot.plan.envelope)) return consentRequired();
+  const latest = await env.DB.prepare("SELECT id FROM study_plan_versions WHERE account_id = ? ORDER BY version DESC LIMIT 1")
+    .bind(session.account_id).first<{ id: string }>();
+  if ((latest?.id ?? null) !== snapshot.plan.expectedVersionId) return consentRequired();
+  const consumed = await env.DB.prepare("DELETE FROM assistant_previews WHERE id = ? AND account_id = ? AND session_hash = ? AND visit_id = ? AND expires_at_ms > ? RETURNING id")
+    .bind(snapshot.id, session.account_id, session.token_hash, body.visitId, now).first();
+  if (!consumed) return consentRequired();
+  const retry = Math.ceil((HOUR - now % HOUR) / 1000);
+  if (!await reserve(env, `send:${session.account_id}`, snapshot.tokens, 20, 80000, now)) return rateLimitedResponse("rate_limited", retry, now);
+  if (provider.route === "shared_gemini" && !await reserve(env, "shared", snapshot.tokens, 100, 400000, now))
+    return rateLimitedResponse("quota_exhausted", retry, now);
+  let text: string;
+  try { text = await adapter(snapshot.payload, provider.model, key.key); }
+  catch { return failure(502, "provider_error", "Study Plan suggestions are unavailable. Your saved plan remains available."); }
+  if (text.includes(key.key)) return failure(502, "provider_error", "Study Plan suggestions are unavailable. Your saved plan remains available.");
+  const proposals = parseProposals(text);
+  if (!proposals) return failure(422, "invalid_suggestions", "Gemini returned invalid Study Plan suggestions. Your saved plan remains available.");
+  const validated = validateProposals(proposals, snapshot.plan.settings, current.context,
+    await completedReviewKeys(env, session.account_id));
+  if (validated instanceof Response) return validated;
+  const proposal: PlanProposal = { id: crypto.randomUUID(), account: session.account_id, session: session.token_hash, visit: body.visitId,
+    expires: now + 5 * 60000, selection: snapshot.plan.selection, settings: snapshot.plan.settings,
+    expectedVersionId: snapshot.plan.expectedVersionId, envelope: snapshot.plan.envelope, proposals };
+  const proposalId = await seal(JSON.stringify(proposal), env.ASSISTANT_SNAPSHOT_KEY!, "plan-proposal");
+  await env.DB.prepare("INSERT INTO assistant_previews (id, account_id, session_hash, visit_id, expires_at_ms) VALUES (?, ?, ?, ?, ?)")
+    .bind(proposal.id, session.account_id, session.token_hash, body.visitId, proposal.expires).run();
+  return json({ proposalId, expiresAt: proposal.expires, tasks: validated, provider });
+}
+
+async function planAccept(body: Record<string, unknown>, request: Request, env: AssistantEnv, session: Session, now: number): Promise<Response> {
+  if (!bodyHasExactly(body, ["proposalId", "visitId"]) || typeof body.proposalId !== "string" || typeof body.visitId !== "string") return invalid();
+  let proposal: PlanProposal;
+  try { proposal = JSON.parse(await unseal(body.proposalId, env.ASSISTANT_SNAPSHOT_KEY!, "plan-proposal")); }
+  catch { return consentRequired(); }
+  if (proposal.account !== session.account_id || proposal.session !== session.token_hash || proposal.visit !== body.visitId || proposal.expires <= now)
+    return consentRequired();
+  return acceptProposals(request, env, session.account_id, now, proposal.id, proposal.expectedVersionId,
+    proposal.selection, proposal.settings, proposal.envelope, proposal.proposals);
+}
+
 export function assistantRoute(request: Request, env: AssistantEnv, adapter: GeminiAdapter = geminiAdapter, now: () => number = Date.now): Promise<Response> | null {
   const path = new URL(request.url).pathname;
   if (!path.startsWith("/api/assistant/")) return null;
@@ -452,7 +539,12 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
     if (!session) return failure(401, "signed_out", "Sign in to open Tutor Chat.");
     if (request.method !== "GET") { const denied = await requireMutation(request, env, session); if (denied) return denied; }
     const blocked = await assessmentBlock(env, session.account_id); if (blocked) return blocked;
-    const time = now(); const options = catalog(env, time);
+    const time = now();
+    if (request.method === "POST" && path === "/api/assistant/plan-accept") {
+      const body = await bodyOf(request); if (!body) return invalid();
+      return planAccept(body, request, env, session, time);
+    }
+    const options = catalog(env, time);
     if (!options.length) return failure(503, "eligibility_required", "Tutor Chat is awaiting a current provider eligibility and failure review.");
      if (request.method === "GET" && path === "/api/assistant/options") {
       const saved = await credential(env, session.account_id);
@@ -467,6 +559,8 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
      if (path === "/api/assistant/reasoning-send") return reasoningSend(body, env, session, options, adapter, time);
      if (path === "/api/assistant/flashcards-preview") return flashcardPreview(body, env, session, options, time);
      if (path === "/api/assistant/flashcards-send") return flashcardSend(body, env, session, options, adapter, time);
+     if (path === "/api/assistant/plan-preview") return planPreview(body, request, env, session, options, time);
+     if (path === "/api/assistant/plan-send") return planSend(body, request, env, session, options, adapter, time);
     if (path === "/api/assistant/credential") {
       if (!bodyHasExactly(body, ["key"]) || typeof body.key !== "string" || !/^[A-Za-z0-9_-]{20,256}$/.test(body.key)) return invalid();
       const encrypted = await seal(body.key, env.ASSISTANT_KEY_KEK!, `credential:${session.account_id}`);

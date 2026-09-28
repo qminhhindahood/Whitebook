@@ -13,7 +13,7 @@ type Practice = { revisionId: string; packageTitle: string; section: string; que
 export type PlanInputs = { dueCards: number; missed: Missed[]; practice: Practice[]; officialResultCount: number };
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
-function validDate(value: unknown): value is string {
+export function validDate(value: unknown): value is string {
   if (typeof value !== "string" || !YMD.test(value)) return false;
   try { return addCalendarDays(value, 0) === value; } catch { return false; }
 }
@@ -125,7 +125,7 @@ export function missedQuestions(attemptRows: AttemptEvidenceRow[], reviews: Guid
   }
   return missed;
 }
-async function context(request: Request, env: AccountEnv, accountId: string, now: number) {
+export async function planContext(request: Request, env: AccountEnv, accountId: string, now: number) {
   const [account, dates, scores, attempts, reviewed, packages] = await Promise.all([
     env.DB.prepare("SELECT time_zone FROM learner_accounts WHERE id = ?").bind(accountId).first<{ time_zone: string }>(),
     env.DB.prepare("SELECT test_date FROM learner_sat_dates WHERE account_id = ? AND is_primary = 1").bind(accountId).first<{ test_date: string }>(),
@@ -173,7 +173,7 @@ async function context(request: Request, env: AccountEnv, accountId: string, now
 async function show(request: Request, env: AccountEnv, session: Session, now: number): Promise<Response> {
   const [versions, ctx] = await Promise.all([
     all<VersionRow>(env, `SELECT ${VERSION_COLUMNS} FROM study_plan_versions WHERE account_id = ? ORDER BY version DESC`, session.account_id),
-    context(request, env, session.account_id, now),
+    planContext(request, env, session.account_id, now),
   ]);
   const requested = new URL(request.url).searchParams.get("version");
   if (requested && !versions.some((v) => v.id === requested)) return failure(404, "not_found", "This plan version is unavailable.");
@@ -209,7 +209,7 @@ async function rebuild(request: Request, env: AccountEnv, session: Session, now:
     return failure(400, "invalid_plan", "Open the latest plan before rebuilding.");
   const settings = validateSettings(body.settings);
   if (!settings) return failure(400, "invalid_settings", "Choose a study day, rest days, 10–240 daily minutes, and a valid optional official-score goal.");
-  const [ctx, previous] = await Promise.all([context(request, env, session.account_id, now), currentVersion(env, session.account_id)]);
+  const [ctx, previous] = await Promise.all([planContext(request, env, session.account_id, now), currentVersion(env, session.account_id)]);
   if (settings.primaryDate !== ctx.primaryDate || settings.primaryDate <= ctx.today)
     return failure(400, "invalid_date", "Choose a future primary SAT Weekend date on the Dashboard first.");
   if ((previous?.id ?? null) !== body.expectedVersionId) return failure(409, "plan_changed", "A newer plan exists. Reload before rebuilding.");

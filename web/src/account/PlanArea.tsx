@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, type ComponentType } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
+import type { PlanAssistantProps } from "./PlanAssistant";
 import "./plan.css";
 
 type Settings = { primaryDate: string; studyDays: number[]; restDays: number[]; dailyMinutes: number; officialScoreGoal: number | null };
@@ -14,6 +15,9 @@ type Props = { onSessionEnded: () => void; onGoDates: () => void; onAction: (act
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const defaultDays = [1, 2, 3, 4, 5];
 const emptySettings = (primaryDate: string): Settings => ({ primaryDate, studyDays: defaultDays, restDays: [0, 6], dailyMinutes: 30, officialScoreGoal: null });
+const PlanAssistant = lazy<ComponentType<PlanAssistantProps>>(() => import.meta.env.VITE_AI_RELEASE_ENABLED === "true"
+  ? import("./PlanAssistant").then(module => ({ default: module.PlanAssistant }))
+  : Promise.resolve({ default: (_props: PlanAssistantProps) => null }));
 
 async function planRequest(path: string, method = "GET", body?: unknown): Promise<Plan | { task: Task }> {
   const response = await accountFetch(path, method === "GET" ? undefined : {
@@ -135,6 +139,9 @@ export function PlanArea({ onSessionEnded, onGoDates, onAction }: Props) {
             <button type="button" disabled={busy || !settings.studyDays.length || plan.primaryDate <= plan.today} onClick={() => void rebuild()}>
               {plan.versions.length ? "Rebuild from current evidence" : "Create Study Plan"}</button></>}
         </section>
+        {import.meta.env.VITE_AI_RELEASE_ENABLED === "true" && settings && <Suspense fallback={null}><PlanAssistant
+          settings={{ ...settings, primaryDate: plan.primaryDate }} expectedVersionId={plan.versions[0]?.id ?? null}
+          onSessionEnded={onSessionEnded} onSaved={() => load()} /></Suspense>}
       </>}
         {plan.versions.length > 0 && <><section className="plan-progress" aria-labelledby="plan-progress-heading">
           <div><h3 id="plan-progress-heading">Plan progress</h3><p>{done} done · {pending} pending · {skipped} skipped in this version</p>
