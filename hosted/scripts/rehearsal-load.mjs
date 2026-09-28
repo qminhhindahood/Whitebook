@@ -5,13 +5,16 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { mapLimited } from "./map-limited.mjs";
+import { retryLoad } from "./retry-load.mjs";
 
 const HOSTED = resolve(import.meta.dirname, "..");
 const WORKER = resolve(HOSTED, "node_modules", "wrangler", "bin", "wrangler.js");
 const DATABASE = "whitebook-ticket-03-staging";
-const DEFAULT_ORIGIN = "https://whitebook-ticket-03-staging.anothermiralph.workers.dev";
+const DEFAULT_ORIGIN = "https://whitebook.docai.dpdns.org";
+const RELIABILITY_ORIGIN = "https://whitebook-reliability-staging.anothermiralph.workers.dev";
 const origin = new URL(process.env.WHITEBOOK_STAGING_URL || DEFAULT_ORIGIN);
-if (origin.hostname !== new URL(DEFAULT_ORIGIN).hostname || origin.protocol !== "https:") {
+if (![DEFAULT_ORIGIN, RELIABILITY_ORIGIN].includes(origin.origin)) {
   throw new Error("This rehearsal only runs against the configured staging Worker.");
 }
 
@@ -24,7 +27,7 @@ if (!Number.isInteger(learnerCount) || (diagnostic ? learnerCount !== 1 : learne
 }
 
 const runId = `${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomBytes(8).toString("hex")}`;
-const providerPrefix = `ticket16-rehearsal-${runId}`;
+const providerPrefix = `ticket03-rehearsal-${runId}`;
 const nowSeconds = Math.floor(Date.now() / 1000);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const sqlText = (value) => `'${String(value).replaceAll("'", "''")}'`;
@@ -59,7 +62,7 @@ function runWrangler(args) {
 function readD1Insights() {
   const result = spawnSync(process.execPath, [WORKER, "d1", "insights", DATABASE,
     "--sort-type=sum", "--sort-by=reads", "--limit=1000", "--time-period=1d", "--json"], {
-    cwd: HOSTED, encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024,
+    cwd: HOSTED, encoding: "utf8", windowsHide: true, timeout: 20_000, maxBuffer: 16 * 1024 * 1024,
   });
   if (result.error || result.status !== 0) return null;
   try {
@@ -89,10 +92,10 @@ function readDatabaseSizeBytes() {
 
 async function seedLearners() {
   const statements = learners.flatMap((learner) => [
-    `INSERT INTO learner_accounts (id, provider, provider_subject, email, display_name, created_at) VALUES (${sqlText(learner.accountId)}, 'google', ${sqlText(learner.providerSubject)}, ${sqlText(learner.email)}, 'Ticket 16 rehearsal', ${nowSeconds});`,
+    `INSERT INTO learner_accounts (id, provider, provider_subject, email, display_name, created_at) VALUES (${sqlText(learner.accountId)}, 'google', ${sqlText(learner.providerSubject)}, ${sqlText(learner.email)}, 'Ticket 03 rehearsal', ${nowSeconds});`,
     `INSERT INTO learner_sessions (token_hash, account_id, csrf_hash, expires_at, created_at) VALUES (${sqlText(learner.tokenHash)}, ${sqlText(learner.accountId)}, ${sqlText(learner.csrfHash)}, ${nowSeconds + 3600}, ${nowSeconds});`,
   ]);
-  const directory = await mkdtemp(resolve(tmpdir(), "whitebook-ticket16-seed-"));
+  const directory = await mkdtemp(resolve(tmpdir(), "whitebook-ticket03-seed-"));
   const file = resolve(directory, "seed.sql");
   try {
     await writeFile(file, `${statements.join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
@@ -105,8 +108,10 @@ async function seedLearners() {
 const requests = [];
 const cleanupResults = [];
 const failureCodes = {};
+const transportFailureKinds = { fetch: {}, body: {} };
 const runChecks = { questionCountCreated: 0, timerChecksPassed: 0, takeoverChecksPassed: 0 };
 let errorResponseLeakedSensitiveMaterial = false;
+let answerMaterialLeakedByLearnerRead = false;
 let d1Before = null;
 let d1After = null;
 let databaseBytesBefore = null;
@@ -127,12 +132,18 @@ async function call(learner, pathname, {
       method, headers, body: body === undefined ? undefined : JSON.stringify(body),
       redirect: "manual", signal: AbortSignal.timeout(30_000),
     });
-  } catch {
-    throw new Error(`A staging request failed during ${phase}.`);
+  } catch (error) {
+    const kind = error instanceof Error ? error.name : "unknown";
+    transportFailureKinds.fetch[kind] = (transportFailureKinds.fetch[kind] || 0) + 1;
+    if (phase === "load") requests.push({ status: "transport_error", elapsedMs: performance.now() - started, operation });
+    const failure = new Error(`A staging request failed during ${phase}.`);
+    failure.status = 0;
+    throw failure;
   }
   const elapsedMs = performance.now() - started;
+  const record = { status: response.status, elapsedMs, operation };
   if (phase === "load") {
-    requests.push({ status: response.status, elapsedMs, operation });
+    requests.push(record);
     learner.requestCount += 1;
   } else {
     cleanupResults.push(response.status);
@@ -153,24 +164,35 @@ async function call(learner, pathname, {
       /* The response body can be absent for a platform error. */
     }
     failureCodes[code] = (failureCodes[code] || 0) + 1;
-    throw new Error(`A staging ${operation} returned HTTP ${response.status} (${code}).`);
+    const error = new Error(`A staging ${operation} returned HTTP ${response.status} (${code}).`);
+    error.status = response.status;
+    throw error;
   }
   if (parse === "none") {
     await response.body?.cancel();
     return response;
   }
-  if (parse === "text") return { response, text: await response.text() };
-  if (parse === "bytes") {
-    const bytes = await response.arrayBuffer();
-    return bytes.byteLength;
+  try {
+    if (parse === "text") return { response, text: await response.text() };
+    if (parse === "bytes") {
+      const bytes = await response.arrayBuffer();
+      return bytes.byteLength;
+    }
+    return response.json();
+  } catch (error) {
+    const kind = error instanceof Error ? error.name : "unknown";
+    transportFailureKinds.body[kind] = (transportFailureKinds.body[kind] || 0) + 1;
+    record.status = "body_read_failed";
+    if (error && typeof error === "object") error.status = 0;
+    throw error;
   }
-  return response.json();
 }
 
 function assertNoAnswerMaterial(value) {
   if (value === null || typeof value !== "object") return;
   for (const [key, child] of Object.entries(value)) {
     if (/^(acceptedAnswers|answerKey|answerKeys|correctAnswer|correctAnswers)$/i.test(key)) {
+      answerMaterialLeakedByLearnerRead = true;
       throw new Error("An answer field appeared in a learner response.");
     }
     assertNoAnswerMaterial(child);
@@ -237,16 +259,16 @@ async function runLearner(learner) {
     throw new Error("The staging Section Exam did not contain the expected question count.");
   }
 
-  const presentationRows = await Promise.all(created.questions.map((question) =>
-    call(learner, `/api/library/${encodeURIComponent(selectedPackage.revisionId)}/questions/${encodeURIComponent(question.questionId)}`,
+  const presentationRows = await mapLimited(created.questions, 1, (question) =>
+    retryLoad(() => call(learner, `/api/library/${encodeURIComponent(selectedPackage.revisionId)}/questions/${encodeURIComponent(question.questionId)}`,
       { operation: "question presentation" })));
   presentationRows.forEach(assertNoAnswerMaterial);
   const visualPaths = new Set();
   presentationRows.forEach((row, index) => collectVisualPaths(
     row.presentation, selectedPackage.revisionId, created.questions[index].questionId, visualPaths,
   ));
-  const visualResults = await Promise.all([...visualPaths].map((path) =>
-    call(learner, path, { parse: "bytes", operation: "protected publication visual" })));
+  const visualResults = await mapLimited([...visualPaths], 1, (path) =>
+    retryLoad(() => call(learner, path, { parse: "bytes", operation: "protected publication visual" })));
   if (visualResults.some((size) => size <= 0)) {
     throw new Error("A selected publication visual could not be loaded.");
   }
@@ -408,6 +430,7 @@ const output = {
   statusCounts: statuses,
   statusCountsByOperation: operationStatuses,
   failureCodes,
+  transportFailureKinds,
   d1UsageWindow: {
     rowsReadBefore: d1Before?.rowsRead ?? null,
     rowsReadAfter: d1After?.rowsRead ?? null,
@@ -423,7 +446,7 @@ const output = {
   databaseBytesPeak,
   databaseBytesDelta: databaseBytesBefore !== null && databaseBytesPeak !== null
     ? databaseBytesPeak - databaseBytesBefore : null,
-  answerMaterialLeakedByLearnerRead: false,
+  answerMaterialLeakedByLearnerRead,
   errorResponseLeakedSensitiveMaterial,
   timerDurationChecksPassed: runChecks.timerChecksPassed,
   takeoverChecksPassed: runChecks.takeoverChecksPassed,
@@ -431,6 +454,6 @@ const output = {
   runError,
 };
 console.log(JSON.stringify(output, null, 2));
-  if (runError || output.attemptsCompleted !== learnerCount || output.syntheticAccountsDeleted !== learnerCount) {
+if (runError || output.attemptsCompleted !== learnerCount || output.syntheticAccountsDeleted !== learnerCount) {
   process.exitCode = 1;
 }

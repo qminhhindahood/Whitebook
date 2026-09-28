@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && node --test test/mapLimited.node.mjs test/retryLoad.node.mjs test/stagePublicationVisuals.node.mjs",
     "typecheck": "tsc --noEmit",
     "dev": "wrangler dev --local",
-    "build": "npm --prefix ../web run build:staging && node scripts/stage-reference-sheet.mjs",
+    "build": "npm --prefix ../web run build:staging && node scripts/stage-reference-sheet.mjs && node scripts/stage-publication-visuals.mjs",
     "probe": "node scripts/probe.mjs"
   },
   "devDependencies": {

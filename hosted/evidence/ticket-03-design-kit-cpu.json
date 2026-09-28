@@ -1,0 +1,10 @@
+{
+  "scriptName": "whitebook-ticket-03-staging",
+  "startedAt": "2026-09-28T01:58:26.154Z",
+  "finishedAt": "2026-09-28T02:02:17.738Z",
+  "source": "Cloudflare GraphQL workersInvocationsAdaptive",
+  "requests": 7085,
+  "errors": 0,
+  "cpuTimeP95Ms": 2.822,
+  "cpuTimeP99Ms": 6.58
+}

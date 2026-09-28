@@ -1,0 +1,88 @@
+{
+  "startedAt": "2026-09-28T01:58:26.154Z",
+  "finishedAt": "2026-09-28T02:02:17.738Z",
+  "target": "https://whitebook.docai.dpdns.org",
+  "syntheticLearners": 24,
+  "attemptsCompleted": 24,
+  "attemptsCreated": 24,
+  "completedSections": {
+    "Math": 12,
+    "Reading and Writing": 12
+  },
+  "questionsInCreatedAttempts": 1176,
+  "questionPresentationRequests": 1176,
+  "questionPresentationsLoaded": 1176,
+  "visualFetches": 4432,
+  "visualFetchesSucceeded": 4432,
+  "visualFetchesFailed": 0,
+  "workerRequests": 7048,
+  "workerRequestsPerLearner": 293.67,
+  "workerRequestsPerAttempt": 293.67,
+  "clientLatencyMs": {
+    "p50": 237.62,
+    "p95": 541.45,
+    "p99": 823.36,
+    "max": 2030.72
+  },
+  "http5xxResponses": 0,
+  "http1102Responses": 0,
+  "statusCounts": {
+    "200": 7000,
+    "201": 24,
+    "409": 24
+  },
+  "statusCountsByOperation": {
+    "account session check": {
+      "200": 24
+    },
+    "protected package library": {
+      "200": 24
+    },
+    "Math Section Exam creation": {
+      "201": 12
+    },
+    "Reading and Writing Section Exam creation": {
+      "201": 12
+    },
+    "question presentation": {
+      "200": 1176
+    },
+    "protected publication visual": {
+      "200": 4432
+    },
+    "learner request": {
+      "200": 1320
+    },
+    "cross-device takeover": {
+      "200": 24
+    },
+    "stale-editor rejection": {
+      "409": 24
+    }
+  },
+  "failureCodes": {},
+  "transportFailureKinds": {
+    "fetch": {},
+    "body": {}
+  },
+  "d1UsageWindow": {
+    "rowsReadBefore": 922611,
+    "rowsReadAfter": 945921,
+    "rowsReadDelta": 23310,
+    "rowsWrittenBefore": 5123,
+    "rowsWrittenAfter": 5861,
+    "rowsWrittenDelta": 738,
+    "queryPatternsBefore": 67,
+    "queryPatternsAfter": 67,
+    "method": "Wrangler D1 Insights sums observed SQL fingerprints in its rolling 24-hour window."
+  },
+  "databaseBytesBefore": 3891200,
+  "databaseBytesPeak": 4349952,
+  "databaseBytesDelta": 458752,
+  "answerMaterialLeakedByLearnerRead": false,
+  "errorResponseLeakedSensitiveMaterial": false,
+  "timerDurationChecksPassed": 24,
+  "takeoverChecksPassed": 24,
+  "syntheticAccountsDeleted": 24,
+  "runError": null
+}

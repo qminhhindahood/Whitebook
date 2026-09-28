@@ -64,20 +64,49 @@ function visualPaths(presentation: HostedPresentationData, revisionId: string, q
   }))];
 }
 
+async function loadOneAtATime<T, U>(items: T[], load: (item: T) => Promise<U>): Promise<U[]> {
+  const results: U[] = [];
+  for (const item of items) results.push(await load(item));
+  return results;
+}
+
+async function retryTransientContent<T>(load: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await load();
+    } catch (error) {
+      const transient = error instanceof RequestError ? error.status >= 500 :
+        error instanceof TypeError || (error instanceof Error &&
+          (error.name === "AbortError" || error.name === "TimeoutError"));
+      if (!transient || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+    }
+  }
+  throw new Error("A selected content request could not be loaded.");
+}
+
 export async function loadSelectedContent(snapshot: AttemptSnapshot): Promise<PresentationQuestion[]> {
-  const presentations = await Promise.all(snapshot.questions.map(async (question) => {
-    const item = await request<PresentationQuestion>(
+  const presentations = await loadOneAtATime(snapshot.questions, async (question) => {
+    const item = await retryTransientContent(() => request<PresentationQuestion>(
       `/api/library/${snapshot.revisionId}/questions/${question.questionId}`,
-    );
+    ));
     if (item.revisionId !== snapshot.revisionId || item.questionId !== question.questionId)
       throw new Error("A selected Question Presentation did not match this Attempt.");
     return item;
-  }));
+  });
   const paths = [...new Set(presentations.flatMap((item) =>
     visualPaths(item.presentation, snapshot.revisionId, item.questionId)))];
-  const results = await Promise.all(paths.map((path) => accountFetch(path, { method: "GET", credentials: "same-origin", cache: "no-store" })));
-  if (results.some((response) => !response.ok))
-    throw new Error("A required visual could not be loaded; the timer has not started. Retry loading.");
+  await loadOneAtATime(paths, async (path) => {
+    try {
+      await retryTransientContent(async () => {
+        const response = await accountFetch(path, { method: "GET", credentials: "same-origin", cache: "no-store" });
+        if (!response.ok) throw new RequestError("A required visual could not be loaded.", response.status);
+        if (!(await response.arrayBuffer()).byteLength) throw new RequestError("A required visual is empty.", 503);
+      });
+    } catch {
+      throw new Error("A required visual could not be loaded; the timer has not started. Retry loading.");
+    }
+  });
   return presentations;
 }
 
