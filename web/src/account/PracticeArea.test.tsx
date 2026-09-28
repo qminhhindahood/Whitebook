@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PracticeArea } from "./PracticeArea";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); sessionStorage.clear(); });
@@ -55,6 +55,44 @@ function apiFixture(visual: () => Response = () => new Response("image", { statu
   });
   vi.stubGlobal("fetch", fetchMock);
   return { calls, fetchMock };
+}
+
+function mathPracticeFixture(scriptUrl: string | null, calculatorConfigUnavailable = false, activeAttempt = false,
+  referenceSheetUnavailable = false) {
+  const calls: { path: string; init?: RequestInit }[] = [];
+  const link = { questionId: "math-q1", ordinal: 1, section: "Math", module: 1, questionNumber: 1,
+    responseType: "student_produced_response" };
+  const base = { attemptId: "math-attempt", revisionId: "math-revision", kind: "practice", section: "Math",
+    modules: [1], questionIds: [link.questionId], questions: [link], createdAt: 1_800_000_000_000 };
+  const activeSnapshot = { ...base, status: "active", state: { responses: {}, currentQuestionId: link.questionId }, stateVersion: 1,
+    startedAt: 1_800_000_000_000, serverNow: 1_800_000_000_000, deadlineAt: null,
+    editorToken: "a".repeat(64), lease: { held: true, expiresAt: 1_800_000_120_000 } };
+  vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close() {} })));
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
+    calls.push({ path, init });
+    if (path === "/api/library") return Response.json({ packages: [{ revisionId: "math-revision", title: "Reviewed Math", publishedRevision: 1, questionCount: 1 }] });
+    if (path === "/api/attempts" && !init?.method) return Response.json({ attempts: activeAttempt ? [{ attemptId: base.attemptId,
+      revisionId: base.revisionId, kind: "practice", status: "active", section: "Math", questionCount: 1,
+      createdAt: base.createdAt, startedAt: activeSnapshot.startedAt, deadlineAt: null, completedAt: null }] : [] });
+    if (path === "/api/attempts/math-attempt" && activeAttempt) return Response.json(activeSnapshot);
+    if (path === "/api/library/math-revision/questions") return Response.json({ questions: [link] });
+    if (path === "/api/library/math-revision/questions/math-q1") return Response.json({ ...link, revisionId: "math-revision",
+      presentation: { version: 3, stimulus: [], stem: [{ kind: "text", text: "Compute 2 + 2." }], choices: [] } });
+    if (path === "/api/attempts" && init?.method === "POST") return Response.json({ ...base, status: "preparing", state: {},
+      stateVersion: 0, startedAt: null, deadlineAt: null }, { status: 201 });
+    if (path === "/api/math/calculator-config") return calculatorConfigUnavailable
+      ? new Response("Unavailable", { status: 503 })
+      : Response.json({ configured: !!scriptUrl, scriptUrl });
+    if (path === "/api/math/reference-sheet.png") return referenceSheetUnavailable
+      ? new Response("Missing", { status: 404 })
+      : new Response("sheet", { status: 200, headers: { "Content-Type": "image/png" } });
+    if (path === "/api/attempts/math-attempt/start") return Response.json({ ...base, status: "active",
+      state: { responses: {}, currentQuestionId: link.questionId }, stateVersion: 1,
+      startedAt: 1_800_000_000_000, serverNow: 1_800_000_000_000, deadlineAt: null,
+      editorToken: "a".repeat(64), lease: { held: true, expiresAt: 1_800_000_120_000 } });
+    throw new Error(`Unexpected request ${path} ${String(init?.method)}`);
+  }));
+  return { calls, link };
 }
 
 it("creates from exactly the chosen revision and starts only after every presentation and visual is ready", async () => {
@@ -209,9 +247,76 @@ it("keeps Section selection visible and omits Practice-only setup fields for an 
 });
 
 it.each([
+  { name: "when Desmos is ready", checks: { scriptLoaded: true, constructorAvailable: true, instanceCreated: true, stateReadable: true, usableSize: true },
+    expectedMode: "graphing" },
+  { name: "when Desmos is unavailable", checks: { scriptLoaded: false, constructorAvailable: false, instanceCreated: false, stateReadable: false, usableSize: false },
+    expectedMode: "scientific" },
+])("starts Math Practice with the correct calculator $name", async ({ checks, expectedMode }) => {
+  const { calls } = mathPracticeFixture("https://www.desmos.com/api/v1.12/calculator.js?apiKey=fixture");
+  render(<PracticeArea initialRevisionId="math-revision" onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
+  const probe = await screen.findByTitle("Desmos graphing calculator") as HTMLIFrameElement;
+  expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
+  await act(async () => {
+    window.dispatchEvent(new MessageEvent("message", { source: probe.contentWindow, data: {
+      whitebookCalculator: true, type: "ready", payload: checks,
+    } }));
+  });
+  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+  expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+  expect(document.querySelector('[aria-label="Math tools"]')).toBeTruthy();
+  if (expectedMode === "graphing") {
+    expect(screen.getByRole("button", { name: "Graphing calculator" })).toBeTruthy();
+    const frame = await screen.findByTitle("Desmos graphing calculator") as HTMLIFrameElement;
+    expect(frame.getAttribute("src")).toBe("/app/calculator-frame");
+    expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+  } else {
+    expect(screen.queryByRole("button", { name: "Graphing calculator" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Expression" }), { target: { value: "2+2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
+    expect(document.querySelector(".scientific-calculator output")?.textContent).toBe("4");
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Reference Sheet" }));
+  expect(document.querySelector('[role="dialog"][aria-label="Reference Sheet"][aria-modal="true"]')).toBeTruthy();
+});
+
+it("keeps Math Practice available with the scientific calculator when calculator configuration is unavailable", async () => {
+  const { calls } = mathPracticeFixture(null, true);
+  render(<PracticeArea initialRevisionId="math-revision" onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
+  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Reference Sheet" })).toBeTruthy();
+  expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png"))
+    .toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+});
+
+it("does not start Math Practice when the hosted Reference Sheet cannot load", async () => {
+  const { calls } = mathPracticeFixture(null, false, false, true);
+  render(<PracticeArea initialRevisionId="math-revision" onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
+  expect((await screen.findByRole("alert")).textContent).toMatch(/Reference Sheet could not be loaded/);
+  expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
+});
+
+it("opens an active Math Practice Attempt without waiting for a second pre-start readiness probe", async () => {
+  const { calls } = mathPracticeFixture("https://www.desmos.com/api/v1.12/calculator.js?apiKey=fixture", false, true);
+  render(<PracticeArea onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Resume Attempt" }));
+  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(document.querySelector('[aria-label="Math tools"]')).toBeTruthy();
+  expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
+  expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png"))
+    .toBeGreaterThan(calls.findIndex((call) => call.path === "/api/attempts/math-attempt"));
+});
+
+it.each([
   { section: "Reading and Writing", responseType: "multiple_choice", answer: "B", expected: "B" },
   { section: "Math", responseType: "student_produced_response", answer: "12", expected: "12" },
 ])("completes a $section Practice journey from loading gate to graded Results", async ({ section, responseType, answer, expected }) => {
+  if (section === "Math") vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close() {} })));
   const revisionId = section === "Math" ? "math-revision" : "reading-revision";
   const link = { questionId: "q1", ordinal: 1, section, module: 1, questionNumber: 1, responseType };
   const visualPath = `/content/${revisionId}/q1/diagram.png`;
@@ -230,6 +335,8 @@ it.each([
         [{ kind: "text", text: "Choose the best answer." }],
       choices: responseType === "multiple_choice" ? "ABCD".split("").map((id) => ({ id, content: [{ kind: "text", text: `Option ${id}` }] })) : [],
     } });
+    if (path === "/api/math/calculator-config") return Response.json({ configured: false, scriptUrl: null });
+    if (path === "/api/math/reference-sheet.png") return new Response("sheet", { status: 200, headers: { "Content-Type": "image/png" } });
     if (path === visualPath) return new Response("image", { status: 200, headers: { "Content-Type": "image/png" } });
     if (path === "/api/attempts" && init?.method === "POST") return Response.json({ ...base, status: "preparing", state: {},
       stateVersion: 0, startedAt: null, deadlineAt: null }, { status: 201 });
@@ -263,6 +370,17 @@ it.each([
     expect(document.querySelector(".katex")).toBeTruthy();
     expect(screen.getByAltText("Diagram")).toBeTruthy();
     expect(calls.findIndex((call) => call.path === visualPath)).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+    expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+    expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
+    expect(document.querySelector('[aria-label="Math tools"]')).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Expression" }), { target: { value: "2+2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
+    expect(document.querySelector(".scientific-calculator output")?.textContent).toBe("4");
+    fireEvent.click(screen.getByRole("button", { name: "Reference Sheet" }));
+    expect(document.querySelector('[role="dialog"][aria-label="Reference Sheet"]')).toBeTruthy();
+    expect(screen.getByAltText("Math Reference Sheet").getAttribute("src")).toBe("/api/math/reference-sheet.png");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: answer } });
   } else {
     expect(screen.getByText("Read this passage.")).toBeTruthy();

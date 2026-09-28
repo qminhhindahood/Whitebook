@@ -243,30 +243,48 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
     if (timing === "sat_paced") setTiming("elapsed");
   }
 
+  async function mathCalculatorScriptUrl(): Promise<string | null> {
+    try {
+      const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
+      return calculator.scriptUrl;
+    } catch (cause) {
+      if (cause instanceof RequestError && cause.status === 401) throw cause;
+      return null;
+    }
+  }
+
+  async function prepareMathResources(): Promise<string | null> {
+    const scriptUrl = await mathCalculatorScriptUrl();
+    let readyScriptUrl: string | null = null;
+    if (scriptUrl) {
+      await loadDesmos(scriptUrl);
+      const ready = await new Promise<boolean>((resolve) => {
+        let timeout: number | undefined;
+        const complete = (usable: boolean) => {
+          if (calculatorProbeResolver.current !== complete) return;
+          calculatorProbeResolver.current = null;
+          if (timeout !== undefined) window.clearTimeout(timeout);
+          setCalculatorProbeUrl("");
+          resolve(usable);
+        };
+        calculatorProbeResolver.current = complete;
+        setCalculatorProbeUrl(scriptUrl!);
+        timeout = window.setTimeout(() => complete(false), 26_000);
+      });
+      if (ready) readyScriptUrl = scriptUrl;
+    }
+    await prepareReferenceSheet();
+    return readyScriptUrl;
+  }
+
   async function openLoadingGate(snapshot: AttemptSnapshot) {
     setPreparingAttemptId(snapshot.attemptId);
     setLoadError(""); setLoadMessage("Loading selected questions and visuals…");
     try {
       const prepared = await loadSelectedContent(snapshot);
-      if (snapshot.kind === "section_exam" && snapshot.section === "Math") {
+      if (snapshot.section === "Math") {
         setLoadMessage("Preparing the Math calculator and Reference Sheet…");
-        const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
-        let readyScriptUrl: string | null = null;
-        if (calculator.scriptUrl) {
-          await loadDesmos(calculator.scriptUrl);
-          const ready = await new Promise<boolean>((resolve) => {
-            calculatorProbeResolver.current = resolve;
-            setCalculatorProbeUrl(calculator.scriptUrl!);
-            window.setTimeout(() => {
-              if (calculatorProbeResolver.current === resolve) {
-                calculatorProbeResolver.current = null; setCalculatorProbeUrl(""); resolve(false);
-              }
-            }, 26_000);
-          });
-          if (ready) readyScriptUrl = calculator.scriptUrl;
-        }
-        await prepareReferenceSheet();
-        setDesmosScriptUrl(readyScriptUrl);
+        setDesmosScriptUrl(await prepareMathResources());
       }
       if (snapshot.status !== "preparing") {
         setActiveQuestions(prepared);
@@ -340,11 +358,12 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
       }
       setLoadMessage("Loading this Attempt and its visuals…");
       const prepared = await loadSelectedContent(snapshot);
-      if (snapshot.kind === "section_exam" && snapshot.section === "Math") {
-        const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
-        if (calculator.scriptUrl) await loadDesmos(calculator.scriptUrl);
-        setDesmosScriptUrl(calculator.scriptUrl);
+      if (snapshot.section === "Math" && snapshot.status === "active") {
+        setLoadMessage("Loading the Math calculator and Reference Sheet…");
+        const scriptUrl = await mathCalculatorScriptUrl();
+        if (scriptUrl) await loadDesmos(scriptUrl);
         await prepareReferenceSheet();
+        setDesmosScriptUrl(scriptUrl);
       }
       setActiveQuestions(prepared);
       setActiveAttempt(snapshot);
@@ -375,7 +394,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
       <p>Checking graphing calculator readiness; the scientific calculator remains available if it cannot be verified.</p>
       <DesmosReadinessProbe options={{ expressions: true, settingsMenu: false }} onResult={(checks) => {
         const resolver = calculatorProbeResolver.current;
-        if (resolver) { calculatorProbeResolver.current = null; setCalculatorProbeUrl(""); resolver(Object.values(checks).every(Boolean)); }
+        if (resolver) resolver(Object.values(checks).every(Boolean));
       }} />
     </div>}
     <header className="practice-area__heading"><div><h2 id="practice-heading">Practice</h2>
