@@ -24,13 +24,14 @@ function presentation(questionId: string) {
   } };
 }
 
-function apiFixture(visual: () => Response = () => new Response("image", { status: 200 })) {
+function apiFixture(visual: () => Response = () => new Response("image", { status: 200 }),
+  listedQuestions = questionLinks) {
   const calls: { path: string; init?: RequestInit }[] = [];
   const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
     calls.push({ path, init });
     if (path === "/api/library") return Response.json({ packages });
     if (path === "/api/attempts" && !init?.method) return Response.json({ attempts: [] });
-    if (path === "/api/library/reviewed-rw/questions") return Response.json({ questions: questionLinks });
+    if (path === "/api/library/reviewed-rw/questions") return Response.json({ questions: listedQuestions });
     if (path === "/api/library/reviewed-rw/questions/q1") return Response.json(presentation("q1"));
     if (path === "/api/library/reviewed-rw/questions/q2") return Response.json(presentation("q2"));
     if (path === "/api/attempts" && init?.method === "POST") return Response.json({
@@ -78,6 +79,24 @@ it("creates from exactly the chosen revision and starts only after every present
     "/content/reviewed-rw/q1/passage.png", `/content/reviewed-rw/q2/${"b".repeat(64)}.png`,
   ]);
   expect(calls.every((call) => call.init?.credentials === "same-origin" && call.init?.cache === "no-store")).toBe(true);
+});
+
+it("offers published Question Categories and sends the selected category with a filtered count", async () => {
+  const categorized = questionLinks.map((question, index) => ({ ...question,
+    category: index === 1 ? "Vocabulary" : "Grammar" }));
+  const { calls } = apiFixture(undefined, categorized);
+  render(<PracticeArea initialRevisionId="reviewed-rw" onSessionEnded={() => {}} />);
+  const selector = await screen.findByLabelText("Question Category") as HTMLSelectElement;
+  expect([...selector.options].map((option) => option.textContent)).toEqual(["All categories", "Grammar", "Vocabulary"]);
+  fireEvent.change(selector, { target: { value: "Vocabulary" } });
+  expect((screen.getByRole("spinbutton", { name: /Question count/i }) as HTMLInputElement).max).toBe("1");
+  expect(screen.getByText(/Only 1 question in this category/)).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Prepare Attempt" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByRole("spinbutton", { name: /Question count/i }), { target: { value: "1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Prepare Attempt" }));
+  await waitFor(() => expect(calls.some((call) => call.path === "/api/attempts" && call.init?.method === "POST")).toBe(true));
+  const create = calls.find((call) => call.path === "/api/attempts" && call.init?.method === "POST")!;
+  expect(JSON.parse(String(create.init?.body))).toMatchObject({ category: "Vocabulary", count: 1 });
 });
 
 it("leaves the clock unstarted and offers a retry when a selected visual fails", async () => {

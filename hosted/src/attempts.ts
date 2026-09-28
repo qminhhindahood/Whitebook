@@ -10,6 +10,7 @@ type Timing =
   | { mode: "sat_paced" };
 type AttemptConfig = {
   kind?: "practice" | "section_exam";
+  category: string | null;
   section: Section;
   modules: number[];
   count: number;
@@ -84,8 +85,11 @@ function parseConfig(value: Record<string, unknown>): AttemptConfig | Response {
   if (kind === "section_exam") {
     if (section !== "Math" && section !== "Reading and Writing")
       return failure(400, "invalid_attempt", "Choose a supported Section: Math or Reading and Writing.");
+    if (value.category !== undefined && value.category !== null)
+      return failure(400, "invalid_attempt", "Question Category is available for Practice Attempts only.");
     return {
       kind,
+      category: null,
       section,
       modules: [1, 2],
       count: section === "Math" ? 44 : 54,
@@ -95,6 +99,10 @@ function parseConfig(value: Record<string, unknown>): AttemptConfig | Response {
   }
   if (kind !== undefined && kind !== "practice")
     return failure(400, "invalid_attempt", "Choose a supported Attempt kind.");
+  const category = value.category;
+  if (category !== undefined && category !== null &&
+      (typeof category !== "string" || !category.trim()))
+    return failure(400, "invalid_attempt", "Choose a valid Question Category.");
   const modules = value.modules;
   const count = value.count;
   const ordering = value.ordering;
@@ -124,6 +132,7 @@ function parseConfig(value: Record<string, unknown>): AttemptConfig | Response {
 
   return {
     kind: "practice",
+    category: typeof category === "string" ? category : null,
     section,
     modules: [...modules] as number[],
     count: Number(count),
@@ -161,6 +170,7 @@ function snapshot(row: AttemptRow, serverNow: number) {
     kind: row.kind,
     status: row.status,
     section: config.section,
+    category: config.category ?? null,
     modules: config.modules,
     ordering: config.ordering,
     timing: config.timing,
@@ -188,6 +198,7 @@ function summary(row: AttemptRow) {
     kind: row.kind,
     status: row.status,
     section: config.section,
+    category: config.category ?? null,
     questionCount: parseQuestions(row).length,
     createdAt: row.created_at_ms,
     startedAt: row.started_at_ms,
@@ -250,23 +261,37 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
         "question_number, response_type, presentation_json FROM publication_questions " +
         "WHERE revision_id = ? AND section = ? AND module IN (" + placeholders + ") ORDER BY ordinal")
       .bind(revisionId, config.section, ...config.modules));
+  let filtered = candidates;
+  if (config.category) {
+    const metadata = await rows<{ question_id: string; category: string }>(env.DB.prepare(
+      "SELECT question_id, category FROM publication_question_categories WHERE revision_id = ?",
+    ).bind(revisionId));
+    if (!metadata.some((item) => item.category === config.category))
+      return failure(400, "invalid_attempt", "Choose a published Question Category for this Test Package.");
+    const byQuestion = new Map(metadata.map((item) => [item.question_id, item.category]));
+    filtered = candidates.filter((question) => byQuestion.get(question.question_id) === config.category);
+    if (filtered.length === 0)
+      return failure(400, "invalid_attempt", "No questions in this Question Category match the selected Section and Modules.");
+  }
   const eligible = sectionExam
-    ? [...new Map(candidates.map((question) => [question.question_id, question])).values()]
-    : candidates;
+    ? [...new Map(filtered.map((question) => [question.question_id, question])).values()]
+    : filtered;
   if (config.count > eligible.length)
     return failure(400, "invalid_attempt", sectionExam
       ? `This Section needs at least ${config.count} unique questions to create a Section Exam.`
-      : "The selected question count exceeds this Section and Module selection.");
+      : config.category
+        ? `Only ${eligible.length} questions in this Question Category match the selected Section and Modules.`
+        : "The selected question count exceeds this Section and Module selection.");
   if (!sectionExam && config.timing.mode === "sat_paced" &&
       (config.modules.length !== 1 ||
        !((config.section === "Math" && config.count === 22) ||
          (config.section === "Reading and Writing" && config.count === 27)) ||
-       candidates.length !== config.count)) {
+       filtered.length !== config.count)) {
     return failure(400, "invalid_attempt", "SAT-Paced Timing requires one complete Module.");
   }
 
   const selected = config.ordering === "random" ? shuffle(eligible).slice(0, config.count)
-    : candidates.slice(0, config.count);
+    : eligible.slice(0, config.count);
   const moduleSize = config.section === "Math" ? 22 : 27;
   const questions: QuestionLink[] = selected.map((question, index) => {
     const presentation = JSON.parse(question.presentation_json) as { choices?: { id?: unknown }[] };

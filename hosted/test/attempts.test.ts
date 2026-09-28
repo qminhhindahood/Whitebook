@@ -71,6 +71,10 @@ async function fixture() {
     })),
   ];
   const questions: QuestionRow[] = [...practiceQuestions, ...sectionExamQuestions];
+  const categories = new Map([
+    ["reviewed-rw:q1", "Grammar"], ["reviewed-rw:q2", "Vocabulary"],
+    ["reviewed-rw:q3", "Grammar"],
+  ]);
   const answers = questions.map((question, index) => ({
     question_id: question.question_id,
     accepted_answers_json: JSON.stringify([index === 1 ? "A" : "B"]),
@@ -103,6 +107,12 @@ async function fixture() {
           return null;
         },
         async all() {
+          if (sql.includes("FROM publication_question_categories")) {
+            const revisionId = String(args[0]);
+            return { results: [...categories].filter(([key]) => key.startsWith(`${revisionId}:`))
+              .map(([key, category]) => ({ question_id: key.slice(revisionId.length + 1), category })),
+              meta: { rows_read: categories.size, rows_written: 0 } };
+          }
           if (sql.includes("FROM publication_questions")) {
             const revisionId = String(args[0]);
             const section = String(args[1]);
@@ -405,6 +415,59 @@ it("rejects counts that exceed the selected Section and Module pool", async () =
 
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "invalid_attempt" } });
+});
+
+it("filters Practice questions by a published category and retains it for resume and History", async () => {
+  const { credentials, call } = await fixture();
+  const response = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-rw", section: "Reading and Writing", modules: [1, 2],
+      count: 2, ordering: "source", timing: { mode: "elapsed" }, category: "Grammar" } });
+  expect(response.status).toBe(201);
+  const created = await response.json() as { attemptId: string; category: string; questionIds: string[] };
+  expect(created).toMatchObject({ category: "Grammar", questionIds: ["q1", "q3"] });
+  const resumed = await call(`/api/attempts/${created.attemptId}`, { who: credentials[0] });
+  expect(await resumed.json()).toMatchObject({ category: "Grammar", questionIds: ["q1", "q3"] });
+  const history = await call("/api/attempts", { who: credentials[0] });
+  expect(await history.json()).toMatchObject({ attempts: [{ category: "Grammar", questionCount: 2 }] });
+});
+
+it("rejects a category absent from published metadata without creating an Attempt", async () => {
+  const { credentials, call, attempts } = await fixture();
+  const response = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-math", section: "Math", modules: [1], count: 1,
+      ordering: "source", timing: { mode: "elapsed" }, category: "Algebra" } });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "invalid_attempt", message: expect.stringMatching(/category/i) } });
+  const unknown = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-rw", section: "Reading and Writing", modules: [1], count: 1,
+      ordering: "source", timing: { mode: "elapsed" }, category: "Invented" } });
+  expect(unknown.status).toBe(400);
+  expect(await unknown.json()).toMatchObject({ error: { message: expect.stringMatching(/published Question Category/i) } });
+  expect(attempts.size).toBe(0);
+});
+
+it("keeps unfiltered Practice available when the revision has no category metadata", async () => {
+  const { credentials, call } = await fixture();
+  const response = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-math", section: "Math", modules: [1], count: 2,
+      ordering: "source", timing: { mode: "elapsed" } } });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ category: null, questionIds: ["math-q1", "math-q2"] });
+});
+
+it("reports zero eligible questions and insufficient filtered counts", async () => {
+  const { credentials, call, attempts } = await fixture();
+  const base = { revisionId: "reviewed-rw", section: "Reading and Writing", ordering: "source",
+    timing: { mode: "elapsed" }, category: "Vocabulary" };
+  const empty = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { ...base, modules: [2], count: 1 } });
+  expect(empty.status).toBe(400);
+  expect(await empty.json()).toMatchObject({ error: { message: expect.stringMatching(/no.*questions/i) } });
+  const short = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { ...base, modules: [1, 2], count: 2 } });
+  expect(short.status).toBe(400);
+  expect(await short.json()).toMatchObject({ error: { message: expect.stringMatching(/only 1.*category/i) } });
+  expect(attempts.size).toBe(0);
 });
 
 it("starts the server clock and editor lease only after the Loading Gate", async () => {
