@@ -10,6 +10,7 @@ import { reviewRoute } from "./review";
 import { mathToolsRoute } from "./mathTools";
 import { progressRoute } from "./progress";
 import { planRoute } from "./plan";
+import { assistantRoute, type AssistantEnv } from "./assistant";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -17,7 +18,7 @@ type Statement = {
   run(): Promise<{ success: boolean; meta: { rows_read: number; rows_written: number } }>;
 };
 
-type Env = AccountEnv & {
+type Env = AccountEnv & AssistantEnv & {
   DB: { prepare(sql: string): Statement };
   ASSETS: { fetch(request: Request): Promise<Response> };
   STAGING_ACCESS_CODE: string;
@@ -158,6 +159,8 @@ export default {
       return env.ASSETS.fetch(request);
     const meter: Meter = { rowsRead: 0, rowsWritten: 0 };
     try {
+      const assistantResponse = assistantRoute(request, env);
+      if (assistantResponse) return await assistantResponse;
       const scoresResponse = scoresRoute(request, env);
       if (scoresResponse) return await scoresResponse;
       const progressResponse = progressRoute(request, env);
@@ -189,7 +192,7 @@ export default {
       const contentMatch = request.method === "GET" && CONTENT_PATH.exec(path);
       if (contentMatch) return measured(await content(request, env, meter, contentMatch[1], contentMatch[2], contentMatch[3]), meter);
     } catch {
-      if (path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/cards/") || path.startsWith("/api/library") || path.startsWith("/api/attempts") || path.startsWith("/api/review/") || path.startsWith("/api/math/") || path.startsWith("/content/"))
+      if (path.startsWith("/api/assistant/") || path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/cards/") || path.startsWith("/api/library") || path.startsWith("/api/attempts") || path.startsWith("/api/review/") || path.startsWith("/api/math/") || path.startsWith("/content/"))
         return Response.json({ error: { code: "service_unavailable", message: "Whitebook could not reach your account. Try again." } },
           { status: 503, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
       return closed(503);

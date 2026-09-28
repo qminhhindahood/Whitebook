@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { SatWeekend } from "./SatWeekend";
 import { accountFetch, csrfToken } from "./accountClient";
 import { FlashcardsArea } from "./FlashcardStudy";
@@ -12,10 +12,14 @@ import { PlanArea } from "./PlanArea";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; timeZone: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
+const TutorChat = lazy(() => import.meta.env.VITE_AI_RELEASE_ENABLED === "true"
+  ? import("./TutorChat") : Promise.resolve({ default: () => null }));
 
 export { accountFetch, csrfToken } from "./accountClient";
 
 export function AccountApp() {
+  const tutorEnabled = import.meta.env.VITE_AI_RELEASE_ENABLED === "true";
+  const [tutorAvailable, setTutorAvailable] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -24,7 +28,7 @@ export function AccountApp() {
   const [timeZone, setTimeZone] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice" | "history" | "progress" | "plan">("dashboard");
+  const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice" | "history" | "progress" | "plan" | "tutor">("dashboard");
   const [practiceRevisionId, setPracticeRevisionId] = useState<string>();
   const [practiceSection, setPracticeSection] = useState<string>();
   const [historyTarget, setHistoryTarget] = useState<{ attemptId: string; questionId: string }>();
@@ -179,6 +183,7 @@ export function AccountApp() {
           <p>Your private study space follows you across devices.</p>
         </section>
         <nav className="dashboard-nav" aria-label="Workspace areas">
+          {tutorEnabled && tutorAvailable && <button type="button" className={view === "tutor" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "tutor" ? "page" : undefined} onClick={() => setView("tutor")}>Tutor Chat</button>}
           <button type="button" className={view === "dashboard" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => setView("dashboard")}>Dashboard</button>
           <button type="button" className={view === "cards" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "cards" ? "page" : undefined} onClick={() => setView("cards")}>Flashcards</button>
           <button type="button" className={view === "library" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "library" ? "page" : undefined} onClick={() => setView("library")}>Library</button>
@@ -187,7 +192,8 @@ export function AccountApp() {
           <button type="button" className={view === "progress" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "progress" ? "page" : undefined} onClick={() => setView("progress")}>Progress</button>
           <button type="button" className={view === "plan" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "plan" ? "page" : undefined} onClick={() => setView("plan")}>Study Plan</button>
         </nav>
-        {view === "cards" ?
+        {tutorEnabled && <Suspense fallback={null}><TutorChat key={me.account.id} workspaceView={view} onAvailability={setTutorAvailable} onSessionEnded={handleSessionEnded} /></Suspense>}
+        {view === "tutor" && tutorEnabled ? null : view === "cards" ?
           <FlashcardsArea onSessionEnded={handleSessionEnded} /> : view === "library" ?
           <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={(revisionId) => {
             setPracticeRevisionId(revisionId); setPracticeSection(undefined); setView("practice");

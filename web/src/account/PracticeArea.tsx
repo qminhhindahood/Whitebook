@@ -18,14 +18,14 @@ export type AttemptSnapshot = {
   kind?: "practice" | "section_exam"; section: string; modules: number[]; questionIds: string[]; questions: QuestionLink[];
   category?: string | null;
   state: Record<string, unknown>; stateVersion: number; createdAt?: number; startedAt: number | null;
-  deadlineAt: number | null; serverNow?: number; completedAt?: number | null;
+  deadlineAt: number | null; serverNow?: number; completedAt?: number | null; assisted?: boolean;
   editorToken?: string; lease?: { held: boolean; expiresAt: number | null };
 };
 export type AttemptSummary = {
   attemptId: string; revisionId: string; status: AttemptSnapshot["status"];
   kind?: "practice" | "section_exam"; section: string; questionCount: number; createdAt: number; startedAt: number | null;
   category?: string | null;
-  deadlineAt: number | null; completedAt: number | null;
+  deadlineAt: number | null; completedAt: number | null; assisted?: boolean;
 };
 export type AttemptResult = {
   correctCount: number; questionCount: number;

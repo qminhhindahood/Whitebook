@@ -52,6 +52,7 @@ type AttemptRow = {
   result_json: string | null;
   editor_token_hash: string | null;
   editor_lease_expires_at_ms: number | null;
+  assisted_at_ms: number | null;
 };
 
 const ROOT = "/api/attempts";
@@ -148,7 +149,7 @@ async function rows<T>(statement: ReturnType<AttemptEnv["DB"]["prepare"]>): Prom
 async function attemptRow(env: AttemptEnv, accountId: string, attemptId: string): Promise<AttemptRow | null> {
   return env.DB.prepare("SELECT id, account_id, revision_id, kind, status, config_json, questions_json, " +
       "state_json, state_version, created_at_ms, started_at_ms, deadline_at_ms, completed_at_ms, " +
-      "result_json, editor_token_hash, editor_lease_expires_at_ms FROM learner_attempts " +
+      "result_json, editor_token_hash, editor_lease_expires_at_ms, assisted_at_ms FROM learner_attempts " +
       "WHERE id = ? AND account_id = ?")
     .bind(attemptId, accountId).first<AttemptRow>();
 }
@@ -182,6 +183,7 @@ function snapshot(row: AttemptRow, serverNow: number) {
     startedAt: row.started_at_ms,
     deadlineAt: row.deadline_at_ms,
     completedAt: row.completed_at_ms,
+    assisted: row.assisted_at_ms !== null,
     lease: {
       held: row.editor_lease_expires_at_ms !== null && row.editor_lease_expires_at_ms > serverNow,
       expiresAt: row.editor_lease_expires_at_ms,
@@ -204,13 +206,14 @@ function summary(row: AttemptRow) {
     startedAt: row.started_at_ms,
     deadlineAt: row.deadline_at_ms,
     completedAt: row.completed_at_ms,
+    assisted: row.assisted_at_ms !== null,
   };
 }
 
 async function listAttempts(env: AttemptEnv, accountId: string, now: number): Promise<Response> {
   const items = await rows<AttemptRow>(env.DB.prepare("SELECT id, account_id, revision_id, kind, status, " +
       "config_json, questions_json, state_json, state_version, created_at_ms, started_at_ms, deadline_at_ms, " +
-      "completed_at_ms, result_json, editor_token_hash, editor_lease_expires_at_ms " +
+      "completed_at_ms, result_json, editor_token_hash, assisted_at_ms " +
       "FROM learner_attempts WHERE account_id = ? ORDER BY created_at_ms DESC").bind(accountId));
   const current = await Promise.all(items.map((row) => enforceSectionDeadline(env, row, now)));
   if (current.some((row) => !row)) return failure(503, "attempt_unavailable", "Whitebook could not refresh Attempt history. Try again.");
@@ -840,6 +843,19 @@ async function getResults(env: AttemptEnv, accountId: string, attemptId: string,
     result: JSON.parse(row.result_json) });
 }
 
+async function markAssisted(env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const row = await attemptRow(env, accountId, attemptId);
+  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  if (row.kind !== "practice" || row.status !== "active")
+    return failure(409, "assisted_unavailable", "Only an active Practice Attempt can become Assisted Practice.");
+  const saved = await env.DB.prepare("UPDATE learner_attempts SET assisted_at_ms = ? WHERE id = ? AND account_id = ? AND kind = 'practice' AND status = 'active' AND assisted_at_ms IS NULL")
+    .bind(now, attemptId, accountId).run();
+  if (!saved.success) return failure(503, "attempt_unavailable", "Whitebook could not enable Assisted Practice. Try again.");
+  const updated = await attemptRow(env, accountId, attemptId);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  return json({ ...snapshot(updated, now), assisted: true });
+}
+
 export function attemptRoute(request: Request, env: AttemptEnv, now: () => number = Date.now): Promise<Response> | null {
   const path = new URL(request.url).pathname;
   if (path !== ROOT && !path.startsWith(ROOT + "/")) return null;
@@ -858,7 +874,7 @@ export function attemptRoute(request: Request, env: AttemptEnv, now: () => numbe
     if (request.method === "POST" && path === ROOT)
       return createAttempt(request, env, session.account_id, serverNow);
 
-    const match = new RegExp("^/api/attempts/([0-9a-f-]{36})(?:/(start|write|heartbeat|takeover|submit|results|finish-module|continue|pause|resume))?$", "i").exec(path);
+    const match = new RegExp("^/api/attempts/([0-9a-f-]{36})(?:/(start|write|heartbeat|takeover|submit|results|assisted|finish-module|continue|pause|resume))?$", "i").exec(path);
     if (!match) return failure(404, "not_found", "This Attempt action is unavailable.");
     const attemptId = match[1];
     if (request.method === "GET" && !match[2])
@@ -877,6 +893,7 @@ export function attemptRoute(request: Request, env: AttemptEnv, now: () => numbe
     if (request.method === "POST" && match[2] === "heartbeat") return heartbeat(request, env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "takeover") return takeover(env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "submit") return submitAttempt(request, env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "assisted") return markAssisted(env, session.account_id, attemptId, serverNow);
     if (request.method === "GET" && match[2] === "results") return getResults(env, session.account_id, attemptId, serverNow);
     return failure(404, "not_found", "This Attempt action is unavailable.");
   })();

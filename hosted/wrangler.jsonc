@@ -4,6 +4,7 @@
   "compatibility_date": "2026-09-26",
   "workers_dev": true,
   "vars": {
+    "AI_RELEASE_ENABLED": "false",
     "APP_ORIGIN": "https://whitebook-ticket-03-staging.anothermiralph.workers.dev"
   },
   "assets": {
