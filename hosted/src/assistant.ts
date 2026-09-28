@@ -211,11 +211,10 @@ async function reasoningContext(env: AssistantEnv, accountId: string, reviewId: 
   const correctChoiceText = ((presentation as { choices?: { id?: unknown; content?: unknown[] }[] }).choices ?? [])
     .filter(choice => acceptedKeys.has(String(choice.id ?? "").toUpperCase())).flatMap(choice => presentationText({ stimulus: [], stem: choice.content ?? [], choices: [] }));
   const revealed = review.revealed_at_ms !== null;
-  const contextForHint: ReasoningContext = { reviewId, revisionId: review.revision_id, questionId: review.question_id,
+  return { reviewId, revisionId: review.revision_id, questionId: review.question_id,
     section: question.section, responseType: question.response_type, revealed, response: grade.response,
-    acceptedAnswers: grade.acceptedAnswers, presentation, questionText, correctChoiceText, fallbackHint: null };
-  const fallbackHint = help?.reviewed_hint && !unsafeReasoning(help.reviewed_hint, contextForHint) ? help.reviewed_hint : null;
-  return { ...contextForHint, fallbackHint };
+    acceptedAnswers: grade.acceptedAnswers, presentation, questionText, correctChoiceText,
+    fallbackHint: help?.reviewed_hint ?? null };
 }
 
 async function reasoningPreview(body: Record<string, unknown>, env: AssistantEnv, session: Session, options: Option[], now: number): Promise<Response> {

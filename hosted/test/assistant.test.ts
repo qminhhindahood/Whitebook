@@ -245,6 +245,15 @@ it("releases answer-neutral pre-reveal reasoning and uses a withholding state wh
   expect(await withheld.json()).toMatchObject({ withheld: true, answerWithheld: true, hint: null });
 });
 
+it("always shows curated reviewed hints when generated pre-reveal text is withheld", async () => {
+  const f = await fixture();
+  const review = await seedGuidedReview(f, "Reading and Writing", false, "Answer is C.");
+  const preview = await makeReasoningPreview(f, review.reviewId);
+  f.adapter.mockResolvedValueOnce("The answer is C.");
+  const response = await f.call("reasoning-send", { previewId: preview.previewId, visitId: f.input.visitId, consent: true });
+  expect(await response.json()).toMatchObject({ withheld: true, answerWithheld: true, hint: "Answer is C." });
+});
+
 it("does not upgrade a hidden-state preview after the server reveals the answer", async () => {
   const f = await fixture();
   const review = await seedGuidedReview(f);
