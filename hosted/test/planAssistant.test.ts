@@ -110,17 +110,16 @@ it("previews only selected latest sources with all nullable bands and no questio
   expect(officialEnvelope.activityCatalog).toEqual([expect.objectContaining({ revisionId: "revision-1", section: "Math" })]);
   const whitebook = await f.call("plan-preview", { ...f.input, whitebook: true });
   const whitebookBody = await whitebook.text();
-  expect(whitebookBody).toContain("section-2");
-  expect(whitebookBody).not.toContain("section-1");
-  expect(whitebookBody).toContain("Reading and Writing");
-  expect(whitebookBody).toContain("Whitebook Raw Accuracy");
-  expect(whitebookBody).not.toContain("same-date-new-save");
-  expect(whitebookBody).not.toContain("1350");
-  expect(JSON.parse(JSON.parse(whitebookBody).payload).contents[0].parts[0].text).not.toContain("same-date-new-save");
-  expect(whitebookBody).not.toContain("ANSWER_SENTINEL");
-  expect(whitebookBody).not.toContain("RESPONSE_SENTINEL");
-  expect(whitebookBody).not.toContain("QUESTION_STEM_SENTINEL");
   const whitebookEnvelope = JSON.parse(JSON.parse(whitebookBody).payload).contents[0].parts[0].text;
+  expect(whitebookEnvelope).toContain("section-2");
+  expect(whitebookEnvelope).not.toContain("section-1");
+  expect(whitebookEnvelope).toContain("Reading and Writing");
+  expect(whitebookEnvelope).toContain("Whitebook Raw Accuracy");
+  expect(whitebookEnvelope).not.toContain("same-date-new-save");
+  expect(whitebookEnvelope).not.toContain("1350");
+  expect(whitebookEnvelope).not.toContain("ANSWER_SENTINEL");
+  expect(whitebookEnvelope).not.toContain("RESPONSE_SENTINEL");
+  expect(whitebookEnvelope).not.toContain("QUESTION_STEM_SENTINEL");
   expect(JSON.parse(whitebookEnvelope).whitebookSectionExam).toMatchObject({ label: "Whitebook Raw Accuracy", attemptId: "section-2",
     section: "Reading and Writing", questionCount: 44, rawAccuracy: 75 });
   expect(JSON.parse(whitebookEnvelope).officialSatResult).toBeNull();

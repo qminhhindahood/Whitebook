@@ -1,0 +1,9 @@
+{
+  "releaseId": "reviewed-five-20260927",
+  "expectedVisuals": 2272,
+  "bucket": "whitebook-private-publication",
+  "publicationArchiveKey": "releases/reviewed-five-20260927/publication.tar.gz",
+  "publicationArchiveSha256": "e91b10279e83ede3b5c959e7b02eb8e727a0d362e9db141cc3bf5aae7a86fe19",
+  "referenceSheetKey": "releases/reviewed-five-20260927/reference-sheet.png",
+  "referenceSheetSha256": "733d3e9917c939191c0f1e80d742e4dc8036cbe38041fde199a49b357699b359"
+}

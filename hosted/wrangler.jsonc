@@ -1,5 +1,6 @@
 {
   "name": "whitebook-hosted-staging",
+  "account_id": "53714cbaf70177d3e6d6a7e5e7811ed8",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-26",
   "workers_dev": true,

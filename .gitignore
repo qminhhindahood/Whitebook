@@ -7,6 +7,8 @@ logs/
 .scratch/runtime-review/
 question-bank/
 hosted/.publication/
+hosted/.private-build-inputs-*/
+hosted/.private-publication-release.tar.gz
 
 # JavaScript
 node_modules/

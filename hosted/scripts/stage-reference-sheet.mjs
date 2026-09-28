@@ -10,27 +10,28 @@ const candidates = [
   resolve(ownerWorkspaceRoot, "ref/reference-sheet.png"),
 ];
 
-let source;
-for (const candidate of candidates) {
-  try {
-    if ((await stat(candidate)).isFile()) {
-      source = candidate;
-      break;
-    }
-  } catch {
-    // A linked worktree may keep owner assets at the containing workspace root.
-  }
+export async function stageReferenceSheet(source, destination) {
+  const bytes = await readFile(source);
+  const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (bytes.length < pngSignature.length || !bytes.subarray(0, pngSignature.length).equals(pngSignature))
+    throw new Error(`Reference Sheet is not a valid PNG: ${source}`);
+  await mkdir(dirname(destination), { recursive: true });
+  await copyFile(source, destination);
+  process.stdout.write(`Staged Math Reference Sheet: ${destination}\n`);
 }
 
-if (!source)
+export async function findReferenceSheet() {
+  for (const candidate of candidates) {
+    try {
+      if ((await stat(candidate)).isFile()) return candidate;
+    } catch {
+      // A linked worktree may keep owner assets at the containing workspace root.
+    }
+  }
   throw new Error(`Reference Sheet not found. Expected one of: ${candidates.join(", ")}`);
+}
 
-const bytes = await readFile(source);
-const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-if (bytes.length < pngSignature.length || !bytes.subarray(0, pngSignature.length).equals(pngSignature))
-  throw new Error(`Reference Sheet is not a valid PNG: ${source}`);
-
-const destination = resolve(checkoutRoot, "hosted/dist/assets/reference-sheet.png");
-await mkdir(dirname(destination), { recursive: true });
-await copyFile(source, destination);
-process.stdout.write(`Staged Math Reference Sheet: ${destination}\n`);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const source = await findReferenceSheet();
+  await stageReferenceSheet(source, resolve(checkoutRoot, "hosted/dist/assets/reference-sheet.png"));
+}
