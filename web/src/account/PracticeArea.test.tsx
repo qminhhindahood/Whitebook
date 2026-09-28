@@ -84,7 +84,7 @@ it("leaves the clock unstarted and offers a retry when a selected visual fails",
   let visualCalls = 0;
   const { calls } = apiFixture(() => {
     visualCalls++;
-    return visualCalls === 1 ? new Response("", { status: 503 }) : new Response("image", { status: 200 });
+    return visualCalls <= 3 ? new Response("", { status: 503 }) : new Response("image", { status: 200 });
   });
   render(<PracticeArea initialRevisionId="reviewed-rw" onSessionEnded={() => {}} />);
   fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));

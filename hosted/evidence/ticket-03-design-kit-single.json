@@ -1,0 +1,84 @@
+{
+  "startedAt": "2026-09-28T01:57:28.781Z",
+  "finishedAt": "2026-09-28T01:58:18.031Z",
+  "target": "https://whitebook.docai.dpdns.org",
+  "syntheticLearners": 1,
+  "attemptsCompleted": 1,
+  "attemptsCreated": 1,
+  "completedSections": {
+    "Math": 1
+  },
+  "questionsInCreatedAttempts": 44,
+  "questionPresentationRequests": 44,
+  "questionPresentationsLoaded": 44,
+  "visualFetches": 44,
+  "visualFetchesSucceeded": 44,
+  "visualFetchesFailed": 0,
+  "workerRequests": 143,
+  "workerRequestsPerLearner": 143,
+  "workerRequestsPerAttempt": 143,
+  "clientLatencyMs": {
+    "p50": 202.83,
+    "p95": 369.1,
+    "p99": 1021.29,
+    "max": 1025.84
+  },
+  "http5xxResponses": 0,
+  "http1102Responses": 0,
+  "statusCounts": {
+    "200": 141,
+    "201": 1,
+    "409": 1
+  },
+  "statusCountsByOperation": {
+    "account session check": {
+      "200": 1
+    },
+    "protected package library": {
+      "200": 1
+    },
+    "Math Section Exam creation": {
+      "201": 1
+    },
+    "question presentation": {
+      "200": 44
+    },
+    "protected publication visual": {
+      "200": 44
+    },
+    "learner request": {
+      "200": 50
+    },
+    "cross-device takeover": {
+      "200": 1
+    },
+    "stale-editor rejection": {
+      "409": 1
+    }
+  },
+  "failureCodes": {},
+  "transportFailureKinds": {
+    "fetch": {},
+    "body": {}
+  },
+  "d1UsageWindow": {
+    "rowsReadBefore": 922475,
+    "rowsReadAfter": 922475,
+    "rowsReadDelta": 0,
+    "rowsWrittenBefore": 5123,
+    "rowsWrittenAfter": 5123,
+    "rowsWrittenDelta": 0,
+    "queryPatternsBefore": 67,
+    "queryPatternsAfter": 67,
+    "method": "Wrangler D1 Insights sums observed SQL fingerprints in its rolling 24-hour window."
+  },
+  "databaseBytesBefore": 3891200,
+  "databaseBytesPeak": 3907584,
+  "databaseBytesDelta": 16384,
+  "answerMaterialLeakedByLearnerRead": false,
+  "errorResponseLeakedSensitiveMaterial": false,
+  "timerDurationChecksPassed": 1,
+  "takeoverChecksPassed": 1,
+  "syntheticAccountsDeleted": 1,
+  "runError": null
+}
