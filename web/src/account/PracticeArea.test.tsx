@@ -102,7 +102,7 @@ it("creates from exactly the chosen revision and starts only after every present
   expect(screen.queryByLabelText(/Question Category/i)).toBeNull();
   fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
 
-  await screen.findByRole("heading", { name: "Practice Attempt" });
+  await screen.findByRole("heading", { name: "Reading and Writing · Practice" });
   const createIndex = calls.findIndex((call) => call.path === "/api/attempts" && call.init?.method === "POST");
   const presentationIndex = calls.findIndex((call) => call.path.endsWith("/questions/q1"));
   const firstVisualIndex = calls.findIndex((call) => call.path.startsWith("/content/"));
@@ -149,7 +149,7 @@ it("leaves the clock unstarted and offers a retry when a selected visual fails",
   expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
 
   fireEvent.click(screen.getByRole("button", { name: "Retry loading" }));
-  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Reading and Writing · Practice" })).toBeTruthy();
   expect(calls.filter((call) => call.path === "/api/attempts" && call.init?.method === "POST")).toHaveLength(1);
   await waitFor(() => expect(calls.filter((call) => call.path.endsWith("/start"))).toHaveLength(1));
 });
@@ -185,12 +185,12 @@ it("resumes an active Attempt from the server snapshot without restarting its cl
   }));
   render(<PracticeArea onSessionEnded={() => {}} />);
   fireEvent.click(await screen.findByRole("button", { name: "Resume Attempt" }));
-  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Reading and Writing · Practice" })).toBeTruthy();
   expect((screen.getByRole("radio", { name: /BOption B/ }) as HTMLInputElement).checked).toBe(true);
-  expect(screen.getByText("Editing here")).toBeTruthy();
+  expect((screen.getByRole("radio", { name: /BOption B/ }) as HTMLInputElement).disabled).toBe(false);
   expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
   expect(calls.some((call) => call.path.endsWith("/takeover"))).toBe(false);
-  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
   expect(await screen.findByRole("heading", { name: "Your Attempts" })).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(false);
 });
@@ -220,6 +220,10 @@ it("creates a Section Exam with a section-only payload and prepares its Math too
       section: "Math", modules: [1, 2], questionIds: mathLinks.map((q) => q.questionId), questions: mathLinks,
       state: { phase: "module", activeModule: 1 }, stateVersion: 1, deadlineAt: 1_800_000_000_000,
       startedAt: 1_799_997_900_000, serverNow: 1_799_997_900_000, editorToken: "a".repeat(64), lease: { held: true, expiresAt: 1_800_000_000_000 } });
+    if (path === "/api/attempts/exam-1/pause") return Response.json({ attemptId: "exam-1", revisionId: "math-pack", kind: "section_exam", status: "active",
+      section: "Math", modules: [1, 2], questionIds: mathLinks.map((q) => q.questionId), questions: mathLinks,
+      state: { phase: "paused", pausedPhase: "module", activeModule: 1 }, stateVersion: 2, deadlineAt: 1_800_000_000_000,
+      startedAt: 1_799_997_900_000, serverNow: 1_799_997_901_000, editorToken: "a".repeat(64), lease: { held: true, expiresAt: 1_800_000_000_000 } });
     throw new Error(`Unexpected request ${path}`);
   }));
   render(<PracticeArea initialRevisionId="math-pack" onSessionEnded={() => {}} />);
@@ -227,13 +231,14 @@ it("creates a Section Exam with a section-only payload and prepares its Math too
   expect((screen.getByLabelText("Section") as HTMLSelectElement).value).toBe("Math");
   expect(screen.getByText(/35 minutes per Module/)).toBeTruthy();
   fireEvent.click(await screen.findByRole("button", { name: "Prepare Section Exam" }));
-  await screen.findByRole("heading", { name: "Section Exam · Module 1" });
+  await screen.findByRole("heading", { name: "Math · Module 1" });
   const createCall = calls.find((call) => call.path === "/api/attempts" && call.init?.method === "POST")!;
   expect(JSON.parse(String(createCall.init?.body))).toEqual({ revisionId: "math-pack", kind: "section_exam", section: "Math" });
   expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
   expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
-  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
   expect(await screen.findByText(/Section Exam.*44 questions.*active/)).toBeTruthy();
+  expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(true);
 });
 
 it("keeps Section selection visible and omits Practice-only setup fields for an exam", async () => {
@@ -262,23 +267,21 @@ it.each([
       whitebookCalculator: true, type: "ready", payload: checks,
     } }));
   });
-  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Math · Practice" })).toBeTruthy();
   expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
   expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
-  expect(document.querySelector('[aria-label="Math tools"]')).toBeTruthy();
   if (expectedMode === "graphing") {
-    expect(screen.getByRole("button", { name: "Graphing calculator" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
     const frame = await screen.findByTitle("Desmos graphing calculator") as HTMLIFrameElement;
     expect(frame.getAttribute("src")).toBe("/app/calculator-frame");
     expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
   } else {
-    expect(screen.queryByRole("button", { name: "Graphing calculator" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Expression" }), { target: { value: "2+2" } });
     fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
     expect(document.querySelector(".scientific-calculator output")?.textContent).toBe("4");
   }
-  fireEvent.click(screen.getByRole("button", { name: "Reference Sheet" }));
+  fireEvent.click(screen.getByRole("button", { name: "Reference" }));
   expect(document.querySelector('[role="dialog"][aria-label="Reference Sheet"][aria-modal="true"]')).toBeTruthy();
 });
 
@@ -286,9 +289,10 @@ it("keeps Math Practice available with the scientific calculator when calculator
   const { calls } = mathPracticeFixture(null, true);
   render(<PracticeArea initialRevisionId="math-revision" onSessionEnded={() => {}} />);
   fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
-  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Reference Sheet" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Math · Practice" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
+  expect(screen.getByRole("textbox", { name: "Expression" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Reference" })).toBeTruthy();
   expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png"))
     .toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
 });
@@ -305,8 +309,8 @@ it("opens an active Math Practice Attempt without waiting for a second pre-start
   const { calls } = mathPracticeFixture("https://www.desmos.com/api/v1.12/calculator.js?apiKey=fixture", false, true);
   render(<PracticeArea onSessionEnded={() => {}} />);
   fireEvent.click(await screen.findByRole("button", { name: "Resume Attempt" }));
-  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
-  expect(document.querySelector('[aria-label="Math tools"]')).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Math · Practice" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Calculator" })).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
   expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png"))
     .toBeGreaterThan(calls.findIndex((call) => call.path === "/api/attempts/math-attempt"));
@@ -364,7 +368,7 @@ it.each([
   }));
   render(<PracticeArea initialRevisionId={revisionId} onSessionEnded={() => {}} />);
   fireEvent.click(await screen.findByRole("button", { name: "Prepare Attempt" }));
-  expect(await screen.findByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: `${section} · Practice` })).toBeTruthy();
   expect(calls.findIndex((call) => call.path.endsWith("/start"))).toBeGreaterThan(calls.findIndex((call) => call.path.endsWith("/questions/q1")));
   if (section === "Math") {
     expect(document.querySelector(".katex")).toBeTruthy();
@@ -372,26 +376,31 @@ it.each([
     expect(calls.findIndex((call) => call.path === visualPath)).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
     expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
     expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
-    expect(document.querySelector('[aria-label="Math tools"]')).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
-    fireEvent.change(screen.getByRole("textbox", { name: "Expression" }), { target: { value: "2+2" } });
-    fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
+    const tools = document.querySelector(".player-header__tools")!;
+    const calculatorButton = tools.querySelector("button")!;
+    expect(calculatorButton.textContent).toContain("Calculator");
+    fireEvent.click(calculatorButton);
+    const calculator = document.querySelector(".player-calculator")!;
+    fireEvent.change(calculator.querySelector("input")!, { target: { value: "2+2" } });
+    fireEvent.click(calculator.querySelector(".key-equals")!);
     expect(document.querySelector(".scientific-calculator output")?.textContent).toBe("4");
-    fireEvent.click(screen.getByRole("button", { name: "Reference Sheet" }));
+    fireEvent.click(tools.querySelectorAll("button")[1]);
     expect(document.querySelector('[role="dialog"][aria-label="Reference Sheet"]')).toBeTruthy();
     expect(screen.getByAltText("Math Reference Sheet").getAttribute("src")).toBe("/api/math/reference-sheet.png");
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: answer } });
+    fireEvent.click(document.querySelector(".reference-overlay header button")!);
+    fireEvent.change(document.querySelector('.response-panel input[aria-label="Your response"]')!, { target: { value: answer } });
   } else {
     expect(screen.getByText("Read this passage.")).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: /BOption B/ }));
   }
   expect(screen.queryByText(`Accepted answer: ${expected}`)).toBeNull();
   await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
-  fireEvent.click(screen.getByRole("button", { name: "Submit Attempt" }));
+  fireEvent.click([...document.querySelectorAll(".player-footer__actions button")]
+    .find((button) => button.textContent?.trim() === "Submit Practice")!);
   expect(await screen.findByText("1 of 1 correct")).toBeTruthy();
   expect(screen.getByText(`Accepted answer: ${expected}`)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  fireEvent.click([...document.querySelectorAll(".player-header__tools button")]
+    .find((button) => button.textContent?.includes("Save & Exit"))!);
   expect(await screen.findByRole("heading", { name: "Build a Practice Attempt" })).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(false);
 });

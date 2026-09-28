@@ -157,7 +157,7 @@ it("waits for a pending typed response before submitting the Attempt", async () 
   view(attempt(), studentResponseQuestions());
 
   fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: "8" } });
-  fireEvent.click(screen.getByRole("button", { name: "Submit Attempt" }));
+  fireEvent.click(screen.getByRole("button", { name: "Submit Practice" }));
 
   expect(await screen.findByText("1 of 2 correct")).toBeTruthy();
   expect(requestOrder).toEqual(["write", "submit"]);
@@ -172,9 +172,9 @@ it("leaves a submitted Practice Result without sending another Attempt write", a
     : Promise.reject(new Error(path)));
   view(attempt(), questions, onExit);
 
-  fireEvent.click(screen.getByRole("button", { name: "Submit Attempt" }));
+  fireEvent.click(screen.getByRole("button", { name: "Submit Practice" }));
   expect(await screen.findByText("1 of 2 correct")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
   await waitFor(() => expect(onExit).toHaveBeenCalledOnce());
   expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(0);
 });
@@ -261,14 +261,14 @@ it("keeps a failed typed response visible and offers retry instead of leaving as
 
   expect(input.value).toBe("-3/4");
   expect(screen.getByRole("button", { name: "Reapply unsaved changes" })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
   expect(onExit).not.toHaveBeenCalled();
   expect((screen.getByRole("textbox", { name: "Your response" }) as HTMLInputElement).value).toBe("-3/4");
 
   fireEvent.click(screen.getByRole("button", { name: "Reapply unsaved changes" }));
   await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
   expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(2);
-  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
   await waitFor(() => expect(onExit).toHaveBeenCalledOnce());
 });
 
@@ -309,12 +309,43 @@ it("uses the familiar player shell for Practice while keeping its hosted save co
     : Promise.reject(new Error(path)));
   const { container } = view();
   expect(container.querySelector(".player-shell")).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Reading and Writing · Practice" })).toBeTruthy();
   expect(screen.getByText("Question 1 of 2")).toBeTruthy();
   fireEvent.click(screen.getByRole("radio", { name: /AOption A/ }));
   await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
   expect(JSON.parse(String(calls.find((call) => call.path.endsWith("/write"))?.init?.body)))
     .toMatchObject({ editorToken: token, expectedStateVersion: 1, change: { type: "response", questionId: "q1", response: "A" } });
+});
+
+it("uses the local full-screen controls and split question layout for a hosted Section Exam", () => {
+  const mathQuestions = questions.map((question) => ({ ...question, section: "Math" as const }));
+  const initial = attempt({ kind: "section_exam", section: "Math", modules: [1, 2],
+    state: { phase: "module", activeModule: 1, responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" } });
+  const { view } = fixture();
+  const { container } = view(initial, mathQuestions);
+
+  expect(container.querySelector("main.player-shell.hosted-practice-player")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Math · Module 1" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Directions" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Hide" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Calculator" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Reference" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Save & Exit" })).toBeTruthy();
+  expect(screen.getByRole("separator", { name: "Resize question and answer panels" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Finish Module" })).toBeTruthy();
+  expect(screen.getByText("Question 1 of 2")).toBeTruthy();
+});
+
+it("opens the calculator over the left pane without hiding hosted Math answers", () => {
+  const mathQuestions = questions.map((question) => ({ ...question, section: "Math" as const }));
+  const { view } = fixture();
+  view(attempt({ section: "Math" }), mathQuestions);
+
+  fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
+
+  expect(screen.getByRole("region", { name: "Calculator" })).toBeTruthy();
+  expect(screen.getByRole("radio", { name: /AOption A/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Calculator" }).getAttribute("aria-pressed")).toBe("true");
 });
 
 it("keeps rapid edits serialized and sends the next write with the acknowledged version", async () => {
@@ -323,7 +354,7 @@ it("keeps rapid edits serialized and sends the next write with the acknowledged 
     ? new Promise<Response>((resolve) => resolvers.push(resolve)) : Promise.reject(new Error(path)));
   view();
   fireEvent.click(screen.getByRole("radio", { name: /AOption A/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Mark for review" }));
+  fireEvent.click(screen.getByRole("button", { name: "Mark for Review" }));
   expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(1);
   await act(async () => resolvers[0](savedResponse(2, {
     responses: { q1: "A" }, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1",
@@ -354,7 +385,7 @@ it("serializes response, mark, elimination, and navigation changes by state vers
   view();
   fireEvent.click(screen.getByRole("radio", { name: /AOption A/ }));
   await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
-  fireEvent.click(screen.getByRole("button", { name: "Mark for review" }));
+  fireEvent.click(screen.getByRole("button", { name: "Mark for Review" }));
   await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
   fireEvent.click(screen.getByRole("button", { name: "Next question" }));
   await waitFor(() => expect(screen.getByText("Question 2 of 2")).toBeTruthy());
@@ -384,7 +415,7 @@ it("keeps a second device read-only until explicit takeover refreshes state with
   });
   view(before);
   expect((screen.getByRole("radio", { name: /AOption A/ }) as HTMLInputElement).disabled).toBe(true);
-  const clockBefore = screen.getByLabelText("Attempt clock").textContent;
+  const clockBefore = screen.getByLabelText("Time remaining").textContent;
   fireEvent.click(screen.getByRole("button", { name: "Question 1 of 2" }));
   fireEvent.click(screen.getByRole("button", { name: "Question 2, unanswered" }));
   expect(screen.getAllByText("Question 2").length).toBeGreaterThan(0);
@@ -393,7 +424,7 @@ it("keeps a second device read-only until explicit takeover refreshes state with
   await waitFor(() => expect((screen.getByRole("radio", { name: /BOption B/ }) as HTMLInputElement).checked).toBe(true));
   expect(calls.filter((call) => call.path.endsWith("/takeover"))).toHaveLength(1);
   expect(takeoverState.deadlineAt).toBe(before.deadlineAt);
-  expect(screen.getByLabelText("Attempt clock").textContent).toBe(clockBefore);
+  expect(screen.getByLabelText("Time remaining").textContent).toBe(clockBefore);
   expect(screen.queryByText(/deadline reset/i)).toBeNull();
 });
 
@@ -411,7 +442,7 @@ it("submits the final server version and renders the returned graded Result", as
     throw new Error(`Unexpected route ${path} ${String(init?.method)}`);
   });
   view(attempt({ state: finalState }));
-  fireEvent.click(screen.getByRole("button", { name: "Submit Attempt" }));
+  fireEvent.click(screen.getByRole("button", { name: "Submit Practice" }));
   expect(await screen.findByText("2 of 2 correct")).toBeTruthy();
   expect(calls.find((call) => call.path.endsWith("/submit"))).toBeTruthy();
   expect(JSON.parse(String(calls.find((call) => call.path.endsWith("/submit"))!.init?.body)))
@@ -502,11 +533,11 @@ it("pauses and resumes through the Section Exam lifecycle endpoints", async () =
     throw new Error(path);
   });
   view(base);
-  fireEvent.click(screen.getByRole("button", { name: "Pause Section Exam" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
   expect(await screen.findByRole("heading", { name: "Section Exam paused" })).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Resume through Loading Gate" }));
-  await screen.findByRole("button", { name: "Pause Section Exam" });
+  await screen.findByRole("button", { name: "Finish Module" });
   expect(calls.some((call) => call.path.endsWith("/resume"))).toBe(true);
   expect(calls.findIndex((call) => call.path === "/api/math/calculator-config"))
     .toBeLessThan(calls.findIndex((call) => call.path.endsWith("/resume")));
@@ -514,13 +545,15 @@ it("pauses and resumes through the Section Exam lifecycle endpoints", async () =
     .toBeLessThan(calls.findIndex((call) => call.path.endsWith("/resume")));
 });
 
-it("preserves calculator state access and the Reference Sheet control in Math", () => {
+it("opens the calculator and Reference Sheet from the Math toolbar", () => {
   const mathAttempt = attempt({ kind: "section_exam", section: "Math", state: { phase: "module", activeModule: 1 } });
   const { view } = fixture();
   view(mathAttempt, questions.map((question) => ({ ...question, section: "Math" })));
-  expect(screen.getByRole("region", { name: "Math tools" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Reference Sheet" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
+  expect(screen.getByRole("region", { name: "Calculator" })).toBeTruthy();
+  expect(screen.getByRole("textbox", { name: "Expression" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Reference" }));
+  expect(screen.getByRole("region", { name: "Zoomable reference sheet" })).toBeTruthy();
 });
 
 it("waits for calculator readiness before resuming and falls back to the scientific calculator", async () => {
@@ -545,8 +578,9 @@ it("waits for calculator readiness before resuming and falls back to the scienti
         instanceCreated: false, stateReadable: false, usableSize: false },
     } }));
   });
-  await screen.findByRole("button", { name: "Pause Section Exam" });
+  await screen.findByRole("button", { name: "Finish Module" });
   expect(calls.some((call) => call.path.endsWith("/resume"))).toBe(true);
-  expect(screen.getByRole("button", { name: "Scientific calculator" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Graphing calculator" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
+  expect(screen.getByRole("textbox", { name: "Expression" })).toBeTruthy();
+  expect(screen.queryByTitle("Desmos graphing calculator")).toBeNull();
 });

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import { HostedBlocks, HostedChoices } from "./HostedPresentation";
 import { AnswerPreview } from "../AnswerPreview";
 import { DesmosCalculatorPanel, ScientificCalculator } from "../calculator";
 import { DesmosReadinessProbe, loadDesmos } from "../calculator";
+import { LineIcon } from "../icons";
 import { ReferenceSheet } from "../ReferenceSheet";
 import "../player.css";
 import "../player-math.css";
@@ -37,6 +39,17 @@ type HostedAttemptProps = {
 const RESPONSE_SAVE_IDLE_MS = 600;
 const SPLIT_MIN = 25;
 const SPLIT_MAX = 75;
+const DIRECTIONS: Record<string, string> = {
+  "Reading and Writing": "Each question is based on the accompanying text or material. Read it carefully, then choose the best answer. You may return to any question in this Module and mark questions for review before time runs out.",
+  Math: "Choose the best answer, or enter your own response where the question asks for it. The calculator and Reference Sheet are available from the toolbar. You may return to any question in this Module before time runs out.",
+};
+const STUDENT_RESPONSE_DIRECTIONS = [
+  "Type your response in the Answer box. Only what you type is graded.",
+  "Enter whole numbers and decimals with digits, for example 5 or 12.5.",
+  "Use a minus sign for negative numbers, for example -3.",
+  "Use a slash for fractions, for example 3/4. A complete fraction is drawn in the Answer Preview.",
+  "The Answer Preview shows how your entry will be read. It never shows whether an answer is correct.",
+];
 
 class AttemptRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -133,6 +146,9 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [resultLoading, setResultLoading] = useState(initial.status === "completed");
   const [navigatorOpen, setNavigatorOpen] = useState(false);
+  const [timerHidden, setTimerHidden] = useState(false);
+  const [directionsOpen, setDirectionsOpen] = useState(false);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [navigationPending, setNavigationPending] = useState(false);
   const [exitPending, setExitPending] = useState(false);
   const [assistedPending, setAssistedPending] = useState(false);
@@ -440,11 +456,11 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     } finally { submittingRef.current = false; setSubmitting(false); }
   }
 
-  async function sectionAction(action: "pause" | "resume" | "finish-module" | "continue") {
-    if (!sectionExam || lifecycleBusy || !editorToken) return;
+  async function sectionAction(action: "pause" | "resume" | "finish-module" | "continue"): Promise<boolean> {
+    if (!sectionExam || lifecycleBusy || !editorToken) return false;
     setLifecycleBusy(true); setLifecycleError("");
     try {
-      if ((action === "pause" || action === "finish-module") && !await flushPendingResponseWrites()) return;
+      if ((action === "pause" || action === "finish-module") && !await flushPendingResponseWrites()) return false;
       const latest = snapshotRef.current;
       if (action === "resume" && snapshot.section === "Math" && snapshot.state.pausedPhase === "module") {
         const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
@@ -476,8 +492,10 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       snapshotRef.current = next; setSnapshot(next); setDraftState(emptyState(next.state));
       setLocalQuestionId(emptyState(next.state).currentQuestionId); setPaused(false); pausedRef.current = false;
       if (next.status === "completed") setEditorToken("");
+      return true;
     } catch (cause) {
       setLifecycleError(cause instanceof Error ? cause.message : "This Section Exam action could not be completed.");
+      return false;
     } finally { setLifecycleBusy(false); }
   }
 
@@ -520,20 +538,13 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   }
 
   const completed = snapshot.status === "completed";
-  const clockLabel = completed ? "Submitted" : sectionExam && phase === "transition" ? "Module 1 complete"
-    : sectionExam && phase === "paused" ? "Paused" : snapshot.deadlineAt === null
-    ? `Elapsed ${formatClock(clockNow)}` : timeExpired ? "Time ended" : `Time left ${formatClock(clockNow)}`;
+  const clockLabel = completed ? "Submitted" : sectionExam && phase === "paused" ? "Paused" : formatClock(clockNow);
   const showMathTools = snapshot.section === "Math" && snapshot.status === "active" && (!sectionExam || phase === "module");
-  const mathTools = showMathTools && <section className="hosted-attempt__math-tools" aria-label="Math tools">
-    <div className="hosted-attempt__module-actions">
-      <span>Math tools</span>
-      {readyDesmosUrl && <button type="button" className="practice-button practice-button--quiet"
-        aria-pressed={calculatorMode === "desmos"} onClick={() => setCalculatorMode("desmos")}>Graphing calculator</button>}
-      <button type="button" className="practice-button practice-button--quiet"
-        aria-pressed={calculatorMode === "scientific"} onClick={() => setCalculatorMode("scientific")}>Scientific calculator</button>
-      <button type="button" className="practice-button practice-button--quiet" onClick={() => setShowReference(true)}>Reference Sheet</button>
-    </div>
-    {calculatorMode === "desmos" && readyDesmosUrl ? <DesmosCalculatorPanel options={{ expressions: true, settingsMenu: false }}
+  const mathTools = showMathTools && calculatorOpen && <section className="player-calculator" aria-label="Calculator">
+    <header><h2>Calculator</h2><button type="button" className="dialog-close" aria-label="Close calculator"
+      onClick={() => setCalculatorOpen(false)}><LineIcon name="close"/></button></header>
+    <div className="player-calculator__content">{calculatorMode === "desmos" && readyDesmosUrl ? <DesmosCalculatorPanel options={{ images: false,
+      folders: false, notes: false, links: false, pasteGraphLink: false, authorFeatures: false }}
       savedState={(snapshot.state.calculatorState as Record<string, unknown> | undefined) ?? null}
       onReady={(checks) => {
         const ready = Object.values(checks).length > 0 && Object.values(checks).every(Boolean);
@@ -541,31 +552,39 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         setCalculatorMode(ready ? "desmos" : "scientific");
       }}
       onSave={(state) => enqueue({ type: "calculator_state", state })} /> : <ScientificCalculator/>}
+    </div>
   </section>;
   const referenceSheet = showMathTools && showReference && <ReferenceSheet onClose={() => setShowReference(false)} />;
-  if (!sectionExam) {
+  async function saveAndExit() {
+    if (sectionExam && snapshotRef.current.status === "active" && phase !== "paused") {
+      if (await sectionAction("pause")) onExit();
+      return;
+    }
+    await exitAttempt();
+  }
+  if (!sectionExam || phase === "module" || completed) {
     const stimulus = current?.presentation.stimulus ?? [];
     const studentResponse = current?.responseType === "student_produced_response";
-    const splitLayout = stimulus.length > 0 || studentResponse;
+    const splitLayout = current?.section === "Math" || stimulus.length > 0 || studentResponse;
     const questionPanel = current ? <section className="response-panel" aria-label="Question and answers">
       <div className="question-banner">
         <span className="question-banner__number" aria-hidden="true">{currentIndex + 1}</span>
-        <button type="button" className="hosted-attempt__mark" disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending} aria-pressed={marked}
+        <button type="button" className="mark-control hosted-practice-player__mark" disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending} aria-pressed={marked}
           onClick={() => enqueue({ type: "mark", questionId: current.questionId, marked: !marked })}>
-          {marked ? "Remove review mark" : "Mark for review"}
+          <LineIcon name="bookmark"/><span>Mark for Review</span>
         </button>
         <span className="question-banner__meta">{current.category ?? "All Questions"}</span>
       </div>
       <div className="hosted-practice-player__question-content">
-        <HostedBlocks blocks={current.presentation.stem} revisionId={snapshot.revisionId} questionId={current.questionId} />
+        {(current.section !== "Math" || studentResponse) && <HostedBlocks blocks={current.presentation.stem} revisionId={snapshot.revisionId} questionId={current.questionId} />}
         {current.responseType === "multiple_choice" ? <HostedChoices presentation={current.presentation}
           revisionId={snapshot.revisionId} questionId={current.questionId}
           selected={draftState.responses[current.questionId]} eliminated={eliminated}
           onSelect={(response) => enqueue({ type: "response", questionId: current.questionId, response })}
           onEliminate={(choiceId) => enqueue({ type: "elimination", questionId: current.questionId,
             choiceId, eliminated: !eliminated.includes(choiceId) })} disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending} /> :
-          <label className="spr-entry">Your response
-            <input value={draftState.responses[current.questionId] ?? ""} maxLength={4096} disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending}
+          <label className="spr-entry">Answer
+            <input aria-label="Your response" value={draftState.responses[current.questionId] ?? ""} maxLength={4096} disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending}
               onChange={(event) => enqueue({ type: "response", questionId: current.questionId, response: event.target.value })} />
           </label>}
         {studentResponse && <AnswerPreview value={draftState.responses[current.questionId] ?? ""} />}
@@ -579,15 +598,31 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
 
     return <main className="player-shell hosted-practice-player" aria-labelledby="hosted-attempt-heading">
       <header className="player-header">
-        <div className="player-header__section"><h2 id="hosted-attempt-heading">Practice Attempt</h2>
-          <span>{packageTitle} · {snapshot.section}</span></div>
-        <div className="player-header__timer"><time className="player-timer" aria-label="Attempt clock">{clockLabel}</time></div>
-        <div className="player-header__tools"><span className={`practice-chip ${completed || canEdit ? "practice-chip--ready" : "practice-chip--locked"}`}>
-          {completed ? "Submitted" : canEdit ? "Editing here" : "Read only"}</span></div>
+        <div className="player-header__section"><h2 id="hosted-attempt-heading">{snapshot.section} · {sectionExam ? `Module ${activeModule}` : "Practice"}</h2>
+          <span className="hosted-practice-player__context">{packageTitle}{snapshot.category ? ` · ${snapshot.category}` : ""}</span>
+          <button type="button" className="directions-toggle" aria-expanded={directionsOpen}
+            onClick={() => setDirectionsOpen((open) => !open)}>Directions <LineIcon name="chevron"/></button>
+          {directionsOpen && <div className="directions-panel" role="region" aria-label="Directions">
+            <p>{DIRECTIONS[snapshot.section] ?? DIRECTIONS["Reading and Writing"]}</p>
+          </div>}
+        </div>
+        <div className="player-header__timer">{!timerHidden && <time className="player-timer" aria-label={snapshot.deadlineAt === null ? "Elapsed time" : "Time remaining"}>{clockLabel}</time>}
+          <button type="button" className="pill" onClick={() => setTimerHidden((hidden) => !hidden)}>{timerHidden ? "Show" : "Hide"}</button></div>
+        <div className="player-header__tools">
+          {showMathTools && <>
+            <button type="button" className="player-tool" aria-pressed={calculatorOpen}
+              onClick={() => setCalculatorOpen((open) => !open)}><LineIcon name="calculator"/><span>Calculator</span></button>
+            <button type="button" className="player-tool" aria-pressed={showReference}
+              onClick={() => setShowReference(true)}><LineIcon name="reference"/><span>Reference</span></button>
+          </>}
+          <button type="button" className="player-tool" disabled={exitPending || submitting || navigationPending}
+            onClick={() => void saveAndExit()}><LineIcon name="exit"/><span>{exitPending ? "Saving…" : "Save & Exit"}</span></button>
+        </div>
       </header>
       <div className="accent-strip" aria-hidden="true" />
       <div className="hosted-practice-player__notices">
-        {warning && <p className="hosted-attempt__warning" role="status" aria-label="Low time warning">5 minutes remaining in this Practice Attempt.</p>}
+        {warning && <p className="hosted-attempt__warning" role="status" aria-label="Low time warning">{sectionExam
+          ? `5 minutes remaining in Module ${activeModule}.` : "5 minutes remaining in this Practice Attempt."}</p>}
         {snapshot.status === "active" && !canEdit && <div className="hosted-attempt__lease" role="status">
           <p>{timeExpired ? "The server deadline has passed. This Attempt is read-only." : paused
             ? "Editing is paused after a sync conflict or save failure. Refresh the latest Attempt state to continue."
@@ -597,6 +632,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
             {takingOver ? "Refreshing Attempt…" : snapshot.lease?.held ? "Take over editing" : "Reacquire editing"}</button>
         </div>}
         {syncError && <p className="practice-error" role="alert">{syncError}</p>}
+        {lifecycleError && <p className="practice-error" role="alert">{lifecycleError}</p>}
         {failedChanges.length > 0 && <div className="hosted-attempt__unsaved" role="group" aria-label="Unsaved changes">
           <p>{failedChanges.length === 1 ? "One change was not saved." : `${failedChanges.length} changes were not saved.`} Your unsaved work remains visible here.</p>
           {canRetryFailedChanges && <button type="button" className="practice-button practice-button--quiet" onClick={reapplyFailedChanges}>Reapply unsaved changes</button>}
@@ -619,7 +655,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
           })}</div>
         </section>
       </div>}
-      <div className="player-workspace">
+      <div className="player-workspace" style={{ "--calculator-split": `${split}%` } as CSSProperties}>
         {mathTools}
         {completed && <section className="hosted-attempt__results" aria-labelledby="hosted-results-heading">
           <h3 id="hosted-results-heading">Results</h3>
@@ -629,17 +665,21 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         <div className={`player-body ${splitLayout ? "player-body--split" : "player-body--centered"}`}
           style={splitLayout ? { gridTemplateColumns: `minmax(300px, ${split}fr) 10px minmax(330px, ${100 - split}fr)` } : undefined}>
           {splitLayout && current && <section className="player-pane player-pane--left"
-            aria-label={stimulus.length ? "Question passage" : "Entry directions"}>
-            <div className="player-pane__scroll">
-              {stimulus.length ? <HostedBlocks blocks={stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} /> :
-                <div className="spr-directions"><h2>Student-produced responses</h2><ul>
-                  <li>Enter your response with digits, a minus sign, or a slash as needed.</li>
-                  <li>The Answer Preview shows how your entry will be read. It never shows whether an answer is correct.</li>
-                </ul></div>}
+            aria-label={studentResponse ? "Entry directions" : current.section === "Math" ? "Question" : "Question passage"}>
+            <div className="player-pane__scroll" hidden={calculatorOpen && showMathTools}>
+              {studentResponse ? <div className="spr-directions"><h2>Student-produced responses</h2><ul>
+                  <li>Type your response in the Answer box. Only what you type is graded.</li>
+                  <li>Whole numbers and decimals use digits, for example 5 or 12.5.</li>
+                  <li>Negative numbers use a minus sign, for example -3.</li>
+                  <li>Fractions use a slash, for example 3/4.</li>
+                  <li>The Answer Preview never shows whether an answer is correct.</li>
+                </ul></div> : current.section === "Math" ? <div className="math-question-stem">
+                  <HostedBlocks blocks={[...stimulus, ...current.presentation.stem]} revisionId={snapshot.revisionId} questionId={current.questionId} />
+                </div> : <HostedBlocks blocks={stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} />}
             </div>
           </section>}
           {splitLayout && <div className="player-divider" role="separator" tabIndex={0}
-            aria-orientation="vertical" aria-label={stimulus.length ? "Resize passage and question panels" : "Resize entry directions and answer panels"}
+            aria-orientation="vertical" aria-label={studentResponse ? "Resize directions and answer panels" : current?.section === "Math" ? "Resize question and answer panels" : "Resize passage and question panels"}
             aria-valuemin={SPLIT_MIN} aria-valuemax={SPLIT_MAX} aria-valuenow={Math.round(split)}
             onKeyDown={(event) => {
               if (event.key === "ArrowLeft") { event.preventDefault(); changeSplit(split - 2); }
@@ -659,17 +699,19 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       </div>
       {referenceSheet}
       <footer className="player-footer">
-        <button type="button" className="pill pill--soft" disabled={exitPending || submitting || navigationPending} onClick={() => void exitAttempt()}>
-          {exitPending ? "Checking saved changes…" : "Back to Practice"}</button>
+        <span className="player-footer__brand">Whitebook</span>
         <button type="button" className="position-pill" aria-expanded={navigatorOpen}
-          onClick={() => setNavigatorOpen((open) => !open)}>Question {currentIndex + 1} of {questionLinks.length}</button>
+          onClick={() => setNavigatorOpen((open) => !open)}>Question {currentIndex + 1} of {questionLinks.length}<LineIcon name="chevron"/></button>
         <div className="player-footer__actions">
           {!completed && snapshot.kind === "practice" && !snapshot.assisted && <button type="button" className="pill pill--soft" disabled={!canEdit || assistedPending || submitting || navigationPending || exitPending}
             onClick={() => setAssistedConfirmOpen(true)}>{assistedPending ? "Enabling Assisted Practice…" : "Use Assisted Practice"}</button>}
-          {!completed && <button type="button" className="pill pill--soft" disabled={!canEdit || submitting || navigationPending || exitPending}
-            onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit Attempt"}</button>}
-          <button type="button" className="pill pill--outline" disabled={currentIndex === 0 || navigationPending || submitting} onClick={() => void goTo(currentIndex - 1)}>Previous question</button>
-          <button type="button" className="pill pill--primary" disabled={currentIndex === questionLinks.length - 1 || navigationPending || submitting} onClick={() => void goTo(currentIndex + 1)}>Next question</button>
+          {!completed && !sectionExam && <button type="button" className="pill pill--soft" disabled={!canEdit || submitting || navigationPending || exitPending}
+            onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit Practice"}</button>}
+          {!completed && sectionExam && phase === "module" && <button type="button" className="pill pill--soft"
+            disabled={!canEdit || lifecycleBusy || saveStatus !== "saved" || submitting || navigationPending || exitPending}
+            onClick={() => void sectionAction("finish-module")}>{activeModule === 1 ? "Finish Module" : "Finish Section Exam"}</button>}
+          <button type="button" className="pill pill--outline" aria-label="Previous question" disabled={currentIndex === 0 || navigationPending || submitting} onClick={() => void goTo(currentIndex - 1)}>Back</button>
+          <button type="button" className="pill pill--primary" aria-label="Next question" disabled={currentIndex === questionLinks.length - 1 || navigationPending || submitting} onClick={() => void goTo(currentIndex + 1)}>Next</button>
         </div>
       </footer>
       {assistedConfirmOpen && <section className="hosted-attempt__assisted-confirm" role="group" aria-labelledby="assisted-confirm-heading">
