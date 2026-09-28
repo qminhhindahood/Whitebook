@@ -11,7 +11,7 @@ export type AssistantEnv = AccountEnv & {
   GEMINI_SHARED_KEY?: string;
 };
 type Option = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: ("en" | "vi")[]; vision: boolean; quota: string; healthy: boolean };
-type Snapshot = { id: string; account: string; session: string; visit: string; expires: number; provider: Option; credentialVersion: string; payload: string; tokens: number; attachmentReviewId?: string; attachmentVisuals?: boolean; flow?: "tutor" | "reasoning"; reviewId?: string; revealed?: boolean; acceptedAnswers?: string[]; questionText?: string[]; fallbackHint?: string | null };
+type Snapshot = { id: string; account: string; session: string; visit: string; expires: number; provider: Option; credentialVersion: string; payload: string; tokens: number; attachmentReviewId?: string; attachmentVisuals?: boolean; flow?: "tutor" | "reasoning" | "flashcards"; reviewId?: string; revealed?: boolean; acceptedAnswers?: string[]; questionText?: string[]; fallbackHint?: string | null };
 type Credential = { version: string; ciphertext: string; last_four: string };
 type Attachment = { reviewId: string; revisionId: string; questionId: string; section: string; module: number; questionNumber: number; response: string | null; acceptedAnswers: string[]; presentation: unknown; visuals: { path: string; width: number; height: number; alt: string }[] };
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -22,6 +22,7 @@ const json = (data: unknown) => Response.json(data, { headers: noStore });
 const invalid = () => failure(400, "invalid_request", "Check the prompt and Gemini selection, then preview again.");
 const consentRequired = () => failure(409, "consent_required", "This preview changed or expired. Preview and consent again.");
 const exact = (body: Record<string, unknown>, keys: string[]) => Object.keys(body).every(k => keys.includes(k));
+const CARD_FIELDS = ["front", "definition", "vietnamese", "partOfSpeech", "pronunciation", "synonyms", "example"] as const;
 
 // No default model, price, audience eligibility, or capability claims. Operators must
 // supply a dated, reviewed catalog; fixture metadata cannot enable the deployed app.
@@ -192,6 +193,37 @@ async function reasoningSend(body: Record<string, unknown>, env: AssistantEnv, s
   } catch { return failure(502, "provider_error", "Guided Reasoning could not complete this request. Your draft is preserved."); }
 }
 
+async function flashcardPreview(body: Record<string, unknown>, env: AssistantEnv, session: Session, options: Option[], now: number): Promise<Response> {
+  if (!exact(body, ["visitId", "route", "model", "locale", "mode", "words", "context", "deck", "cardIds"]) || typeof body.visitId !== "string" || !UUID.test(body.visitId) || !["draft_cards", "deck_advice"].includes(String(body.mode)) || typeof body.deck !== "string" || body.deck.length > 80 || !Array.isArray(body.cardIds) || body.cardIds.length > 20 || (body.mode === "draft_cards" && (typeof body.words !== "string" || (!body.words.trim() && !body.cardIds.length) || body.words.length > 4000)) || (body.mode === "deck_advice" && (typeof body.words !== "string" || !body.words.trim()))) return invalid();
+  const provider = options.find(item => item.route === body.route && item.model === body.model);
+  if (!provider || !provider.healthy || !provider.languages.includes(body.locale as "en" | "vi")) return failure(400, "model_unavailable", "Choose an available Gemini route and model.");
+  const cards = await env.DB.prepare("SELECT p.id, p.front, p.definition, p.vietnamese, p.part_of_speech, p.pronunciation, p.synonyms, p.example, r.rating, r.next_due FROM personal_cards p LEFT JOIN (SELECT card_id, rating, next_due, ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY rated_at DESC, id DESC) AS rn FROM card_rating_events WHERE account_id = ?) r ON r.card_id = p.id AND r.rn = 1 WHERE p.account_id = ? AND p.deck_key = ? AND p.archived_at IS NULL ORDER BY p.front LIMIT 100").bind(session.account_id, session.account_id, body.deck.toLocaleLowerCase().replace(/\s+/g, " ").trim()).all();
+  const selectedIds = new Set(body.cardIds.filter(id => typeof id === "string"));
+  const selectedCards = (cards.results as { id: string; front: string; definition: string; vietnamese: string; part_of_speech: string; pronunciation: string; synonyms: string; example: string }[]).filter(card => selectedIds.has(card.id)).map(({ id: _id, ...card }) => card);
+  const selected = body.mode === "deck_advice" ? cards.results : [...selectedCards, ...String(body.words).split(/[\n,]+/).map(word => word.trim()).filter(Boolean).slice(0, 20).map(front => ({ front }))].slice(0, 20);
+  if (body.mode === "deck_advice" && !selected.length) return failure(404, "deck_unavailable", "Choose a Personal Deck with cards before requesting advice.");
+  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are Flashcard Assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Propose learner-editable Personal Card content only; never save cards.` }] }, contents: [{ role: "user", parts: [{ text: JSON.stringify({ mode: body.mode, words: selected, context: typeof body.context === "string" ? body.context.slice(0, 2000) : "", destinationDeck: body.deck }) }] }], generationConfig: { maxOutputTokens: MAX_OUTPUT }, store: false });
+  if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return invalid();
+  const key = await routeKey(env, session.account_id, provider); if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
+  const snapshot: Snapshot = { id: crypto.randomUUID(), account: session.account_id, session: session.token_hash, visit: body.visitId, expires: now + 5 * 60000, provider, credentialVersion: key.version, payload, tokens: new TextEncoder().encode(payload).length + MAX_OUTPUT, flow: "flashcards" };
+  const previewId = await seal(JSON.stringify(snapshot), env.ASSISTANT_SNAPSHOT_KEY!, "tutor-preview");
+  await env.DB.prepare("DELETE FROM assistant_previews WHERE expires_at_ms <= ?").bind(now).run();
+  await env.DB.prepare("INSERT INTO assistant_previews (id, account_id, session_hash, visit_id, expires_at_ms) VALUES (?, ?, ?, ?, ?)").bind(snapshot.id, session.account_id, session.token_hash, body.visitId, snapshot.expires).run();
+  return json({ previewId, expiresAt: snapshot.expires, provider, payload, mode: body.mode, deck: body.deck });
+}
+
+async function flashcardSend(body: Record<string, unknown>, env: AssistantEnv, session: Session, options: Option[], adapter: GeminiAdapter, now: number): Promise<Response> {
+  if (!exact(body, ["previewId", "visitId", "consent"]) || body.consent !== true || typeof body.previewId !== "string" || typeof body.visitId !== "string") return consentRequired();
+  let snapshot: Snapshot; try { snapshot = JSON.parse(await unseal(body.previewId, env.ASSISTANT_SNAPSHOT_KEY!, "tutor-preview")); } catch { return consentRequired(); }
+  if (snapshot.flow !== "flashcards" || snapshot.account !== session.account_id || snapshot.session !== session.token_hash || snapshot.visit !== body.visitId || snapshot.expires <= now) return consentRequired();
+  const provider = options.find(item => item.route === snapshot.provider.route && item.model === snapshot.provider.model); const key = provider && await routeKey(env, session.account_id, provider);
+  if (!provider || JSON.stringify(provider) !== JSON.stringify(snapshot.provider) || !key || key.version !== snapshot.credentialVersion) return consentRequired();
+  const consumed = await env.DB.prepare("DELETE FROM assistant_previews WHERE id = ? AND account_id = ? AND session_hash = ? AND visit_id = ? AND expires_at_ms > ? RETURNING id").bind(snapshot.id, session.account_id, session.token_hash, body.visitId, now).first();
+  if (!consumed) return consentRequired();
+  try { const text = await adapter(snapshot.payload, provider.model, key.key); if (!text.trim() || text.length > 12000 || text.includes(key.key)) return failure(502, "provider_error", "Flashcard Assistant returned an unavailable draft."); return json({ text, provider, verified: false }); }
+  catch { return failure(502, "provider_error", "Flashcard Assistant could not complete this request. Your draft is preserved."); }
+}
+
 async function attachment(env: AssistantEnv, accountId: string, reviewId: string, includeVisuals: boolean): Promise<Attachment | Response> {
   const review = await env.DB.prepare("SELECT id, attempt_id, revision_id, question_id, revealed_at_ms FROM guided_reviews WHERE id = ? AND account_id = ?")
     .bind(reviewId, accountId).first<{ id: string; attempt_id: string; revision_id: string; question_id: string; revealed_at_ms: number | null }>();
@@ -310,6 +342,8 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
      if (path === "/api/assistant/reasoning-preview") return reasoningPreview(body, env, session, options, time);
      if (path === "/api/assistant/send") return send(body, env, session, options, adapter, time);
      if (path === "/api/assistant/reasoning-send") return reasoningSend(body, env, session, options, adapter, time);
+     if (path === "/api/assistant/flashcards-preview") return flashcardPreview(body, env, session, options, time);
+     if (path === "/api/assistant/flashcards-send") return flashcardSend(body, env, session, options, adapter, time);
     if (path === "/api/assistant/credential") {
       if (!exact(body, ["key"]) || typeof body.key !== "string" || !/^[A-Za-z0-9_-]{20,256}$/.test(body.key)) return invalid();
       const encrypted = await seal(body.key, env.ASSISTANT_KEY_KEK!, `credential:${session.account_id}`);
