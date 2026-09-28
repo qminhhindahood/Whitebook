@@ -1,0 +1,26 @@
+:root {
+  --ink: #1b2337;
+  --slate: #4c5a70;
+  --muted: #6b7890;
+  --rule: #e3e6f0;
+  --rule-strong: #c9cfdf;
+  --canvas: #f5f6fb;
+  --white: #ffffff;
+  --indigo: #3f51c5;
+  --indigo-deep: #3343ab;
+  --indigo-bright: #637aec;
+  --indigo-tint: #eef1fc;
+  --indigo-wash: #f6f8fe;
+  --halo: rgb(99 122 236 / 32%);
+  --success: #168a52;
+  --success-tint: #eef9f3;
+  --warning: #9a5b00;
+  --warning-tint: #fff8e9;
+  --danger: #b03a30;
+  --danger-tint: #fff2f0;
+  --control-radius: 8px;
+  --tile-radius: 10px;
+  --card-radius: 14px;
+  --card-shadow: 0 1px 2px rgb(23 28 63 / 5%), 0 10px 28px rgb(23 28 63 / 7%);
+  --focus-ring: 3px solid var(--indigo-bright);
+}

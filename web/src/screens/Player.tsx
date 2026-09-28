@@ -10,6 +10,8 @@ import {
   QuestionContent,
 } from "../QuestionContent";
 import { playerLayout, presentationIssue } from "../questionPresentation";
+import "../player.css";
+import "../player-math.css";
 import { BookMark, LineIcon } from "../icons";
 import { formatTime } from "../ui";
 import { ReferenceSheet } from "../ReferenceSheet";
@@ -147,8 +149,8 @@ export function Player({
   }, [error, fail]);
   if (attempt.status === "transition")
     return (
-      <main className="transition-screen">
-        <BookMark className="transition-mark" />
+      <main className="player-transition-screen">
+        <BookMark className="player-transition-mark" />
         <h1>Module saved</h1>
         <p>
           Your completed Module is locked. The next Module remains hidden until
@@ -178,8 +180,8 @@ export function Player({
     );
   if (attempt.status === "break")
     return (
-      <main className="transition-screen">
-        <span className="break-time">
+      <main className="player-transition-screen">
+        <span className="player-break-time">
           {formatTime(clock.breakRemaining ?? attempt.breakRemainingSeconds)}
         </span>
         <h1>Section break</h1>

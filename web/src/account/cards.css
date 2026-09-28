@@ -1,6 +1,6 @@
 .cards { grid-column: 1 / -1; background: #fff; border: 1px solid #dce4ef; border-radius: 16px; padding: clamp(20px, 3vw, 32px); }
 
-.dashboard-nav { grid-column: 1 / -1; display: flex; gap: 8px; }
+.dashboard-nav { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
 .dashboard-nav-link { border: 1px solid #a9b9ce; border-radius: 999px; background: #fff; color: #33465e; padding: 8px 18px; font: inherit; font-weight: 650; cursor: pointer; }
 .dashboard-nav-link--active { background: #3f51c5; border-color: #3f51c5; color: #fff; }
 .dashboard-nav-link:focus-visible { outline: 3px solid #edab3a; outline-offset: 2px; }
