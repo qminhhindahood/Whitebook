@@ -31,3 +31,7 @@ Thumbs.db
 
 .worktrees/
 .wrangler/
+
+# Local visual-review artifacts and owner-provided release inputs
+/.qa/
+/ref/reference-sheet.png

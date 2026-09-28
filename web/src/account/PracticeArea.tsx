@@ -32,7 +32,7 @@ export type AttemptResult = {
   questions: { questionId: string; response: string | null; acceptedAnswers: string[]; correct: boolean }[];
 };
 type TimingMode = "elapsed" | "custom" | "sat_paced";
-type PracticeAreaProps = { initialRevisionId?: string; initialSection?: string; onSessionEnded: () => void };
+type PracticeAreaProps = { initialRevisionId?: string; initialSection?: string; initialExam?: boolean; initialAttemptId?: string; onPlayerChange?: (active: boolean) => void; onSessionEnded: () => void };
 
 class RequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -139,7 +139,7 @@ function selectedPool(questions: QuestionLink[], section: string, modules: numbe
   return questions.filter((question) => question.section === section && modules.includes(question.module));
 }
 
-export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded }: PracticeAreaProps) {
+export function PracticeArea({ initialRevisionId, initialSection, initialExam = false, initialAttemptId, onPlayerChange, onSessionEnded }: PracticeAreaProps) {
   const [packages, setPackages] = useState<Package[]>([]);
   const [attempts, setAttempts] = useState<AttemptSummary[]>([]);
   const [revisionId, setRevisionId] = useState(initialRevisionId ?? "");
@@ -149,7 +149,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
   const [modules, setModules] = useState<number[]>([]);
   const [count, setCount] = useState("1");
   const [ordering, setOrdering] = useState<"source" | "random">("source");
-  const [sectionExam, setSectionExam] = useState(false);
+  const [sectionExam, setSectionExam] = useState(initialExam);
   const [timing, setTiming] = useState<TimingMode>("elapsed");
   const [durationSeconds, setDurationSeconds] = useState("1800");
   const [loading, setLoading] = useState(true);
@@ -375,6 +375,14 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
     } finally { setBuilding(false); }
   }
 
+  const openedInitial = useRef("");
+  useEffect(() => {
+    if (!loading && initialAttemptId && openedInitial.current !== initialAttemptId) {
+      openedInitial.current = initialAttemptId; void openAttempt(initialAttemptId);
+    }
+  }, [loading, initialAttemptId]);
+  useEffect(() => { onPlayerChange?.(!!activeAttempt); return () => onPlayerChange?.(false); }, [!!activeAttempt, onPlayerChange]);
+
   const handleSnapshotChange = useCallback((next: AttemptSnapshot) => {
     setAttempts((current) => current.map((item) => item.attemptId === next.attemptId
       ? { ...item, status: next.status, startedAt: next.startedAt, deadlineAt: next.deadlineAt, completedAt: next.completedAt ?? null }
@@ -408,7 +416,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
             <button type="button" aria-pressed={!sectionExam} onClick={() => setSectionExam(false)}>Practice</button>
             <button type="button" aria-pressed={sectionExam} onClick={() => setSectionExam(true)}>Section Exam</button>
           </div>
-          <p className="practice-helper">{sectionExam ? "Complete both Modules with server timed deadlines and no timed break." : "Choose one package, then select the questions and timing for this Attempt."}</p>
+          <p className="practice-helper">{sectionExam ? "Two timed Modules, with an untimed transition between them." : "Choose one package, then select the questions and timing for this Attempt."}</p>
           <label className="practice-field" htmlFor="practice-package">Test Package
             <select id="practice-package" value={revisionId} onChange={(event) => setRevisionId(event.target.value)}>
               <option value="">Choose one reviewed package</option>
@@ -487,7 +495,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
           <h4>Attempt selection</h4>
           <dl><div><dt>Package</dt><dd>{selectedPackage?.title ?? "Choose a package"}</dd></div>
             {!sectionExam && category && <div><dt>Category</dt><dd>{category}</dd></div>}
-            <div><dt>Questions</dt><dd>{sectionExam ? `${sectionPool.length} total · ${sectionPool.length / 2} per Module` : pool.length ? `${Math.min(Number(count) || 0, pool.length)} of ${pool.length}` : "—"}</dd></div>
+            <div><dt>Questions</dt><dd>{sectionExam ? `${section === "Math" ? 44 : 54} total · ${section === "Math" ? 22 : 27} per Module` : pool.length ? `${Math.min(Number(count) || 0, pool.length)} of ${pool.length}` : "—"}</dd></div>
             <div><dt>Order</dt><dd>{sectionExam ? "Random server selection" : ordering === "source" ? "Package order" : "Random"}</dd></div>
             <div><dt>Timing</dt><dd>{sectionExam ? `${section === "Math" ? 35 : 32} minutes per Module` : timing === "elapsed" ? "Elapsed" : timing === "custom" ? "Custom countdown" : "SAT-paced"}</dd></div></dl>
           <p>The server clock starts only after every selected question and visual is ready.</p>

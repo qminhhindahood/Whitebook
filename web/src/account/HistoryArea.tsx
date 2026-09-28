@@ -38,7 +38,7 @@ async function request<T>(path: string, method = "GET", payload?: unknown): Prom
 
 function responseText(response: string | null | undefined) { return response || "Unanswered"; }
 
-export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded: () => void; initialTarget?: { attemptId: string; questionId: string } }) {
+export function HistoryArea({ onSessionEnded, initialTarget, onResume }: { onSessionEnded: () => void; onResume?: (id: string) => void; initialTarget?: { attemptId: string; questionId: string } }) {
   const [attempts, setAttempts] = useState<AttemptSummary[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -183,7 +183,7 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
         <article key={item.attemptId} className="history-area__card"><div>
           <strong>{packages.find((entry) => entry.revisionId === item.revisionId)?.title ?? "Reviewed Test Package"}</strong>
           <p>{item.kind === "section_exam" ? "Section Exam" : "Practice"} · {item.questionCount} questions · {item.status}</p>
-        </div>{item.status === "completed" && <button type="button" className="practice-button practice-button--quiet" disabled={busy}
+        </div>{(item.status === "active" || item.status === "preparing") && onResume && <button type="button" className="practice-button" onClick={() => onResume(item.attemptId)}>{item.status === "preparing" ? "Continue setup" : "Resume Attempt"}</button>}{item.status === "completed" && <button type="button" className="practice-button practice-button--quiet" disabled={busy}
           onClick={() => openAttempt(item.attemptId)}>Open completed Attempt</button>}</article>)}
     </div> : <>
       <div className="history-area__actions">

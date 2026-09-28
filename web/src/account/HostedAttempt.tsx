@@ -747,7 +747,10 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       <button type="button" className="practice-button" disabled={lifecycleBusy || saveStatus !== "saved"}
         onClick={() => void sectionAction("finish-module")}>{activeModule === 1 ? "Finish Module" : "Finish Section Exam"}</button>
     </div>}
-    {mathTools}
+    {showMathTools && <details className="hosted-attempt__math-tools">
+      <summary>Calculator & Reference Sheet</summary>
+      {mathTools}
+    </details>}
     {referenceSheet}
     {failedChanges.length > 0 && <div className="hosted-attempt__unsaved" role="group" aria-label="Unsaved changes">
       <p>{failedChanges.length === 1 ? "One change was not saved." : `${failedChanges.length} changes were not saved.`} Your unsaved work remains visible here.</p>

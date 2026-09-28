@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { SatWeekend } from "./SatWeekend";
+import { areas, Icon, CalendarRail, StudyDashboard, DatesDialog, useWorkspaceData, type Area, type StudyAction } from "./StudyWorkspace";
 import { accountFetch, csrfToken } from "./accountClient";
 import { FlashcardsArea } from "./FlashcardStudy";
 import { deviceZone } from "./satCountdown";
@@ -28,7 +28,27 @@ export function AccountApp() {
   const [timeZone, setTimeZone] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<"dashboard" | "cards" | "library" | "practice" | "history" | "progress" | "plan" | "tutor">("dashboard");
+  const readView = (): Area => { const area = window.location.hash.slice(1); return area === "tutor" ? (tutorEnabled ? "tutor" : "dashboard") : areas.some(item => item.id === area) ? area as Area : "dashboard"; };
+  const [view, updateView] = useState<Area>(readView);
+  const [datesOpen, setDatesOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [practiceExam, setPracticeExam] = useState(false);
+  const [resumeId, setResumeId] = useState<string>();
+  const [playerOpen, setPlayerOpen] = useState(false);
+  function setView(area: Area) {
+    if (window.location.hash !== `#${area}`) window.history.pushState(null, "", `#${area}`);
+    updateView(area); setPlayerOpen(false);
+  }
+  useEffect(() => {
+    const restore = () => { updateView(readView()); setPlayerOpen(false); };
+    window.addEventListener("popstate", restore);
+    window.addEventListener("hashchange", restore);
+    return () => { window.removeEventListener("popstate", restore); window.removeEventListener("hashchange", restore); };
+  }, []);
+  useEffect(() => {
+    document.title = `${areas.find(item => item.id === view)?.label} · Whitebook`;
+    document.getElementById("page-heading")?.focus({ preventScroll: true });
+  }, [view]);
   const [practiceRevisionId, setPracticeRevisionId] = useState<string>();
   const [practiceSection, setPracticeSection] = useState<string>();
   const [historyTarget, setHistoryTarget] = useState<{ attemptId: string; questionId: string }>();
@@ -173,50 +193,42 @@ export function AccountApp() {
     setMe(null);
     setMessage("Your session ended. Sign in again.");
   }, []);
-  return <main className={`account-shell${me ? " account-shell--dashboard" : ""}`}>
-    <header className="account-header"><a href="/dashboard" className="account-brand">Whitebook</a><span>Personal study workspace</span></header>
-    {loading ? <section className="account-card"><p>Opening your workspace…</p></section> : me ?
-      <div className="dashboard-layout">
-        <section className="dashboard-intro" aria-labelledby="dashboard-heading">
-          <h1 id="dashboard-heading">Dashboard</h1>
-          <p className="dashboard-welcome">Welcome, {me.account.nickname || me.account.displayName}</p>
-          <p>Your private study space follows you across devices.</p>
-        </section>
-        <nav className="dashboard-nav" aria-label="Workspace areas">
-          {tutorEnabled && tutorAvailable && <button type="button" className={view === "tutor" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "tutor" ? "page" : undefined} onClick={() => setView("tutor")}>Tutor Chat</button>}
-          <button type="button" className={view === "dashboard" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => setView("dashboard")}>Dashboard</button>
-          <button type="button" className={view === "cards" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "cards" ? "page" : undefined} onClick={() => setView("cards")}>Flashcards</button>
-          <button type="button" className={view === "library" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "library" ? "page" : undefined} onClick={() => setView("library")}>Library</button>
-          <button type="button" className={view === "practice" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "practice" ? "page" : undefined} onClick={() => { setPracticeRevisionId(undefined); setPracticeSection(undefined); setView("practice"); }}>Practice</button>
-          <button type="button" className={view === "history" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "history" ? "page" : undefined} onClick={() => { setHistoryTarget(undefined); setView("history"); }}>History</button>
-          <button type="button" className={view === "progress" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "progress" ? "page" : undefined} onClick={() => setView("progress")}>Progress</button>
-          <button type="button" className={view === "plan" ? "dashboard-nav-link dashboard-nav-link--active" : "dashboard-nav-link"} aria-current={view === "plan" ? "page" : undefined} onClick={() => setView("plan")}>Study Plan</button>
+  const workspace = useWorkspaceData(handleSessionEnded, `${me?.account.id}-${view}-${refreshKey}`, !!me);
+  const name = me?.account.nickname || me?.account.displayName || "Learner";
+  function startPractice(id: string, exam = false) { setResumeId(undefined); setPracticeExam(exam); setPracticeRevisionId(id); setPracticeSection(undefined); setView("practice"); }
+  function resumeAttempt(id: string) { setResumeId(id); setView("practice"); }
+  function followAction(action: StudyAction) {
+    if (action.area === "cards") setView("cards");
+    if (action.area === "history" && action.attemptId && action.questionId) { setHistoryTarget({ attemptId: action.attemptId, questionId: action.questionId }); setView("history"); }
+    if (action.area === "practice" && action.revisionId) { setResumeId(undefined); setPracticeExam(false); setPracticeRevisionId(action.revisionId); setPracticeSection(action.section); setView("practice"); }
+  }
+  function navigate(area: Area) {
+    if (area === "practice") { setResumeId(undefined); setPracticeRevisionId(undefined); setPracticeSection(undefined); setPracticeExam(false); }
+    if (area === "history") setHistoryTarget(undefined);
+    setView(area);
+  }
+  return <div className={`whitebook-workspace${playerOpen ? " is-playing" : ""}`}>
+    {loading ? <main className="sign-in-page"><p role="status">Opening your workspace…</p></main> : me ? <>
+      <a className="skip-link" href="#page-heading">Skip to study area</a>
+      <aside className="left-rail"><a className="brand" href="#dashboard" aria-label="Whitebook Dashboard" onClick={() => navigate("dashboard")}><span className="brand-mark"><Icon name="leaf" /></span><span className="brand-name">whitebook<span className="brand-dot">.</span></span></a>
+        <div className="workspace-label">YOUR STUDY SPACE</div><nav aria-label="Workspace areas">{areas.filter(item => item.id !== "settings").map(item => <button key={item.id} className={`nav-item${view === item.id ? " active" : ""}`} aria-label={item.label} title={item.label} aria-current={view === item.id ? "page" : undefined} onClick={() => navigate(item.id)}><Icon name={item.icon} /><span>{item.label}</span></button>)}
+          {tutorEnabled && tutorAvailable && <button type="button" className={`nav-item${view === "tutor" ? " active" : ""}`} aria-label="Tutor Chat" title="Tutor Chat" aria-current={view === "tutor" ? "page" : undefined} onClick={() => navigate("tutor")}><Icon name="chat" /><span>Tutor Chat</span></button>}
         </nav>
+        <div className="rail-note"><Icon name="leaf" /><p>Small steps.<br /><em>Big possibilities.</em></p><span>A little growth, every day.</span></div>
+        <div className="rail-bottom"><button className={`nav-item${view === "settings" ? " active" : ""}`} aria-label="Account & Settings" title="Account & Settings" aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}><Icon name="settings" /><span>Account & Settings</span></button><div className="user"><span className="avatar">{name[0]}</span><div><strong>{name}</strong><small>Your personal study space</small></div></div></div>
+      </aside>
+      <div className="app-shell"><header className="topbar"><div className="breadcrumb">My workspace <span>/</span><strong>{areas.find(item => item.id === view)?.label}</strong></div><div className="top-right"><span className="demo-label">Your private study space</span><button className="avatar mini" aria-label="Open account settings" onClick={() => navigate("settings")}>{name[0]}</button></div></header>
+      <div className={`columns${view === "dashboard" ? "" : " columns--study"}`}><main className="study-main" id="study-main">
+        {view !== "dashboard" && <div className="greeting"><h1 id="page-heading" tabIndex={-1}>{areas.find(item => item.id === view)?.label ?? (tutorEnabled ? "Tutor Chat" : "")}</h1></div>}
         {tutorEnabled && <Suspense fallback={null}><TutorChat key={me.account.id} workspaceView={view} onAvailability={setTutorAvailable} onSessionEnded={handleSessionEnded} /></Suspense>}
-        {view === "tutor" && tutorEnabled ? null : view === "cards" ?
-          <FlashcardsArea onSessionEnded={handleSessionEnded} /> : view === "library" ?
-          <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={(revisionId) => {
-            setPracticeRevisionId(revisionId); setPracticeSection(undefined); setView("practice");
-          }} /> : view === "practice" ?
-          <PracticeArea initialRevisionId={practiceRevisionId} initialSection={practiceSection} onSessionEnded={handleSessionEnded} /> : view === "history" ?
-          <HistoryArea initialTarget={historyTarget} onSessionEnded={handleSessionEnded} /> : view === "progress" ?
-          <ProgressArea onSessionEnded={handleSessionEnded} /> :
-          view === "plan" ? <PlanArea onSessionEnded={handleSessionEnded} onGoDates={() => setView("dashboard")}
-            onAction={(action) => {
-              if (action.area === "cards") setView("cards");
-              if (action.area === "history" && action.attemptId && action.questionId) {
-                setHistoryTarget({ attemptId: action.attemptId, questionId: action.questionId }); setView("history");
-              }
-              if (action.area === "practice" && action.revisionId) {
-                setPracticeRevisionId(action.revisionId); setPracticeSection(action.section); setView("practice");
-              }
-            }} /> :
-          <>
-            <SatWeekend onSessionEnded={handleSessionEnded} />
-            <section className="dashboard-empty" aria-labelledby="activity-heading">
-              <h2 id="activity-heading">Your study activity</h2>
-              <p>Open History to revisit completed Attempts and review missed questions.</p>
-            </section>
+        {view === "dashboard" ? <><StudyDashboard data={workspace.data} name={name} timeZone={me.account.timeZone} onNavigate={navigate} onDates={() => setDatesOpen(true)} onPractice={startPractice} onResume={resumeAttempt} />{workspace.error && <p className="workspace-notice" role="status">{workspace.error} <button className="secondary" onClick={workspace.retry}>Retry</button></p>}</> :
+          view === "tutor" && tutorEnabled ? null :
+          view === "cards" ? <FlashcardsArea onSessionEnded={handleSessionEnded} /> :
+          view === "library" ? <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={startPractice} /> :
+          view === "practice" ? <PracticeArea key={`${practiceRevisionId}-${resumeId}-${practiceExam}`} initialRevisionId={practiceRevisionId} initialSection={practiceSection} initialExam={practiceExam} initialAttemptId={resumeId} onPlayerChange={setPlayerOpen} onSessionEnded={handleSessionEnded} /> :
+          view === "history" ? <HistoryArea initialTarget={historyTarget} onResume={resumeAttempt} onSessionEnded={handleSessionEnded} /> :
+          view === "progress" ? <ProgressArea onSessionEnded={handleSessionEnded} /> :
+          view === "plan" ? <PlanArea onSessionEnded={handleSessionEnded} onGoDates={() => setDatesOpen(true)} onAction={followAction} /> :
             <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
               <h2 id="account-heading">Account</h2>
               <p>Signed in as {me.account.email}</p>
@@ -231,16 +243,17 @@ export function AccountApp() {
               </form>
               <div className="account-actions"><button type="button" disabled={busy} onClick={renew}>Renew session</button><button type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
               <div className="account-actions"><button type="button" disabled={busy} onClick={exportData}>Download account data</button></div>
-              <form onSubmit={deleteAccount}>
+              <form className="account-danger" onSubmit={deleteAccount}>
                 <label htmlFor="delete-confirmation">Delete account</label>
                 <p className="account-hint">This permanently removes your study data and signs out every device. Download a copy first if you want to keep it. Type DELETE MY ACCOUNT to confirm.</p>
                 <div className="account-row"><input id="delete-confirmation" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /><button type="submit" disabled={busy || deleteConfirmation !== "DELETE MY ACCOUNT"}>Permanently delete account</button></div>
               </form>
-            </section>
-          </>}
-      </div> :
-      <section className="account-card"><h1>Study in your own space</h1><p>Sign in with Google to open your private Whitebook account.</p>{signInReady ? <a className="account-button" href="/api/auth/google/start">Continue with Google</a> : <p role="status">Google sign-in is being set up. Please return later.</p>}</section>}
+            </section>}
+        <footer className="workspace-footer">Made for your pace. Built for your possibilities.<span>Whitebook</span></footer>
+      </main>{view === "dashboard" && <CalendarRail data={workspace.data} timeZone={me.account.timeZone} onDates={() => setDatesOpen(true)} onPlan={() => navigate("plan")} onAction={followAction} />}</div></div>
+      {datesOpen && <DatesDialog timeZone={me.account.timeZone} onSessionEnded={handleSessionEnded} onClose={() => { setDatesOpen(false); setRefreshKey(value => value + 1); }} />}
+    </> : <main className="sign-in-page"><a href="/dashboard" className="brand"><Icon name="leaf" />whitebook.</a><section className="account-card"><h1>Study in your own space</h1><p>Sign in with Google to open your private Whitebook account.</p>{signInReady ? <a className="account-button" href="/api/auth/google/start">Continue with Google</a> : <p role="status">Google sign-in is being set up. Please return later.</p>}</section></main>}
     {loginError && !me && <p className="account-message" role="alert">{loginError === "google_cancelled" ? "Google sign-in was cancelled. You can try again." : "Google sign-in could not be completed. Please try again."}</p>}
-    {message && <p className="account-message" role="status">{message}</p>}
-  </main>;
+    {message && <p className="account-message workspace-toast" role="status">{message}</p>}
+  </div>;
 }

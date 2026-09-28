@@ -98,11 +98,12 @@ export function FlashcardsArea({ onSessionEnded }: { onSessionEnded?: () => void
     </div>
     {tab === "cards" ? <PersonalCards onSessionEnded={onSessionEnded} /> :
       plan ? <StudySession key={`${plan.deck ?? "all"}:${plan.total}`} plan={plan} onExit={() => setPlan(null)} onSessionEnded={onSessionEnded} /> :
-      <StudyHome onStart={setPlan} onSessionEnded={onSessionEnded} />}
+      <StudyHome onStart={setPlan} onSessionEnded={onSessionEnded} onAddCard={() => setTab("cards")} />}
   </>;
 }
 
-export function StudyHome({ onStart, onSessionEnded }: {
+export function StudyHome({ onStart, onSessionEnded, onAddCard }: {
+  onAddCard?: () => void;
   onStart: (plan: SessionPlan) => void;
   onSessionEnded?: () => void;
 }) {

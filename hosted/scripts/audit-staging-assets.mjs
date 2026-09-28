@@ -5,13 +5,13 @@ import { join, relative, resolve } from "node:path";
 const HOSTED = resolve(import.meta.dirname, "..");
 const DIST = resolve(HOSTED, "dist");
 const PRIMARY = new URL(process.env.WHITEBOOK_STAGING_URL ||
-  "https://whitebook-ticket-03-staging.anothermiralph.workers.dev");
+  "https://whitebook.docai.dpdns.org");
 const VERSION = process.env.WHITEBOOK_STAGING_VERSION_URL ||
-  "https://2c7c78c9-whitebook-ticket-03-staging.anothermiralph.workers.dev";
+  "https://2c7c78c9-whitebook-hosted-staging.anothermiralph.workers.dev";
 const FILE_LIMIT = 20_000;
 const BYTE_LIMIT = 25 * 1024 * 1024;
 
-if (PRIMARY.hostname !== "whitebook-ticket-03-staging.anothermiralph.workers.dev" || PRIMARY.protocol !== "https:") {
+if (PRIMARY.hostname !== "whitebook.docai.dpdns.org" || PRIMARY.protocol !== "https:") {
   throw new Error("The asset audit only runs against the configured staging Worker.");
 }
 

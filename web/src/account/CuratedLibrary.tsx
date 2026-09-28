@@ -1,3 +1,4 @@
+import { PackageCard } from "./StudyWorkspace";
 import { useEffect, useRef, useState } from "react";
 import { HostedBlocks, HostedChoices, type HostedPresentationData } from "./HostedPresentation";
 
@@ -12,7 +13,7 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export function CuratedLibrary({ onSessionEnded, onBuildPractice }: {
-  onSessionEnded: () => void; onBuildPractice?: (revisionId: string) => void;
+  onSessionEnded: () => void; onBuildPractice?: (revisionId: string, exam?: boolean) => void;
 }) {
   const requestToken = useRef(0);
   const [packages, setPackages] = useState<Package[]>([]);
@@ -62,18 +63,9 @@ export function CuratedLibrary({ onSessionEnded, onBuildPractice }: {
     {loading && <p role="status">Loading library…</p>}
     {error && <p role="alert">{error}</p>}
     {!loading && !revision && packages.length === 0 && <p>No reviewed packages are published yet.</p>}
-    <div className="curated-library__packages">
-      {packages.map((item) => <button key={item.revisionId} type="button"
-        aria-pressed={revision === item.revisionId} onClick={() => void openPackage(item.revisionId)}>
-        <strong>{item.title}</strong><span>Revision {item.publishedRevision} · {item.questionCount} questions</span>
-      </button>)}
-    </div>
-    {revision && <div className="curated-library__questions" aria-label="Questions">
-      {links.map((item) => <button key={item.questionId} type="button"
-        aria-current={question?.questionId === item.questionId ? "true" : undefined}
-        onClick={() => void openQuestion(revision, item.questionId)}>
-        {item.section} · Module {item.module} · Question {item.questionNumber}
-      </button>)}
+    {!revision && <div className="package-grid library-shelf">{packages.map(item => <PackageCard key={item.revisionId} item={item} onPractice={(id, exam) => onBuildPractice?.(id, exam)} onPreview={() => void openPackage(item.revisionId)} />)}</div>}
+    {revision && <div className="preview-toolbar"><button className="secondary" onClick={() => { ++requestToken.current; setRevision(null); setQuestion(null); setLinks([]); setLoading(false); }}>Back to packages</button><h3>{packages.find(item => item.revisionId === revision)?.title}</h3>
+      <label>Preview question<select aria-label="Preview question" value={question?.questionId ?? ""} onChange={event => void openQuestion(revision, event.target.value)}>{links.map(item => <option key={item.questionId} value={item.questionId}>{item.section} · Module {item.module} · Question {item.questionNumber}</option>)}</select></label>
     </div>}
     {revision && onBuildPractice && <div className="curated-library__practice">
       <p>Build a saved Practice Attempt from this exact package revision.</p>

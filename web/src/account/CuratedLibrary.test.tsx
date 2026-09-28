@@ -32,9 +32,11 @@ it("opens Reading, Math, and Image Fallback presentations without answer data", 
   render(<CuratedLibrary onSessionEnded={() => { throw new Error("Unexpected sign-out"); }} />);
   fireEvent.click(await screen.findByRole("button", { name: /August R&W/ }));
   expect(await screen.findByText("A reviewed passage.")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /August Math/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Back to packages" }));
+  fireEvent.click(screen.getByRole("button", { name: /Preview August Math/ }));
   expect(await screen.findByText("Solve for x.")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /September R&W/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Back to packages" }));
+  fireEvent.click(screen.getByRole("button", { name: /Preview September R&W/ }));
   const fallback = await screen.findByAltText("Whole question image") as HTMLImageElement;
   expect(fallback.src).toContain(`/content/fallback/q1/${"a".repeat(64)}.png`);
   expect(calls).not.toContain("/source.pdf");
@@ -60,11 +62,12 @@ it("keeps the latest package visible when an earlier request finishes later", as
   }));
   render(<CuratedLibrary onSessionEnded={() => {}} />);
   fireEvent.click(await screen.findByRole("button", { name: /Slow R&W/ }));
-  fireEvent.click(screen.getByRole("button", { name: /Fast Math/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Back to packages" }));
+  fireEvent.click(screen.getByRole("button", { name: /Preview Fast Math/ }));
   expect(await screen.findByText("Fast question")).toBeTruthy();
   await act(async () => { finishSlow(Response.json({ questions: [] })); await slow; });
   expect(screen.getByText("Fast question")).toBeTruthy();
-  expect(screen.getByRole("button", { name: /Fast Math/ }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("heading", { name: "Fast Math" })).toBeTruthy();
 });
 
 it("opens Practice from the selected immutable package revision", async () => {

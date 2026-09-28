@@ -8,7 +8,7 @@ type SatDatesData = {
   selection: { dates: string[]; primary: string | null };
 };
 
-export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) {
+export function SatWeekend({ onSessionEnded, timeZone, onSaved }: { onSessionEnded?: () => void; timeZone?: string; onSaved?: () => void }) {
   const [data, setData] = useState<SatDatesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,7 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
 
   if (loading) return <section className="dashboard-sat" aria-labelledby="sat-heading"><h2 id="sat-heading">SAT test date</h2><p>Loading your SAT dates…</p></section>;
 
-  const countdown = satCountdown(primary, now);
+  const countdown = satCountdown(primary, now, timeZone || undefined);
 
   function toggle(date: string, checked: boolean) {
     if (checked) {
@@ -68,6 +68,7 @@ export function SatWeekend({ onSessionEnded }: { onSessionEnded?: () => void }) 
       const body = await response.json() as { selection: SatDatesData["selection"] };
       setData((current) => current ? { ...current, selection: body.selection } : current);
       setMessage("Saved to your account.");
+      onSaved?.();
     } catch {
       setMessage("Your SAT dates were not saved. Check your connection and try again.");
     } finally { setBusy(false); }

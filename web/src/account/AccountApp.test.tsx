@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AccountApp } from "./AccountApp";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.history.replaceState(null, "", "/"); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 it("shows Google sign-in when the private API says the browser is signed out", async () => {
   vi.stubGlobal("fetch", vi.fn(async (path: string) => path === "/api/auth/status"
@@ -29,6 +29,7 @@ it("requires the deletion phrase and sends the account mutation with CSRF", asyn
     throw new Error(`Unexpected route ${path}`);
   }));
   render(<AccountApp />);
+  fireEvent.click(await screen.findByRole("button", { name: "Account & Settings" }));
   const button = await screen.findByRole("button", { name: "Permanently delete account" });
   expect(button.hasAttribute("disabled")).toBe(true);
   expect(screen.getByRole("button", { name: "Download account data" })).toBeTruthy();
@@ -72,12 +73,13 @@ it("shows account data, saves a nickname, renews and clears private state on sig
   }));
   render(<AccountApp />);
   expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Your study activity" })).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "SAT test date" })).toBeTruthy();
-  expect(await screen.findByText("Welcome, Learner")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Your study shelf" })).toBeTruthy();
+  expect(screen.queryByLabelText("Nickname")).toBeNull();
+  expect(await screen.findByText(/Welcome back, Learner/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Account & Settings" }));
   fireEvent.change(screen.getByLabelText("Nickname"), { target: { value: "Sam" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  expect(await screen.findByText("Welcome, Sam")).toBeTruthy();
+  expect(await screen.findByText("Saved to your account.")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Renew session" }));
   expect(await screen.findByText("Session renewed.")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
@@ -162,7 +164,7 @@ it("opens the Flashcards area from the dashboard navigation and reaches the stud
   expect(screen.getByText("Nothing is due today. Come back tomorrow — new words and reviews will appear here.")).toBeTruthy();
 
   fireEvent.click(screen.getByRole("tab", { name: "My cards" }));
-  expect(await screen.findByRole("heading", { name: "Flashcards" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Flashcards", level: 1 })).toBeTruthy();
   expect(screen.getByText("You have no cards here yet. Add your first word.")).toBeTruthy();
 });
 

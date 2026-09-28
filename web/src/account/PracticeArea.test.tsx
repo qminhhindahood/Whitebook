@@ -243,7 +243,7 @@ it("keeps Section selection visible and omits Practice-only setup fields for an 
   expect(screen.getByLabelText("Section")).toBeTruthy();
   expect(screen.queryByLabelText("Question count")).toBeNull();
   expect(screen.queryByText("Modules")).toBeNull();
-  expect(screen.getByText(/no timed break/i)).toBeTruthy();
+  expect(screen.getByText(/untimed transition/i)).toBeTruthy();
 });
 
 it.each([

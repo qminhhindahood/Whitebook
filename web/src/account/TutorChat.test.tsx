@@ -26,7 +26,7 @@ function setup(enabled = true, vision = false) {
 }
 
 it("has no Tutor Chat control or assistant request in the current release", async () => {
-  const f = setup(false); await screen.findByText("Welcome, Learner");
+  const f = setup(false); await screen.findByRole("heading", { name: "Dashboard" });
   expect(screen.queryByRole("button", { name: "Tutor Chat" })).toBeNull();
   expect(f.calls.some(c => c.path.startsWith("/api/assistant/"))).toBe(false);
 });
@@ -53,6 +53,7 @@ it("previews exact text for each consent, preserves the visit across navigation,
   await screen.findByRole("button", { name: "I consent — send to Gemini" });
   expect(f.calls.filter(c => c.path.endsWith("/preview")).at(-1)!.body).toMatchObject({ locale: "vi", priorMessages: [{ role: "learner", text: "Explain intercept" }, { role: "assistant", text: "Fixture tutor reply" }] });
   fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+  fireEvent.click(screen.getByRole("button", { name: "Account & Settings" }));
   fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
   await screen.findByText("Signed out of this browser.");
   expect(screen.queryByText("Fixture tutor reply")).toBeNull();

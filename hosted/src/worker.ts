@@ -28,6 +28,8 @@ type Env = AccountEnv & AssistantEnv & {
 const QUESTION_PATH = /^\/api\/staging\/questions\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)$/;
 const CONTENT_PATH = /^\/content\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+\.svg)$/;
 const PUBLIC_ASSET_PATH = /^\/assets\/[A-Za-z0-9_-]+\.(?:js|css|woff2?|ttf)$/;
+// Only these authored UI images are public. Question visuals remain behind /content authorization.
+const PUBLIC_DESIGN_IMAGE = /^\/assets\/(?:study-illustration|paper)-[A-Za-z0-9_-]+\.(?:png|webp)$/;
 const SESSION_SECONDS = 30 * 60;
 type Meter = { rowsRead: number; rowsWritten: number };
 
@@ -155,7 +157,7 @@ export default {
       headers.set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
       return new Response(asset.body, { status: asset.status, headers });
     }
-    if (request.method === "GET" && (path === "/staging" || path === "/staging.html" || PUBLIC_ASSET_PATH.test(path)))
+    if (request.method === "GET" && (path === "/staging" || path === "/staging.html" || PUBLIC_ASSET_PATH.test(path) || PUBLIC_DESIGN_IMAGE.test(path)))
       return env.ASSETS.fetch(request);
     const meter: Meter = { rowsRead: 0, rowsWritten: 0 };
     try {

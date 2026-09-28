@@ -1,7 +1,8 @@
 # Ticket 03 staging account setup
 
-Ticket 03 has its own staging Worker and D1 database. It is deployed at
-`https://whitebook-ticket-03-staging.anothermiralph.workers.dev/dashboard`.
+Ticket 03 has its own staging Worker and D1 database. The Worker is named
+`whitebook-hosted-staging` and its staging site is
+`https://whitebook.docai.dpdns.org/dashboard`.
 No production route or paid binding is configured. The ticket 02 staging Worker
 and D1 database remain separate.
 
@@ -10,7 +11,7 @@ accounts, one-use OAuth flows, and revocable hashed sessions. A Google OAuth
 web client is required before live sign-in. Configure its exact authorized
 redirect URI as:
 
-`https://whitebook-ticket-03-staging.anothermiralph.workers.dev/api/auth/google/callback`
+`https://whitebook.docai.dpdns.org/api/auth/google/callback`
 
 From `hosted/`, add these Worker secrets using Wrangler's interactive input.
 Do not put the client secret, session tokens, or OAuth codes in source, shell

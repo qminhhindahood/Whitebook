@@ -1,0 +1,371 @@
+{
+  "note": "Deterministic API fixture; not a live Google or D1 check.",
+  "errors": [],
+  "answerPreservedOnResume": true,
+  "calls": [
+    {
+      "path": "/api/account/me",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/scores",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library/math/questions",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "POST"
+    },
+    {
+      "path": "/api/library/math/questions/q1",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library/math/questions/q2",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts/visual-attempt/start",
+      "method": "POST"
+    },
+    {
+      "path": "/api/attempts/visual-attempt/write",
+      "method": "POST"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/cards/study",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/plan",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/sat-dates",
+      "method": "GET"
+    },
+    {
+      "path": "/api/account/progress",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library/math/questions",
+      "method": "GET"
+    },
+    {
+      "path": "/api/attempts/visual-attempt",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library/math/questions/q1",
+      "method": "GET"
+    },
+    {
+      "path": "/api/library/math/questions/q2",
+      "method": "GET"
+    }
+  ]
+}
