@@ -199,6 +199,19 @@ it("fails closed on expired eligibility, unavailable capability, missing authent
   expect(f.adapter).not.toHaveBeenCalled();
 });
 
+it.each([
+  ["audienceEligibility", "unknown_audience"],
+  ["providerEligibility", "pending"],
+  ["eligibilityEvidence", ""],
+  ["failureCheckEvidence", ""],
+])("does not offer Tutor Chat without an explicitly current and approved %s gate", async (field, value) => {
+  const f = await fixture(); const catalog = JSON.parse(f.env.ASSISTANT_CATALOG!); catalog[field] = value; f.env.ASSISTANT_CATALOG = JSON.stringify(catalog);
+  const response = await f.call("options");
+  expect(response.status).toBe(503);
+  expect((await response.json()).error.code).toBe("eligibility_required");
+  expect(f.adapter).not.toHaveBeenCalled();
+});
+
 it("enforces preview and token budgets independently, with bounded retry timing", async () => {
   const f = await fixture(); const p = await f.preview();
   const window = Math.floor(Date.now() / 3600000) * 3600000;
