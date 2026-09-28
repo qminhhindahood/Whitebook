@@ -247,15 +247,19 @@ async function saveBatch(request: Request, env: AccountEnv, session: Session): P
   }
   if (Object.keys(duplicates).length) return Response.json({ error: { code: "batch_duplicates", message: "Resolve duplicate cards before saving the batch.", duplicates } }, { status: 409, headers: noStore });
   const now = Math.floor(Date.now() / 1000);
-  const statements = normalizedCards.map(card => {
-    const id = crypto.randomUUID();
+  const ids = normalizedCards.map(() => crypto.randomUUID());
+  const statements = normalizedCards.map((card, index) => {
+    const id = ids[index];
     return env.DB.prepare(`INSERT INTO personal_cards (id, account_id, deck, deck_key, front, front_key, definition, vietnamese, part_of_speech, pronunciation, synonyms, example, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`)
       .bind(id, session.account_id, card.deck, normalize(card.deck), card.front, normalize(card.front), card.back.definition, card.back.vietnamese, card.back.partOfSpeech, card.back.pronunciation, card.back.synonyms, card.back.example, now, now);
   });
   try { await env.DB.batch(statements); }
   catch { return failure(503, "batch_failed", "The card batch was not saved. Your reviewed drafts are unchanged."); }
-  const cards = await env.DB.prepare(`SELECT ${CARD_COLUMNS} FROM personal_cards WHERE account_id = ? AND created_at = ? ORDER BY rowid DESC LIMIT ?`).bind(session.account_id, now, normalizedCards.length).all();
-  return json({ cards: (cards.results as CardRow[]).map(cardJson) }, 201);
+  const inserted = await env.DB.prepare(`SELECT ${CARD_COLUMNS} FROM personal_cards WHERE account_id = ? AND id IN (${ids.map(() => "?").join(", ")})`)
+    .bind(session.account_id, ...ids).all();
+  const byId = new Map((inserted.results as CardRow[]).map(row => [row.id, row]));
+  if (ids.some(id => !byId.has(id))) return failure(503, "batch_unavailable", "The saved card batch could not be opened. Refresh your cards to check the result.");
+  return json({ cards: ids.map(id => cardJson(byId.get(id)!)) }, 201);
 }
 
 async function edit(request: Request, env: AccountEnv, session: Session, id: string): Promise<Response> {
