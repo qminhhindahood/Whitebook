@@ -53,12 +53,14 @@ async function question(env: LibraryEnv, revisionId: string, questionId: string)
 }
 
 async function questions(env: LibraryEnv, revisionId: string): Promise<Response> {
-  const items = await rows<{ question_id: string; ordinal: number; section: string; module: number; question_number: number }>(
-    env.DB.prepare(`SELECT question_id, ordinal, section, module, question_number
-      FROM publication_questions WHERE revision_id = ? ORDER BY ordinal`).bind(revisionId));
+  const items = await rows<{ question_id: string; ordinal: number; section: string; module: number; question_number: number; category: string | null }>(
+    env.DB.prepare(`SELECT pq.question_id, pq.ordinal, pq.section, pq.module, pq.question_number, pc.category
+      FROM publication_questions pq LEFT JOIN publication_question_categories pc
+        ON pc.revision_id = pq.revision_id AND pc.question_id = pq.question_id
+      WHERE pq.revision_id = ? ORDER BY pq.ordinal`).bind(revisionId));
   return json({ revisionId, questions: items.map((item) => ({
     questionId: item.question_id, ordinal: item.ordinal, section: item.section,
-    module: item.module, questionNumber: item.question_number,
+    module: item.module, questionNumber: item.question_number, category: item.category,
   })) });
 }
 

@@ -32,8 +32,8 @@ function MathNotation({ source }: { source: string }) {
   return <span ref={target} className="question-content__math" />;
 }
 
-export function HostedBlocks({ blocks, revisionId, questionId }: {
-  blocks: HostedBlock[]; revisionId: string; questionId: string;
+export function HostedBlocks({ blocks, revisionId, questionId, highlightQuote }: {
+  blocks: HostedBlock[]; revisionId: string; questionId: string; highlightQuote?: string | null;
 }) {
   return <span className="question-content">
     {blocks.map((block, index) => {
@@ -42,7 +42,9 @@ export function HostedBlocks({ blocks, revisionId, questionId }: {
       if (block.kind === "reviewed_text") return <span key={index} className="question-content__text--reviewed">
         {block.runs.map((run, runIndex) => {
           const content = run.blank ? <span className="question-content__blank">{run.text}</span> : run.text;
-          return run.emphasis ? <em key={runIndex}>{content}</em> : <span key={runIndex}>{content}</span>;
+          const matchAt = !run.blank && highlightQuote ? run.text.indexOf(highlightQuote) : -1;
+          const matched = matchAt >= 0 ? <><span>{run.text.slice(0, matchAt)}</span><mark aria-label="Quoted evidence highlight">{highlightQuote}</mark><span>{run.text.slice(matchAt + highlightQuote!.length)}</span></> : content;
+          return run.emphasis ? <em key={runIndex}>{matched}</em> : <span key={runIndex}>{matched}</span>;
         })}
       </span>;
       const src = block.kind === "image_asset" ?

@@ -111,6 +111,40 @@ it("does not count assisted answers or guided retries as new graded evidence", (
   expect(summary.domains[0]).toMatchObject({ domain: "Algebra", sampleSize: 10 });
 });
 
+it("excludes every question in an Assisted Practice Attempt and keeps unassisted trends unchanged", () => {
+  const questions = Array.from({ length: 10 }, (_, index) => ({ questionId: `q${index}`, section: "Math" as const,
+    response: "A", correct: index < 5 }));
+  const first = attempt("learner-a", "first", 1000, questions.slice(0, 5));
+  const second = attempt("learner-a", "second", 2000, questions.slice(5));
+  const assisted = attempt("learner-a", "assisted", 3000, [
+    { questionId: "q10", section: "Math", response: "A", correct: true },
+    { questionId: "q11", section: "Math", response: "B", correct: false },
+  ]) as ReturnType<typeof attempt> & { assisted_at_ms: number };
+  assisted.assisted_at_ms = 3001;
+  const categories = [...questions, { questionId: "q10" }, { questionId: "q11" }].map(({ questionId }) => ({
+    revision_id: "revision-1", question_id: questionId, section: "Math" as const, category: "Algebra",
+  }));
+  const unassisted = summarizeProgress([first, second].map(row => ({ ...row, kind: "practice" })), categories);
+  const summary = summarizeProgress([first, second, assisted].map(row => ({ ...row, kind: "practice" })), categories);
+  expect(summary.completedAttempts).toBe(3);
+  expect(summary.excludedAssisted).toBe(2);
+  expect(summary.sections).toEqual(unassisted.sections);
+  expect(summary.categories).toEqual(unassisted.categories);
+  expect(summary.domains).toEqual(unassisted.domains);
+});
+
+it("returns an empty evidence baseline when every completed question came from Assisted Practice", () => {
+  const assisted = attempt("learner-a", "assisted", 3000, [
+    { questionId: "q1", section: "Math", response: "A", correct: true },
+    { questionId: "q2", section: "Math", response: null, correct: false },
+  ]) as ReturnType<typeof attempt> & { assisted_at_ms: number };
+  assisted.assisted_at_ms = 3001;
+  const summary = summarizeProgress([{ ...assisted, kind: "practice" }], ["q1", "q2"].map(questionId => ({
+    revision_id: "revision-1", question_id: questionId, section: "Math", category: "Algebra",
+  })));
+  expect(summary).toMatchObject({ completedAttempts: 1, excludedAssisted: 2, sections: [], categories: [], domains: [], unmapped: [] });
+});
+
 it("does not manufacture a trend from question order within one Attempt", () => {
   const questions = Array.from({ length: 10 }, (_, index) => ({ questionId: `q${index}`, section: "Math",
     response: "A", correct: index < 5 }));

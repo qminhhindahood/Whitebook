@@ -9,7 +9,7 @@ const owned = [
   { name: "personalCards", table: "personal_cards", fields: "id, deck, front, definition, vietnamese, part_of_speech, pronunciation, synonyms, example, archived_at, created_at, updated_at", order: "created_at, id" },
   { name: "cardRatings", table: "card_rating_events", fields: "id, card_id, rating, rating_zone, next_due, rated_at", order: "rated_at, id" },
   { name: "starterCardRatings", table: "starter_card_rating_events", fields: "id, deck_id, stable_id, rating, rating_zone, next_due, rated_at", order: "rated_at, id" },
-  { name: "attempts", table: "learner_attempts", fields: "id, revision_id, kind, status, config_json, questions_json, state_json, state_version, created_at_ms, started_at_ms, deadline_at_ms, completed_at_ms, result_json, answers_exposed_at_ms", order: "created_at_ms, id" },
+  { name: "attempts", table: "learner_attempts", fields: "id, revision_id, kind, status, config_json, questions_json, state_json, state_version, created_at_ms, started_at_ms, deadline_at_ms, completed_at_ms, result_json, answers_exposed_at_ms, assisted_at_ms", order: "created_at_ms, id" },
   { name: "guidedReviews", table: "guided_reviews", fields: "id, attempt_id, revision_id, question_id, prior_answer_exposure, retry_response, hint_used, revealed_at_ms, mistake_label, created_at_ms, updated_at_ms", order: "created_at_ms, id" },
   { name: "studyNotes", table: "study_notes", fields: "id, revision_id, question_id, body, created_at_ms, updated_at_ms", order: "created_at_ms, id" },
   { name: "planVersions", table: "study_plan_versions", fields: "id, version, primary_date, settings_json, source_json, created_at_ms", order: "version" },
@@ -64,7 +64,8 @@ async function deleteAccount(request: Request, env: AccountEnv, session: Session
     return failure(400, "invalid_confirmation", "Type DELETE MY ACCOUNT to confirm deletion.");
 
   // D1 batch is atomic. Child rows are removed before parent rows, including
-  // every account_id FK in migrations 0002-0009.
+  // Every account_id FK is removed; assistant nonce/credential rows also cascade
+  // with the account. They contain no portable study data and are never exported.
   const order = [
     "study_plan_task_events", "study_plan_tasks", "study_plan_versions",
     "study_notes", "guided_reviews", "card_rating_events", "starter_card_rating_events",
@@ -72,6 +73,7 @@ async function deleteAccount(request: Request, env: AccountEnv, session: Session
     "private_revision_entitlements", "learner_sessions",
   ];
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM assistant_limits WHERE scope IN (?, ?)").bind(`preview:${session.account_id}`, `send:${session.account_id}`),
     ...order.map(table => env.DB.prepare(`DELETE FROM ${table} WHERE account_id = ?`).bind(session.account_id)),
     env.DB.prepare("DELETE FROM learner_accounts WHERE id = ?").bind(session.account_id),
   ]);

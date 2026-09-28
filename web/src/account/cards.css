@@ -1,6 +1,6 @@
 .cards { grid-column: 1 / -1; background: #fff; border: 1px solid #dce4ef; border-radius: 16px; padding: clamp(20px, 3vw, 32px); }
 
-.dashboard-nav { grid-column: 1 / -1; display: flex; gap: 8px; }
+.dashboard-nav { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
 .dashboard-nav-link { border: 1px solid #a9b9ce; border-radius: 999px; background: #fff; color: #33465e; padding: 8px 18px; font: inherit; font-weight: 650; cursor: pointer; }
 .dashboard-nav-link--active { background: #3f51c5; border-color: #3f51c5; color: #fff; }
 .dashboard-nav-link:focus-visible { outline: 3px solid #edab3a; outline-offset: 2px; }
@@ -26,6 +26,13 @@
 .cards-form button, .cards-add-button, .cards-item-actions button { border: 0; border-radius: 8px; background: #2056aa; color: white; padding: 10px 15px; font: inherit; font-weight: 650; cursor: pointer; }
 .cards-form-actions button:last-child, .cards-item-actions button { background: #33465e; }
 .cards-form button:disabled, .cards-add-button:disabled, .cards-item-actions button:disabled { opacity: .55; cursor: wait; }
+.cards-assistant { display: grid; gap: 12px; margin: 18px 0; padding: 18px; border: 1px solid #cbd6ee; border-radius: 10px; background: #f8f9fd; }
+.cards-assistant label { display: grid; gap: 7px; font-weight: 650; }
+.cards-assistant select, .cards-assistant textarea, .cards-assistant input { padding: 10px 12px; border: 1px solid #a9b9ce; border-radius: 8px; font: inherit; }
+.cards-assistant textarea { min-height: 80px; resize: vertical; }
+.cards-assistant__preview, .cards-assistant__advice, .cards-assistant__draft { padding: 12px; border: 1px solid #dce4ef; border-radius: 8px; background: #fff; }
+.cards-assistant__preview pre { max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; }
+.cards-assistant__draft { display: grid; gap: 8px; }
 .cards-form button:focus-visible, .cards-add-button:focus-visible, .cards-item-actions button:focus-visible,
 .cards-toolbar-actions select:focus-visible, .cards-form-field input:focus-visible, .cards-form-field textarea:focus-visible { outline: 3px solid #edab3a; outline-offset: 2px; }
 

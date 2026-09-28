@@ -1,3 +1,5 @@
+@import "../tokens.css";
+
 :root {
   font-family: Inter, system-ui, sans-serif;
   color: #182538;
@@ -266,7 +268,28 @@ body { margin: 0; }
 .history-area__question-button { border: 0; background: none; padding: 0; color: #3343ab; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
 .history-area__question-button:focus-visible, .history-area input:focus-visible, .history-area textarea:focus-visible { outline: 3px solid #637aec; outline-offset: 2px; }
 .history-area__result-presentation { display: grid; gap: 12px; margin: 16px 0; line-height: 1.6; }
+.history-area__review--guided { max-width: none; }
+.guided-reasoning { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .85fr); gap: 18px; min-height: 62vh; }
+.guided-reasoning__switch { display: none; }
+.guided-reasoning__question, .guided-reasoning__guidance { min-height: 0; max-height: 68vh; overflow: auto; padding: 18px; border: 1px solid #dce4ef; border-radius: 10px; background: #fff; }
+.guided-reasoning__question { line-height: 1.65; }
+.guided-reasoning__guidance { display: grid; align-content: start; gap: 12px; }
+.guided-reasoning [hidden] { display: none !important; }
+.guided-reasoning__guidance label { display: grid; gap: 7px; font-weight: 650; }
+.guided-reasoning__guidance select, .guided-reasoning__guidance textarea { padding: 10px 12px; border: 1px solid #a9b9ce; border-radius: 8px; font: inherit; }
+.guided-reasoning__guidance textarea { min-height: 90px; resize: vertical; }
+.guided-reasoning__controls { display: grid; gap: 10px; }
+.guided-reasoning__preview { padding: 12px; border: 1px solid #cbd6ee; border-radius: 8px; background: #f8f9fd; }
+.guided-reasoning__preview pre { max-height: 180px; overflow: auto; white-space: pre-wrap; font-size: 12px; }
+.guided-reasoning__reply { padding: 12px; border-left: 3px solid #3f51c5; background: #eef1fc; }
+.guided-reasoning__steps { display: grid; gap: 10px; padding-left: 22px; }
+.guided-reasoning__steps li { padding-left: 4px; }
+.guided-reasoning__note { padding: 14px; border: 1px solid #cbd6ee; border-radius: 8px; background: #f8f9fd; }
+.guided-reasoning__note h5 { margin: 0 0 10px; }
 .hosted-attempt__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 22px; padding-top: 16px; border-top: 1px solid #dce4ef; }
+.hosted-attempt__assisted-confirm { margin: 18px 0; padding: 18px; border: 2px solid #d97706; border-radius: 10px; background: #fffbeb; }
+.hosted-attempt__assisted-confirm h3 { margin-top: 0; }
+.hosted-attempt__assisted-confirm p { line-height: 1.55; }
 .hosted-attempt__footer span { color: #52647a; font-weight: 700; font-variant-numeric: tabular-nums; }
 @media (max-width: 720px) {
   .practice-builder, .practice-form-grid { grid-template-columns: 1fr; }
@@ -276,4 +299,9 @@ body { margin: 0; }
   .hosted-attempt__workspace { grid-template-columns: 1fr; }
   .hosted-attempt__navigator ol { grid-template-columns: repeat(6, minmax(34px, 1fr)); }
   .hosted-attempt__header-side { justify-content: space-between; width: 100%; }
+  .guided-reasoning { display: grid; grid-template-columns: 1fr; }
+  .guided-reasoning__switch { display: flex; gap: 0; }
+  .guided-reasoning__switch button { flex: 1; min-height: 44px; border: 1px solid #a9b9ce; background: #fff; font: inherit; font-weight: 700; }
+  .guided-reasoning__switch button[aria-selected="true"] { background: #3f51c5; color: #fff; }
+  .guided-reasoning__question, .guided-reasoning__guidance { max-height: none; }
 }

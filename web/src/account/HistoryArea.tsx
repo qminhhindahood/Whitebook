@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import { HostedBlocks, HostedChoices } from "./HostedPresentation";
 import type { AttemptResult, AttemptSummary, PresentationQuestion } from "./PracticeArea";
+import type { ComponentType } from "react";
+import type { GuidedReasoningProps } from "./GuidedReasoning";
 
 class HistoryRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -17,7 +19,10 @@ type Review = { reviewId: string; attemptId: string; revisionId: string; questio
   priorAnswerExposure: "seen" | "possible"; hintAvailable: boolean;
   hintUsed: boolean; revealed: boolean; mistakeLabel: string | null;
   originalResponse?: string | null; retryResponse?: string | null; acceptedAnswers?: string[];
-  retryCorrect?: boolean | null; explanation?: string | null; notes?: Note[] };
+   retryCorrect?: boolean | null; explanation?: string | null; notes?: Note[] };
+const GuidedReasoning = lazy<ComponentType<GuidedReasoningProps>>(() => import.meta.env.VITE_AI_RELEASE_ENABLED === "true"
+  ? import("./GuidedReasoning").then((module) => ({ default: module.GuidedReasoning }))
+  : Promise.resolve({ default: (_props: GuidedReasoningProps) => null }));
 
 async function request<T>(path: string, method = "GET", payload?: unknown): Promise<T> {
   const response = await accountFetch(path, method === "GET" ? undefined : {
@@ -51,6 +56,8 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [guidedOpen, setGuidedOpen] = useState(false);
+  const aiEnabled = import.meta.env.VITE_AI_RELEASE_ENABLED === "true";
 
   useEffect(() => {
     let live = true;
@@ -121,7 +128,7 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
       const next = await request<Review>(`/api/review/attempts/${overview.attemptId}/questions/${questionId}`, "POST", {});
       const question = await request<PresentationQuestion>(`/api/library/${overview.revisionId}/questions/${questionId}`);
       setSelectedQuestionId(questionId); setReview(next); setPresentation(question); setResultPresentation(null);
-      setResults(null); setRetrying(false); setRetryResponse(""); setHint("");
+      setResults(null); setRetrying(false); setRetryResponse(""); setHint(""); setGuidedOpen(false);
       setLabel(next.mistakeLabel ?? ""); setNoteDraft(""); setEditingNoteId("");
     });
   }
@@ -188,14 +195,15 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
         }}>Back to questions</button>}
       </div>
       <p>{overview.correctCount} of {overview.questionCount} correct · Raw Accuracy is unchanged by review.</p>
-      {reviewPath ? <article className="history-area__review" aria-label="Guided review">
+      {reviewPath ? <article className={`history-area__review${guidedOpen ? " history-area__review--guided" : ""}`} aria-label="Guided review">
         <h3>{selected?.section} · Module {selected?.module} · Question {selected?.questionNumber}</h3>
         <p className="history-area__exposure">{review.priorAnswerExposure === "seen"
           ? "The answer was available in an earlier Results view. This retry is not blind."
           : "No prior answer view was recorded. Earlier Results may still have shown the answer."}</p>
-        <HostedBlocks blocks={presentation.presentation.stimulus} revisionId={review.revisionId} questionId={review.questionId} />
-        <HostedBlocks blocks={presentation.presentation.stem} revisionId={review.revisionId} questionId={review.questionId} />
-        {!review.revealed && <>
+        {aiEnabled && <button type="button" className="practice-button" disabled={busy} onClick={() => setGuidedOpen(true)}>Open Guided Reasoning</button>}
+        {guidedOpen ? <Suspense fallback={<p role="status">Loading…</p>}><GuidedReasoning review={review} presentation={presentation} onReveal={() => reviewAction("reveal")} onSessionEnded={onSessionEnded} /></Suspense>
+          : <><HostedBlocks blocks={presentation.presentation.stimulus} revisionId={review.revisionId} questionId={review.questionId} /><HostedBlocks blocks={presentation.presentation.stem} revisionId={review.revisionId} questionId={review.questionId} /></>}
+        {!review.revealed && !guidedOpen && <>
           {!retrying ? <div className="history-area__actions">
             <button type="button" className="practice-button" disabled={busy} onClick={() => setRetrying(true)}>Try again</button>
             {review.hintAvailable && <button type="button" className="practice-button practice-button--quiet" disabled={busy}
@@ -215,7 +223,7 @@ export function HistoryArea({ onSessionEnded, initialTarget }: { onSessionEnded:
           </div>}
           {hint && <p className="history-area__hint" role="status"><strong>Reviewed hint:</strong> {hint}</p>}
         </>}
-        {review.revealed && <>
+        {review.revealed && !guidedOpen && <>
           <div className="history-area__answer"><h4>Answer review</h4>
             <dl><div><dt>Original Attempt response</dt><dd>{responseText(review.originalResponse)}</dd></div>
               <div><dt>Retry response</dt><dd>{review.retryResponse === null ? "Skipped" : responseText(review.retryResponse)}</dd></div>

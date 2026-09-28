@@ -8,7 +8,7 @@ const question = { version: 1, stimulus: [], stem: [{ kind: "text", text: "Find 
 const bytes = new TextEncoder().encode("image bytes");
 const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-function env(accountId = "learner") {
+function env(accountId = "learner", category: string | null = null) {
   const assetFetch = vi.fn(async () => new Response(bytes));
   return {
     APP_ORIGIN: "https://whitebook.test",
@@ -32,7 +32,7 @@ function env(accountId = "learner") {
           if (sql.includes("FROM package_revisions p WHERE")) return { results: [{ id: "reviewed-revision", family_id: "family",
             title: "August R&W", source_revision: 5, published_revision: 6, question_count: 1 }], meta: { rows_read: 1, rows_written: 0 } };
           if (sql.includes("FROM publication_questions")) return { results: [{ question_id: "q1", ordinal: 1,
-            section: "Reading and Writing", module: 1, question_number: 1 }], meta: { rows_read: 1, rows_written: 0 } };
+            section: "Reading and Writing", module: 1, question_number: 1, category }], meta: { rows_read: 1, rows_written: 0 } };
           throw new Error(sql);
         },
         async run() { return { success: true, meta: { rows_read: 0, rows_written: 0 } }; },
@@ -65,6 +65,14 @@ it("requires an account and entitlement for questions and manifest-listed visual
   expect(environment.assetFetch).toHaveBeenCalledTimes(1);
   environment.assetFetch.mockImplementationOnce(async () => new Response("wrong bytes"));
   expect((await libraryRoute(request("/content/reviewed-revision/q1/image.png"), environment))?.status).toBe(503);
+});
+
+it("lists only published category metadata for an entitled revision", async () => {
+  const categorized = await libraryRoute(request("/api/library/reviewed-revision/questions"), env("learner", "Grammar"));
+  expect(await categorized?.json()).toMatchObject({ questions: [{ questionId: "q1", category: "Grammar" }] });
+  const legacy = await libraryRoute(request("/api/library/reviewed-revision/questions"), env());
+  expect(await legacy?.json()).toMatchObject({ questions: [{ questionId: "q1", category: null }] });
+  expect((await libraryRoute(request("/api/library/private-revision/questions"), env()))?.status).toBe(404);
 });
 
 it("keeps content paths behind the Worker on direct requests", async () => {

@@ -23,6 +23,12 @@ function attempt(overrides: Partial<AttemptSnapshot> = {}): AttemptSnapshot {
     editorToken: token, lease: { held: true, expiresAt: now + 120_000 }, ...overrides };
 }
 
+function studentResponseQuestions() {
+  return questions.map((question) => question.questionId === "q1"
+    ? { ...question, responseType: "student_produced_response" }
+    : question);
+}
+
 function fixture(fetcher?: (path: string, init?: RequestInit) => Promise<Response>) {
   const calls: { path: string; init?: RequestInit }[] = [];
   const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
@@ -31,8 +37,8 @@ function fixture(fetcher?: (path: string, init?: RequestInit) => Promise<Respons
     throw new Error(`Unexpected request ${path}`);
   });
   vi.stubGlobal("fetch", fetchMock);
-  const view = (initial = attempt(), availableQuestions = questions) => render(<HostedAttempt initial={initial} questions={availableQuestions}
-    packageTitle="Reviewed Reading" onSessionEnded={() => {}} onExit={() => {}} onSnapshotChange={() => {}} />);
+  const view = (initial = attempt(), availableQuestions = questions, onExit = () => {}, desmosScriptUrl: string | null = null) => render(<HostedAttempt initial={initial} questions={availableQuestions}
+    packageTitle="Reviewed Reading" onSessionEnded={() => {}} onExit={onExit} onSnapshotChange={() => {}} desmosScriptUrl={desmosScriptUrl} />);
   return { calls, view };
 }
 
@@ -51,6 +57,264 @@ it("shows pending until the server confirms a response save", async () => {
   await act(async () => { resolveSave(savedResponse(2, { responses: { q1: "A" }, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" })); });
   expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i);
   expect((screen.getByRole("radio", { name: /AOption A/ }) as HTMLInputElement).checked).toBe(true);
+});
+
+it("explains whole-Attempt evidence exclusion and asks for confirmation before Assisted Practice", async () => {
+  const { calls, view } = fixture(async path => path.endsWith("/assisted")
+    ? Response.json(attempt({ assisted: true }))
+    : Promise.reject(new Error(path)));
+  view(attempt({ kind: "practice" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Use Assisted Practice" })[0]);
+  expect(await screen.findByRole("group", { name: "Confirm Assisted Practice" })).toBeTruthy();
+  expect(screen.getByText(/this whole Attempt as Assisted Practice.*Every question.*excluded from unassisted Progress evidence.*cannot be undone/i)).toBeTruthy();
+  expect(calls.some(call => call.path.endsWith("/assisted"))).toBe(false);
+
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("group", { name: "Confirm Assisted Practice" })).toBeNull();
+  fireEvent.click(screen.getAllByRole("button", { name: "Use Assisted Practice" })[0]);
+  fireEvent.click(await screen.findByRole("button", { name: "Continue with Assisted Practice" }));
+  await waitFor(() => expect(calls.filter(call => call.path.endsWith("/assisted"))).toHaveLength(1));
+  expect(JSON.parse(String(calls.find(call => call.path.endsWith("/assisted"))?.init?.body))).toEqual({});
+  expect(screen.queryByRole("button", { name: "Use Assisted Practice" })).toBeNull();
+});
+
+it("coalesces rapid typed responses into one idle save and previews the learner entry", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(now);
+  const { calls, view } = fixture(async (path) => path.endsWith("/write")
+    ? savedResponse(2, { responses: { q1: "3/4" }, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" })
+    : Promise.reject(new Error(path)));
+  view(attempt(), studentResponseQuestions());
+
+  const input = screen.getByRole("textbox", { name: "Your response" });
+  fireEvent.change(input, { target: { value: "3" } });
+  fireEvent.change(input, { target: { value: "3/" } });
+  fireEvent.change(input, { target: { value: "3/4" } });
+
+  expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(0);
+  expect(screen.getByLabelText("3 over 4")).toBeTruthy();
+  expect(screen.getByLabelText("Save status").textContent).toMatch(/pending/i);
+
+  await act(async () => { await vi.advanceTimersByTimeAsync(700); });
+
+  const writes = calls.filter((call) => call.path.endsWith("/write"));
+  expect(writes).toHaveLength(1);
+  expect(JSON.parse(String(writes[0].init?.body))).toMatchObject({
+    expectedStateVersion: 1,
+    change: { type: "response", questionId: "q1", response: "3/4" },
+  });
+  expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i);
+});
+
+it("saves the latest typed response before persisting navigation", async () => {
+  const changes: { type: string; questionId: string; response?: string }[] = [];
+  let version = 1;
+  let state = { responses: {} as Record<string, string>, markedQuestionIds: [] as string[],
+    eliminatedChoices: {} as Record<string, string[]>, currentQuestionId: "q1" };
+  const { calls, view } = fixture(async (path, init) => {
+    if (!path.endsWith("/write")) throw new Error(path);
+    const body = JSON.parse(String(init?.body)) as { change: { type: string; questionId: string; response?: string } };
+    changes.push(body.change);
+    if (body.change.type === "response") state.responses[body.change.questionId] = body.change.response ?? "";
+    if (body.change.type === "navigation") state.currentQuestionId = body.change.questionId;
+    version += 1;
+    return savedResponse(version, state);
+  });
+  view(attempt(), studentResponseQuestions());
+
+  fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: "12.5" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next question" }));
+
+  expect(await screen.findByText("Question 2 of 2")).toBeTruthy();
+  expect(changes).toEqual([
+    { type: "response", questionId: "q1", response: "12.5" },
+    { type: "navigation", questionId: "q2" },
+  ]);
+  expect(calls.filter((call) => call.path.endsWith("/write")).map((call) =>
+    JSON.parse(String(call.init?.body)).expectedStateVersion)).toEqual([1, 2]);
+});
+
+it("waits for a pending typed response before submitting the Attempt", async () => {
+  const requestOrder: string[] = [];
+  let version = 1;
+  const state = { responses: {} as Record<string, string>, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" };
+  const { calls, view } = fixture(async (path, init) => {
+    if (path.endsWith("/write")) {
+      requestOrder.push("write");
+      const body = JSON.parse(String(init?.body)) as { change: { questionId: string; response: string } };
+      state.responses[body.change.questionId] = body.change.response;
+      version += 1;
+      return savedResponse(version, state);
+    }
+    if (path.endsWith("/submit")) {
+      requestOrder.push("submit");
+      return Response.json({ ...attempt({ status: "completed", stateVersion: version, state }), result: {
+        correctCount: 1, questionCount: 2, questions: [],
+      } });
+    }
+    throw new Error(path);
+  });
+  view(attempt(), studentResponseQuestions());
+
+  fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: "8" } });
+  fireEvent.click(screen.getByRole("button", { name: "Submit Attempt" }));
+
+  expect(await screen.findByText("1 of 2 correct")).toBeTruthy();
+  expect(requestOrder).toEqual(["write", "submit"]);
+  expect(JSON.parse(String(calls.find((call) => call.path.endsWith("/submit"))?.init?.body)))
+    .toMatchObject({ expectedStateVersion: 2 });
+});
+
+it("leaves a submitted Practice Result without sending another Attempt write", async () => {
+  const onExit = vi.fn();
+  const { calls, view } = fixture(async (path) => path.endsWith("/submit")
+    ? Response.json({ ...attempt({ status: "completed" }), result: { correctCount: 1, questionCount: 2, questions: [] } })
+    : Promise.reject(new Error(path)));
+  view(attempt(), questions, onExit);
+
+  fireEvent.click(screen.getByRole("button", { name: "Submit Attempt" }));
+  expect(await screen.findByText("1 of 2 correct")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  await waitFor(() => expect(onExit).toHaveBeenCalledOnce());
+  expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(0);
+});
+
+it("flushes a typed draft before an online refresh replaces the hosted snapshot", async () => {
+  let version = 1;
+  let state = { responses: {} as Record<string, string>, markedQuestionIds: [] as string[],
+    eliminatedChoices: {} as Record<string, string[]>, currentQuestionId: "q1" };
+  const { calls, view } = fixture(async (path, init) => {
+    if (path.endsWith("/write")) {
+      const body = JSON.parse(String(init?.body)) as { change: { questionId: string; response: string } };
+      state.responses[body.change.questionId] = body.change.response;
+      version += 1;
+      return savedResponse(version, state);
+    }
+    if (path === "/api/attempts/attempt-1") return Response.json(attempt({ state, stateVersion: version }));
+    throw new Error(path);
+  });
+  view(attempt(), studentResponseQuestions());
+  const input = screen.getByRole("textbox", { name: "Your response" }) as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "9" } });
+  expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(0);
+
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  });
+
+  expect(input.value).toBe("9");
+  expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(1);
+  expect(calls.find((call) => call.path.endsWith("/write"))?.init?.body).toContain('"response":"9"');
+});
+
+it("shows the five-minute warning for a timed Practice Attempt without sending a request", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(now);
+  const { calls, view } = fixture();
+  view(attempt({ serverNow: now, startedAt: now, deadlineAt: now + 301_000 }));
+  const requestCount = calls.length;
+
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+
+  expect(screen.getByRole("status", { name: "Low time warning" }).textContent)
+    .toMatch(/5 minutes remaining in this Practice Attempt/i);
+  expect(calls).toHaveLength(requestCount);
+});
+
+it("uses an accessible, keyboard-adjustable split for passage questions and restores its saved width", () => {
+  const passageQuestions = questions.map((question) => question.questionId === "q1"
+    ? { ...question, presentation: { ...question.presentation, stimulus: [{ kind: "text" as const, text: "Passage" }] } }
+    : question);
+  const { view } = fixture();
+  const initial = attempt();
+  const first = view(initial, passageQuestions);
+  const divider = screen.getByRole("separator", { name: "Resize passage and question panels" });
+
+  expect(divider.getAttribute("aria-valuenow")).toBe("50");
+  fireEvent.keyDown(divider, { key: "ArrowRight" });
+  expect(divider.getAttribute("aria-valuenow")).toBe("52");
+  expect(sessionStorage.getItem("whitebook-split-attempt-1")).toBe("52");
+
+  first.unmount();
+  view(initial, passageQuestions);
+  expect(screen.getByRole("separator", { name: "Resize passage and question panels" }).getAttribute("aria-valuenow"))
+    .toBe("52");
+});
+
+it("keeps a failed typed response visible and offers retry instead of leaving as saved", async () => {
+  const onExit = vi.fn();
+  let writeCount = 0;
+  const { calls, view } = fixture(async (path, init) => {
+    if (!path.endsWith("/write")) throw new Error(path);
+    writeCount += 1;
+    if (writeCount === 1) return Response.json({ error: { message: "Offline" } }, { status: 503 });
+    const body = JSON.parse(String(init?.body)) as { change: { questionId: string; response: string } };
+    return savedResponse(2, { responses: { [body.change.questionId]: body.change.response },
+      markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" });
+  });
+  view(attempt(), studentResponseQuestions(), onExit);
+  const input = screen.getByRole("textbox", { name: "Your response" }) as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "-3/4" } });
+
+  await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/failed/i));
+
+  expect(input.value).toBe("-3/4");
+  expect(screen.getByRole("button", { name: "Reapply unsaved changes" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  expect(onExit).not.toHaveBeenCalled();
+  expect((screen.getByRole("textbox", { name: "Your response" }) as HTMLInputElement).value).toBe("-3/4");
+
+  fireEvent.click(screen.getByRole("button", { name: "Reapply unsaved changes" }));
+  await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
+  expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(2);
+  fireEvent.click(screen.getByRole("button", { name: "Back to Practice" }));
+  await waitFor(() => expect(onExit).toHaveBeenCalledOnce());
+});
+
+it("asks the browser to confirm leaving while a typed response is not yet saved", () => {
+  const { view } = fixture();
+  view(attempt(), studentResponseQuestions());
+  fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: "4" } });
+  const event = new Event("beforeunload", { cancelable: true });
+
+  window.dispatchEvent(event);
+
+  expect(event.defaultPrevented).toBe(true);
+});
+
+it("keeps an unsaved typed response visible when takeover refreshes the server snapshot", async () => {
+  const fresh = attempt({ stateVersion: 2, state: { responses: { q1: "server value" }, markedQuestionIds: [],
+    eliminatedChoices: {}, currentQuestionId: "q1" }, editorToken: "b".repeat(64),
+    lease: { held: true, expiresAt: now + 120_000 } });
+  const { view } = fixture(async (path) => {
+    if (path.endsWith("/write")) return Response.json({ error: { message: "State changed on another device" } }, { status: 409 });
+    if (path.endsWith("/takeover")) return Response.json(fresh);
+    throw new Error(path);
+  });
+  view(attempt(), studentResponseQuestions());
+  fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: "learner draft" } });
+  await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/failed/i));
+
+  fireEvent.click(screen.getByRole("button", { name: "Take over editing" }));
+
+  await waitFor(() => expect((screen.getByRole("textbox", { name: "Your response" }) as HTMLInputElement).value)
+    .toBe("learner draft"));
+  expect(screen.getByRole("button", { name: "Reapply unsaved changes" })).toBeTruthy();
+});
+
+it("uses the familiar player shell for Practice while keeping its hosted save contract", async () => {
+  const { calls, view } = fixture(async (path) => path.endsWith("/write")
+    ? savedResponse(2, { responses: { q1: "A" }, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" })
+    : Promise.reject(new Error(path)));
+  const { container } = view();
+  expect(container.querySelector(".player-shell")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Practice Attempt" })).toBeTruthy();
+  expect(screen.getByText("Question 1 of 2")).toBeTruthy();
+  fireEvent.click(screen.getByRole("radio", { name: /AOption A/ }));
+  await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
+  expect(JSON.parse(String(calls.find((call) => call.path.endsWith("/write"))?.init?.body)))
+    .toMatchObject({ editorToken: token, expectedStateVersion: 1, change: { type: "response", questionId: "q1", response: "A" } });
 });
 
 it("keeps rapid edits serialized and sends the next write with the acknowledged version", async () => {
@@ -121,6 +385,7 @@ it("keeps a second device read-only until explicit takeover refreshes state with
   view(before);
   expect((screen.getByRole("radio", { name: /AOption A/ }) as HTMLInputElement).disabled).toBe(true);
   const clockBefore = screen.getByLabelText("Attempt clock").textContent;
+  fireEvent.click(screen.getByRole("button", { name: "Question 1 of 2" }));
   fireEvent.click(screen.getByRole("button", { name: "Question 2, unanswered" }));
   expect(screen.getAllByText("Question 2").length).toBeGreaterThan(0);
   expect(calls.some((call) => call.path.endsWith("/write"))).toBe(false);

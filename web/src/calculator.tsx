@@ -185,10 +185,12 @@ export function ScientificCalculator() {
 export function DesmosCalculatorPanel({
   options,
   savedState,
+  onReady,
   onSave,
 }: {
   options: Record<string, boolean>;
   savedState: Record<string, unknown> | null;
+  onReady?: (checks: Record<string, boolean>) => void;
   onSave: (state: Record<string, unknown>) => void;
 }) {
   return (
@@ -196,6 +198,7 @@ export function DesmosCalculatorPanel({
       <CalculatorFrame
         options={options}
         savedState={savedState}
+        onReady={onReady}
         onSave={onSave}
       />
     </div>

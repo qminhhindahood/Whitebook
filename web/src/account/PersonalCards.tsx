@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import type { ComponentType } from "react";
 import { accountFetch, csrfToken } from "./AccountApp";
+import type { PersonalCardsAssistantProps } from "./PersonalCardsAssistant";
 
 export type CardRecord = {
   id: string;
@@ -37,6 +39,9 @@ const emptyDraft = (): Draft => ({ deck: "", front: "", definition: "", vietname
 type Editor = { mode: "create" } | { mode: "edit"; card: CardRecord } | { mode: "move"; card: CardRecord };
 
 const FIELD_ORDER: BackField[] = ["definition", "vietnamese", "partOfSpeech", "pronunciation", "synonyms", "example"];
+const FlashcardAssistant = lazy<ComponentType<PersonalCardsAssistantProps>>(() => import.meta.env.VITE_AI_RELEASE_ENABLED === "true"
+  ? import("./PersonalCardsAssistant").then((module) => ({ default: module.PersonalCardsAssistant }))
+  : Promise.resolve({ default: (_props: PersonalCardsAssistantProps) => null }));
 
 function CardFields({ card }: { card: CardRecord }) {
   return <dl className="cards-fields">
@@ -57,6 +62,7 @@ export function PersonalCards({ onSessionEnded }: { onSessionEnded?: () => void 
   const [warning, setWarning] = useState<DuplicateMatch | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const aiEnabled = import.meta.env.VITE_AI_RELEASE_ENABLED === "true";
 
   async function load() {
     try {
@@ -257,6 +263,7 @@ export function PersonalCards({ onSessionEnded }: { onSessionEnded?: () => void 
         <button type="button" className="cards-add-button" onClick={startCreate}>Add card</button>
       </div>
     </div>
+    {aiEnabled && <Suspense fallback={null}><FlashcardAssistant cards={cards ?? []} decks={decks} onSessionEnded={onSessionEnded} onSaved={load} /></Suspense>}
     {notice && <p className="cards-notice" role="status">{notice}</p>}
     {editing && <form className="cards-form" onSubmit={submit} noValidate>
       <h3>{editor?.mode === "create" ? "Add a card" : "Edit card"}</h3>

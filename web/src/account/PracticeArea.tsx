@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { accountFetch, csrfToken } from "./accountClient";
 import type { HostedBlock, HostedPresentationData } from "./HostedPresentation";
 import { HostedAttempt } from "./HostedAttempt";
@@ -7,7 +8,7 @@ import { DesmosReadinessProbe, loadDesmos } from "../calculator";
 type Package = { revisionId: string; title: string; publishedRevision: number; questionCount: number };
 export type QuestionLink = {
   questionId: string; ordinal: number; section: string; module: number;
-  questionNumber: number; responseType: string; choiceIds?: string[];
+  questionNumber: number; responseType: string; choiceIds?: string[]; category?: string | null;
 };
 export type PresentationQuestion = QuestionLink & {
   revisionId: string; presentation: HostedPresentationData;
@@ -15,14 +16,16 @@ export type PresentationQuestion = QuestionLink & {
 export type AttemptSnapshot = {
   attemptId: string; revisionId: string; status: "preparing" | "active" | "completed" | "expired";
   kind?: "practice" | "section_exam"; section: string; modules: number[]; questionIds: string[]; questions: QuestionLink[];
+  category?: string | null;
   state: Record<string, unknown>; stateVersion: number; createdAt?: number; startedAt: number | null;
-  deadlineAt: number | null; serverNow?: number; completedAt?: number | null;
+  deadlineAt: number | null; serverNow?: number; completedAt?: number | null; assisted?: boolean;
   editorToken?: string; lease?: { held: boolean; expiresAt: number | null };
 };
 export type AttemptSummary = {
   attemptId: string; revisionId: string; status: AttemptSnapshot["status"];
   kind?: "practice" | "section_exam"; section: string; questionCount: number; createdAt: number; startedAt: number | null;
-  deadlineAt: number | null; completedAt: number | null;
+  category?: string | null;
+  deadlineAt: number | null; completedAt: number | null; assisted?: boolean;
 };
 export type AttemptResult = {
   correctCount: number; questionCount: number;
@@ -101,6 +104,9 @@ export async function loadSelectedContent(snapshot: AttemptSnapshot): Promise<Pr
       await retryTransientContent(async () => {
         const response = await accountFetch(path, { method: "GET", credentials: "same-origin", cache: "no-store" });
         if (!response.ok) throw new RequestError("A required visual could not be loaded.", response.status);
+        const expectedType = path.endsWith(".png") ? "image/png" : path.endsWith(".webp") ? "image/webp" : "image/jpeg";
+        if (response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== expectedType)
+          throw new RequestError("A required visual has an invalid content type.", 422);
         if (!(await response.arrayBuffer()).byteLength) throw new RequestError("A required visual is empty.", 503);
       });
     } catch {
@@ -139,6 +145,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
   const [revisionId, setRevisionId] = useState(initialRevisionId ?? "");
   const [questions, setQuestions] = useState<QuestionLink[]>([]);
   const [section, setSection] = useState("");
+  const [category, setCategory] = useState("");
   const [modules, setModules] = useState<number[]>([]);
   const [count, setCount] = useState("1");
   const [ordering, setOrdering] = useState<"source" | "random">("source");
@@ -161,8 +168,10 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
   const sections = useMemo(() => [...new Set(questions.map((question) => question.section))], [questions]);
   const availableModules = useMemo(() => [...new Set(questions.filter((question) => question.section === section)
     .map((question) => question.module))].sort(), [questions, section]);
-  const pool = useMemo(() => selectedPool(questions, section, modules), [questions, section, modules]);
   const sectionPool = useMemo(() => questions.filter((question) => question.section === section), [questions, section]);
+  const categories = useMemo(() => [...new Set(sectionPool.flatMap((question) => question.category ? [question.category] : []))].sort(), [sectionPool]);
+  const pool = useMemo(() => selectedPool(questions, section, modules)
+    .filter((question) => !category || question.category === category), [questions, section, modules, category]);
   const selectedPackage = packages.find((item) => item.revisionId === revisionId);
   const satPacedAvailable = modules.length === 1 && pool.length === Number(count) &&
     ((section === "Math" && pool.length === 22) ||
@@ -193,7 +202,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
     let live = true;
     setQuestionsLoading(true);
     setQuestions([]);
-    setSection(""); setModules([]); setCount("1"); setGeneralError("");
+    setSection(""); setCategory(""); setModules([]); setCount("1"); setGeneralError("");
     void request<{ questions: QuestionLink[] }>(`/api/library/${revisionId}/questions`).then((data) => {
       if (!live) return;
       setQuestions(data.questions);
@@ -216,7 +225,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
 
   function chooseSection(next: string) {
     const nextModules = [...new Set(questions.filter((question) => question.section === next).map((question) => question.module))].sort();
-    setSection(next); setModules(nextModules.length ? [nextModules[0]] : []);
+    setSection(next); setCategory(""); setModules(nextModules.length ? [nextModules[0]] : []);
     setCount(String(Math.min(10, questions.filter((question) => question.section === next && question.module === nextModules[0]).length)));
     if (timing === "sat_paced") setTiming("elapsed");
   }
@@ -224,9 +233,48 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
   function toggleModule(module: number) {
     const next = modules.includes(module) ? modules.filter((item) => item !== module) : [...modules, module].sort();
     setModules(next);
-    const max = selectedPool(questions, section, next).length;
-    if (Number(count) > max) setCount(String(Math.max(1, max)));
+    const max = selectedPool(questions, section, next).filter((question) => !category || question.category === category).length;
+    if (!category && Number(count) > max) setCount(String(Math.max(1, max)));
     if (timing === "sat_paced") setTiming("elapsed");
+  }
+
+  function chooseCategory(next: string) {
+    setCategory(next);
+    if (timing === "sat_paced") setTiming("elapsed");
+  }
+
+  async function mathCalculatorScriptUrl(): Promise<string | null> {
+    try {
+      const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
+      return calculator.scriptUrl;
+    } catch (cause) {
+      if (cause instanceof RequestError && cause.status === 401) throw cause;
+      return null;
+    }
+  }
+
+  async function prepareMathResources(): Promise<string | null> {
+    const scriptUrl = await mathCalculatorScriptUrl();
+    let readyScriptUrl: string | null = null;
+    if (scriptUrl) {
+      await loadDesmos(scriptUrl);
+      const ready = await new Promise<boolean>((resolve) => {
+        let timeout: number | undefined;
+        const complete = (usable: boolean) => {
+          if (calculatorProbeResolver.current !== complete) return;
+          calculatorProbeResolver.current = null;
+          if (timeout !== undefined) window.clearTimeout(timeout);
+          setCalculatorProbeUrl("");
+          resolve(usable);
+        };
+        calculatorProbeResolver.current = complete;
+        setCalculatorProbeUrl(scriptUrl!);
+        timeout = window.setTimeout(() => complete(false), 26_000);
+      });
+      if (ready) readyScriptUrl = scriptUrl;
+    }
+    await prepareReferenceSheet();
+    return readyScriptUrl;
   }
 
   async function openLoadingGate(snapshot: AttemptSnapshot) {
@@ -234,32 +282,17 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
     setLoadError(""); setLoadMessage("Loading selected questions and visuals…");
     try {
       const prepared = await loadSelectedContent(snapshot);
-      if (snapshot.kind === "section_exam" && snapshot.section === "Math") {
+      if (snapshot.section === "Math") {
         setLoadMessage("Preparing the Math calculator and Reference Sheet…");
-        const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
-        let readyScriptUrl: string | null = null;
-        if (calculator.scriptUrl) {
-          await loadDesmos(calculator.scriptUrl);
-          const ready = await new Promise<boolean>((resolve) => {
-            calculatorProbeResolver.current = resolve;
-            setCalculatorProbeUrl(calculator.scriptUrl!);
-            window.setTimeout(() => {
-              if (calculatorProbeResolver.current === resolve) {
-                calculatorProbeResolver.current = null; setCalculatorProbeUrl(""); resolve(false);
-              }
-            }, 26_000);
-          });
-          if (ready) readyScriptUrl = calculator.scriptUrl;
-        }
-        await prepareReferenceSheet();
-        setDesmosScriptUrl(readyScriptUrl);
+        setDesmosScriptUrl(await prepareMathResources());
       }
       if (snapshot.status !== "preparing") {
         setActiveQuestions(prepared);
         setActiveAttempt(snapshot);
         setPreparingAttemptId(""); setLoadMessage("");
         setAttempts((current) => [{ attemptId: snapshot.attemptId, revisionId: snapshot.revisionId,
-          kind: snapshot.kind, status: snapshot.status, section: snapshot.section, questionCount: snapshot.questions.length,
+          kind: snapshot.kind, status: snapshot.status, section: snapshot.section, category: snapshot.category,
+          questionCount: snapshot.questions.length,
           createdAt: snapshot.createdAt ?? Date.now(), startedAt: snapshot.startedAt,
           deadlineAt: snapshot.deadlineAt, completedAt: snapshot.completedAt ?? null },
         ...current.filter((item) => item.attemptId !== snapshot.attemptId)]);
@@ -272,7 +305,8 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
       setPreparingAttemptId("");
       setLoadMessage("");
       setAttempts((current) => [{ attemptId: started.attemptId, revisionId: started.revisionId, kind: started.kind, status: started.status,
-        section: started.section, questionCount: started.questions.length, createdAt: Date.now(), startedAt: started.startedAt,
+        section: started.section, category: started.category, questionCount: started.questions.length,
+        createdAt: Date.now(), startedAt: started.startedAt,
         deadlineAt: started.deadlineAt, completedAt: null }, ...current.filter((item) => item.attemptId !== started.attemptId)]);
     } catch (cause: unknown) {
       const message = cause instanceof Error ? cause.message : "The Loading Gate could not finish. Retry loading.";
@@ -291,7 +325,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
     try {
       const created = await request<AttemptSnapshot>("/api/attempts", mutation(sectionExam
         ? { revisionId, kind: "section_exam", section }
-        : { revisionId, section, modules, count: Number(count), ordering,
+        : { revisionId, section, modules, count: Number(count), ordering, category: category || null,
           timing: timing === "custom" ? { mode: "custom", durationSeconds: Number(durationSeconds) } : { mode: timing } }));
       await openLoadingGate(created);
     } catch (cause: unknown) {
@@ -324,11 +358,12 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
       }
       setLoadMessage("Loading this Attempt and its visuals…");
       const prepared = await loadSelectedContent(snapshot);
-      if (snapshot.kind === "section_exam" && snapshot.section === "Math") {
-        const calculator = await request<{ configured: boolean; scriptUrl: string | null }>("/api/math/calculator-config");
-        if (calculator.scriptUrl) await loadDesmos(calculator.scriptUrl);
-        setDesmosScriptUrl(calculator.scriptUrl);
+      if (snapshot.section === "Math" && snapshot.status === "active") {
+        setLoadMessage("Loading the Math calculator and Reference Sheet…");
+        const scriptUrl = await mathCalculatorScriptUrl();
+        if (scriptUrl) await loadDesmos(scriptUrl);
         await prepareReferenceSheet();
+        setDesmosScriptUrl(scriptUrl);
       }
       setActiveQuestions(prepared);
       setActiveAttempt(snapshot);
@@ -346,17 +381,20 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
       : item));
   }, []);
 
-  if (activeAttempt) return <HostedAttempt initial={activeAttempt} questions={activeQuestions} desmosScriptUrl={desmosScriptUrl}
+  if (activeAttempt) {
+    const player = <HostedAttempt initial={activeAttempt} questions={activeQuestions} desmosScriptUrl={desmosScriptUrl}
     packageTitle={packages.find((item) => item.revisionId === activeAttempt.revisionId)?.title ?? "Reviewed Test Package"}
     onSessionEnded={onSessionEnded} onExit={() => { setActiveAttempt(null); setActiveQuestions([]); }}
     onSnapshotChange={handleSnapshotChange} />;
+    return activeAttempt.kind === "section_exam" ? player : createPortal(player, document.body);
+  }
 
   return <section className="practice-area" aria-labelledby="practice-heading">
     {calculatorProbeUrl && <div className="practice-loading" role="status">
       <p>Checking graphing calculator readiness; the scientific calculator remains available if it cannot be verified.</p>
       <DesmosReadinessProbe options={{ expressions: true, settingsMenu: false }} onResult={(checks) => {
         const resolver = calculatorProbeResolver.current;
-        if (resolver) { calculatorProbeResolver.current = null; setCalculatorProbeUrl(""); resolver(Object.values(checks).every(Boolean)); }
+        if (resolver) resolver(Object.values(checks).every(Boolean));
       }} />
     </div>}
     <header className="practice-area__heading"><div><h2 id="practice-heading">Practice</h2>
@@ -398,6 +436,16 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
                 <span className="practice-field__hint">{pool.length} questions in this selection</span>
               </label>}
             </div>
+            {!sectionExam && categories.length > 0 && <label className="practice-field" htmlFor="practice-category">Question Category
+              <select id="practice-category" value={category} onChange={(event) => chooseCategory(event.target.value)}>
+                <option value="">All categories</option>
+                {categories.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>}
+            {!sectionExam && category && pool.length === 0 &&
+              <p className="practice-empty">No questions in this Question Category match the selected Modules.</p>}
+            {!sectionExam && category && pool.length > 0 && Number(count) > pool.length &&
+              <p className="practice-empty">Only {pool.length} {pool.length === 1 ? "question" : "questions"} in this category match the selected Modules. Reduce the question count.</p>}
             {!sectionExam && <fieldset className="practice-modules"><legend>Modules</legend>
               <div className="practice-modules__options">
                 {availableModules.map((module) => <label key={module} className="practice-option">
@@ -438,6 +486,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
         <aside className="practice-summary" aria-label="Attempt selection summary">
           <h4>Attempt selection</h4>
           <dl><div><dt>Package</dt><dd>{selectedPackage?.title ?? "Choose a package"}</dd></div>
+            {!sectionExam && category && <div><dt>Category</dt><dd>{category}</dd></div>}
             <div><dt>Questions</dt><dd>{sectionExam ? `${sectionPool.length} total · ${sectionPool.length / 2} per Module` : pool.length ? `${Math.min(Number(count) || 0, pool.length)} of ${pool.length}` : "—"}</dd></div>
             <div><dt>Order</dt><dd>{sectionExam ? "Random server selection" : ordering === "source" ? "Package order" : "Random"}</dd></div>
             <div><dt>Timing</dt><dd>{sectionExam ? `${section === "Math" ? 35 : 32} minutes per Module` : timing === "elapsed" ? "Elapsed" : timing === "custom" ? "Custom countdown" : "SAT-paced"}</dd></div></dl>
@@ -449,7 +498,7 @@ export function PracticeArea({ initialRevisionId, initialSection, onSessionEnded
         {attempts.length === 0 ? <p className="practice-empty">Your saved Practice Attempts will appear here.</p> :
           <ul>{attempts.map((attempt) => <li key={attempt.attemptId}>
             <div><strong>{packages.find((item) => item.revisionId === attempt.revisionId)?.title ?? "Reviewed Test Package"}</strong>
-              <span>{attempt.section} · {attempt.kind === "section_exam" ? "Section Exam" : "Practice"} · {attempt.questionCount} questions · {attempt.status}</span></div>
+              <span>{attempt.section} · {attempt.kind === "section_exam" ? "Section Exam" : "Practice"}{attempt.category ? ` · ${attempt.category}` : ""} · {attempt.questionCount} questions · {attempt.status}</span></div>
             {attempt.status !== "expired" && <button type="button" className="practice-button practice-button--quiet"
               disabled={building} onClick={() => void openAttempt(attempt.attemptId)}>
               {attempt.status === "preparing" ? "Continue setup" : attempt.status === "completed" ? "Review results" : "Resume Attempt"}

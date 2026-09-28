@@ -47,7 +47,7 @@ it("recovers a transient visual transport failure before starting the Attempt", 
     if (path.startsWith("/content/")) {
       visualCalls++;
       if (visualCalls === 1) throw new TypeError("network request failed");
-      return new Response(new Uint8Array([1, 2, 3]));
+      return new Response(new Uint8Array([1, 2, 3]), { headers: { "Content-Type": "image/png" } });
     }
     return Response.json({ revisionId: "revision", questionId: "q1", responseType: "multiple_choice",
       presentation: { version: 3, stimulus: [], stem: [{ kind: "image_asset", assetId: "a".repeat(64), alt: "Diagram" }],

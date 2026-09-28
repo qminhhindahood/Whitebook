@@ -9,6 +9,7 @@ type AttemptRow = {
   questions_json: string;
   result_json: string;
   state_json: string;
+  assisted_at_ms?: number | null;
 };
 type CategoryRow = { revision_id: string; question_id: string; section: Section; category: string | null };
 type Link = { questionId: string; section: Section };
@@ -91,6 +92,7 @@ export function summarizeProgress(attempts: AttemptRow[], categories: CategoryRo
     if (!(["practice", "section_exam"].includes(attempt.kind))) continue;
     const links = JSON.parse(attempt.questions_json) as Link[];
     const grades = JSON.parse(attempt.result_json) as { questions: Grade[] };
+    if (attempt.assisted_at_ms != null) { excludedAssisted += grades.questions.length; continue; }
     const state = JSON.parse(attempt.state_json) as { questionElapsedMs?: Record<string, unknown>; assistedQuestionIds?: string[] };
     const byId = new Map(links.map((item) => [item.questionId, item]));
     const assisted = new Set(state.assistedQuestionIds ?? []);
@@ -142,7 +144,7 @@ export function progressRoute(request: Request, env: AccountEnv): Promise<Respon
   return (async () => {
     const session = await currentSession(request, env);
     if (!session) return failure(401, "signed_out", "Sign in to see your progress evidence.");
-    const result = await env.DB.prepare("SELECT id, revision_id, kind, completed_at_ms, questions_json, result_json, state_json " +
+    const result = await env.DB.prepare("SELECT id, revision_id, kind, completed_at_ms, questions_json, result_json, state_json, assisted_at_ms " +
       "FROM learner_attempts WHERE account_id = ? AND status = 'completed' AND result_json IS NOT NULL ORDER BY completed_at_ms DESC")
       .bind(session.account_id).all();
     const attempts = result.results as AttemptRow[];

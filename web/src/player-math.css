@@ -1,0 +1,61 @@
+.player-shell:has(.player-body--centered) {
+  height: 100dvh;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+}
+
+.player-shell .player-body.player-body--centered {
+  height: auto;
+  display: block;
+  overflow: auto;
+  background: var(--white);
+}
+
+.player-shell .player-body--centered .response-panel {
+  width: min(100% - 64px, 720px);
+  margin: 42px auto 56px;
+  overflow: visible;
+}
+
+.player-shell .player-body--centered .question-banner {
+  min-height: 42px;
+  padding: 0 12px 0 0;
+}
+
+.player-shell .player-body--centered .question-banner__number {
+  align-self: stretch;
+}
+
+.player-shell .math-question-stem {
+  margin: 24px 0;
+}
+
+.player-shell .player-pane--right .math-question-stem {
+  width: min(100%, 720px);
+  margin: 24px auto 0;
+}
+
+.player-shell .player-pane--right .question-banner {
+  min-height: 42px;
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.player-shell .player-pane--right .content-choices {
+  width: min(100%, 720px);
+  margin: 0 auto 44px;
+}
+
+.player-shell .player-pane--right .spr-entry,
+.player-shell .player-pane--right .answer-preview {
+  width: min(100%, 720px);
+  margin-inline: auto;
+}
+
+.player-shell .presentation-missing {
+  margin-top: 24px;
+}
+
+.player-shell .presentation-missing h1 {
+  margin: 0 0 12px;
+}

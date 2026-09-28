@@ -1,0 +1,49 @@
+export class GeminiFailure extends Error {
+  constructor(public code: "provider_error" | "quota_exhausted" | "model_unavailable" | "blocked_content" | "timeout" | "credential_invalid", public retrySeconds = 0) { super(code); }
+}
+export type GeminiAdapter = (payload: string, model: string, key: string) => Promise<string>;
+
+// The payload is already serialized in the learner's preview. Never augment it here.
+export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: payload, signal: controller.signal, redirect: "error",
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      if (response.status === 429) {
+        const seconds = Number(response.headers.get("Retry-After"));
+        throw new GeminiFailure("quota_exhausted", Number.isFinite(seconds) && seconds > 0 ? Math.min(3600, Math.ceil(seconds)) : 60);
+      }
+      if (response.status === 401 || response.status === 403) throw new GeminiFailure("credential_invalid");
+      if (response.status === 404) throw new GeminiFailure("model_unavailable");
+      throw new GeminiFailure("provider_error", 30);
+    }
+    // Bound even malformed upstream responses, without logging their body or headers.
+    const reader = response.body?.getReader();
+    if (!reader) throw new GeminiFailure("provider_error");
+    const chunks: Uint8Array[] = []; let length = 0;
+    while (true) {
+      const chunk = await reader.read(); if (chunk.done) break;
+      length += chunk.value.length;
+      if (length > 65536) { await reader.cancel(); throw new GeminiFailure("provider_error"); }
+      chunks.push(chunk.value);
+    }
+    const all = new Uint8Array(length); let offset = 0;
+    for (const chunk of chunks) { all.set(chunk, offset); offset += chunk.length; }
+    const data = JSON.parse(new TextDecoder().decode(all)) as { promptFeedback?: { blockReason?: string }; candidates?: { finishReason?: string; content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
+    const candidate = data.candidates?.[0];
+    if (data.promptFeedback?.blockReason || ["SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"].includes(candidate?.finishReason ?? "")) throw new GeminiFailure("blocked_content");
+    if (!candidate || !["STOP", "MAX_TOKENS"].includes(candidate.finishReason ?? "")) throw new GeminiFailure("provider_error");
+    const text = candidate.content?.parts?.filter(p => !p.thought).map(p => p.text ?? "").join("");
+    if (!text?.trim() || text.length > 8000 || text.includes(key)) throw new GeminiFailure("blocked_content");
+    return text;
+  } catch (error) {
+    if (controller.signal.aborted) throw new GeminiFailure("timeout", 5);
+    if (error instanceof GeminiFailure) throw error;
+    throw new GeminiFailure("provider_error", 30);
+  } finally { clearTimeout(timeout); }
+};

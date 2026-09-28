@@ -10,6 +10,7 @@ type Timing =
   | { mode: "sat_paced" };
 type AttemptConfig = {
   kind?: "practice" | "section_exam";
+  category: string | null;
   section: Section;
   modules: number[];
   count: number;
@@ -51,6 +52,7 @@ type AttemptRow = {
   result_json: string | null;
   editor_token_hash: string | null;
   editor_lease_expires_at_ms: number | null;
+  assisted_at_ms: number | null;
 };
 
 const ROOT = "/api/attempts";
@@ -84,8 +86,11 @@ function parseConfig(value: Record<string, unknown>): AttemptConfig | Response {
   if (kind === "section_exam") {
     if (section !== "Math" && section !== "Reading and Writing")
       return failure(400, "invalid_attempt", "Choose a supported Section: Math or Reading and Writing.");
+    if (value.category !== undefined && value.category !== null)
+      return failure(400, "invalid_attempt", "Question Category is available for Practice Attempts only.");
     return {
       kind,
+      category: null,
       section,
       modules: [1, 2],
       count: section === "Math" ? 44 : 54,
@@ -95,6 +100,10 @@ function parseConfig(value: Record<string, unknown>): AttemptConfig | Response {
   }
   if (kind !== undefined && kind !== "practice")
     return failure(400, "invalid_attempt", "Choose a supported Attempt kind.");
+  const category = value.category;
+  if (category !== undefined && category !== null &&
+      (typeof category !== "string" || !category.trim()))
+    return failure(400, "invalid_attempt", "Choose a valid Question Category.");
   const modules = value.modules;
   const count = value.count;
   const ordering = value.ordering;
@@ -124,6 +133,7 @@ function parseConfig(value: Record<string, unknown>): AttemptConfig | Response {
 
   return {
     kind: "practice",
+    category: typeof category === "string" ? category : null,
     section,
     modules: [...modules] as number[],
     count: Number(count),
@@ -139,7 +149,7 @@ async function rows<T>(statement: ReturnType<AttemptEnv["DB"]["prepare"]>): Prom
 async function attemptRow(env: AttemptEnv, accountId: string, attemptId: string): Promise<AttemptRow | null> {
   return env.DB.prepare("SELECT id, account_id, revision_id, kind, status, config_json, questions_json, " +
       "state_json, state_version, created_at_ms, started_at_ms, deadline_at_ms, completed_at_ms, " +
-      "result_json, editor_token_hash, editor_lease_expires_at_ms FROM learner_attempts " +
+      "result_json, editor_token_hash, editor_lease_expires_at_ms, assisted_at_ms FROM learner_attempts " +
       "WHERE id = ? AND account_id = ?")
     .bind(attemptId, accountId).first<AttemptRow>();
 }
@@ -161,6 +171,7 @@ function snapshot(row: AttemptRow, serverNow: number) {
     kind: row.kind,
     status: row.status,
     section: config.section,
+    category: config.category ?? null,
     modules: config.modules,
     ordering: config.ordering,
     timing: config.timing,
@@ -172,6 +183,7 @@ function snapshot(row: AttemptRow, serverNow: number) {
     startedAt: row.started_at_ms,
     deadlineAt: row.deadline_at_ms,
     completedAt: row.completed_at_ms,
+    assisted: row.assisted_at_ms !== null,
     lease: {
       held: row.editor_lease_expires_at_ms !== null && row.editor_lease_expires_at_ms > serverNow,
       expiresAt: row.editor_lease_expires_at_ms,
@@ -188,18 +200,20 @@ function summary(row: AttemptRow) {
     kind: row.kind,
     status: row.status,
     section: config.section,
+    category: config.category ?? null,
     questionCount: parseQuestions(row).length,
     createdAt: row.created_at_ms,
     startedAt: row.started_at_ms,
     deadlineAt: row.deadline_at_ms,
     completedAt: row.completed_at_ms,
+    assisted: row.assisted_at_ms !== null,
   };
 }
 
 async function listAttempts(env: AttemptEnv, accountId: string, now: number): Promise<Response> {
   const items = await rows<AttemptRow>(env.DB.prepare("SELECT id, account_id, revision_id, kind, status, " +
       "config_json, questions_json, state_json, state_version, created_at_ms, started_at_ms, deadline_at_ms, " +
-      "completed_at_ms, result_json, editor_token_hash, editor_lease_expires_at_ms " +
+      "completed_at_ms, result_json, editor_token_hash, assisted_at_ms " +
       "FROM learner_attempts WHERE account_id = ? ORDER BY created_at_ms DESC").bind(accountId));
   const current = await Promise.all(items.map((row) => enforceSectionDeadline(env, row, now)));
   if (current.some((row) => !row)) return failure(503, "attempt_unavailable", "Whitebook could not refresh Attempt history. Try again.");
@@ -250,23 +264,37 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
         "question_number, response_type, presentation_json FROM publication_questions " +
         "WHERE revision_id = ? AND section = ? AND module IN (" + placeholders + ") ORDER BY ordinal")
       .bind(revisionId, config.section, ...config.modules));
+  let filtered = candidates;
+  if (config.category) {
+    const metadata = await rows<{ question_id: string; category: string }>(env.DB.prepare(
+      "SELECT question_id, category FROM publication_question_categories WHERE revision_id = ?",
+    ).bind(revisionId));
+    if (!metadata.some((item) => item.category === config.category))
+      return failure(400, "invalid_attempt", "Choose a published Question Category for this Test Package.");
+    const byQuestion = new Map(metadata.map((item) => [item.question_id, item.category]));
+    filtered = candidates.filter((question) => byQuestion.get(question.question_id) === config.category);
+    if (filtered.length === 0)
+      return failure(400, "invalid_attempt", "No questions in this Question Category match the selected Section and Modules.");
+  }
   const eligible = sectionExam
-    ? [...new Map(candidates.map((question) => [question.question_id, question])).values()]
-    : candidates;
+    ? [...new Map(filtered.map((question) => [question.question_id, question])).values()]
+    : filtered;
   if (config.count > eligible.length)
     return failure(400, "invalid_attempt", sectionExam
       ? `This Section needs at least ${config.count} unique questions to create a Section Exam.`
-      : "The selected question count exceeds this Section and Module selection.");
+      : config.category
+        ? `Only ${eligible.length} questions in this Question Category match the selected Section and Modules.`
+        : "The selected question count exceeds this Section and Module selection.");
   if (!sectionExam && config.timing.mode === "sat_paced" &&
       (config.modules.length !== 1 ||
        !((config.section === "Math" && config.count === 22) ||
          (config.section === "Reading and Writing" && config.count === 27)) ||
-       candidates.length !== config.count)) {
+       filtered.length !== config.count)) {
     return failure(400, "invalid_attempt", "SAT-Paced Timing requires one complete Module.");
   }
 
   const selected = config.ordering === "random" ? shuffle(eligible).slice(0, config.count)
-    : candidates.slice(0, config.count);
+    : eligible.slice(0, config.count);
   const moduleSize = config.section === "Math" ? 22 : 27;
   const questions: QuestionLink[] = selected.map((question, index) => {
     const presentation = JSON.parse(question.presentation_json) as { choices?: { id?: unknown }[] };
@@ -815,6 +843,19 @@ async function getResults(env: AttemptEnv, accountId: string, attemptId: string,
     result: JSON.parse(row.result_json) });
 }
 
+async function markAssisted(env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
+  const row = await attemptRow(env, accountId, attemptId);
+  if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+  if (row.kind !== "practice" || row.status !== "active")
+    return failure(409, "assisted_unavailable", "Only an active Practice Attempt can become Assisted Practice.");
+  const saved = await env.DB.prepare("UPDATE learner_attempts SET assisted_at_ms = ? WHERE id = ? AND account_id = ? AND kind = 'practice' AND status = 'active' AND assisted_at_ms IS NULL")
+    .bind(now, attemptId, accountId).run();
+  if (!saved.success) return failure(503, "attempt_unavailable", "Whitebook could not enable Assisted Practice. Try again.");
+  const updated = await attemptRow(env, accountId, attemptId);
+  if (!updated) return failure(503, "attempt_unavailable", "Whitebook could not load this Attempt. Try again.");
+  return json({ ...snapshot(updated, now), assisted: true });
+}
+
 export function attemptRoute(request: Request, env: AttemptEnv, now: () => number = Date.now): Promise<Response> | null {
   const path = new URL(request.url).pathname;
   if (path !== ROOT && !path.startsWith(ROOT + "/")) return null;
@@ -833,7 +874,7 @@ export function attemptRoute(request: Request, env: AttemptEnv, now: () => numbe
     if (request.method === "POST" && path === ROOT)
       return createAttempt(request, env, session.account_id, serverNow);
 
-    const match = new RegExp("^/api/attempts/([0-9a-f-]{36})(?:/(start|write|heartbeat|takeover|submit|results|finish-module|continue|pause|resume))?$", "i").exec(path);
+    const match = new RegExp("^/api/attempts/([0-9a-f-]{36})(?:/(start|write|heartbeat|takeover|submit|results|assisted|finish-module|continue|pause|resume))?$", "i").exec(path);
     if (!match) return failure(404, "not_found", "This Attempt action is unavailable.");
     const attemptId = match[1];
     if (request.method === "GET" && !match[2])
@@ -852,6 +893,7 @@ export function attemptRoute(request: Request, env: AttemptEnv, now: () => numbe
     if (request.method === "POST" && match[2] === "heartbeat") return heartbeat(request, env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "takeover") return takeover(env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "submit") return submitAttempt(request, env, session.account_id, attemptId, serverNow);
+    if (request.method === "POST" && match[2] === "assisted") return markAssisted(env, session.account_id, attemptId, serverNow);
     if (request.method === "GET" && match[2] === "results") return getResults(env, session.account_id, attemptId, serverNow);
     return failure(404, "not_found", "This Attempt action is unavailable.");
   })();

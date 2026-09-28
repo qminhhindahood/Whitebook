@@ -11,7 +11,7 @@ type AttemptRow = {
   id: string; account_id: string; revision_id: string; kind: string; status: string;
   config_json: string; questions_json: string; state_json: string; state_version: number;
   created_at_ms: number; started_at_ms: number | null; deadline_at_ms: number | null;
-  completed_at_ms: number | null; result_json: string | null; answers_exposed_at_ms: number | null;
+  completed_at_ms: number | null; result_json: string | null; answers_exposed_at_ms: number | null; assisted_at_ms: number | null;
   editor_token_hash: string | null; editor_lease_expires_at_ms: number | null;
 };
 
@@ -71,6 +71,10 @@ async function fixture() {
     })),
   ];
   const questions: QuestionRow[] = [...practiceQuestions, ...sectionExamQuestions];
+  const categories = new Map([
+    ["reviewed-rw:q1", "Grammar"], ["reviewed-rw:q2", "Vocabulary"],
+    ["reviewed-rw:q3", "Grammar"],
+  ]);
   const answers = questions.map((question, index) => ({
     question_id: question.question_id,
     accepted_answers_json: JSON.stringify([index === 1 ? "A" : "B"]),
@@ -103,6 +107,12 @@ async function fixture() {
           return null;
         },
         async all() {
+          if (sql.includes("FROM publication_question_categories")) {
+            const revisionId = String(args[0]);
+            return { results: [...categories].filter(([key]) => key.startsWith(`${revisionId}:`))
+              .map(([key, category]) => ({ question_id: key.slice(revisionId.length + 1), category })),
+              meta: { rows_read: categories.size, rows_written: 0 } };
+          }
           if (sql.includes("FROM publication_questions")) {
             const revisionId = String(args[0]);
             const section = String(args[1]);
@@ -123,6 +133,14 @@ async function fixture() {
           return { results: [], meta: { rows_read: 0, rows_written: 0 } };
         },
         async run() {
+          if (sql.includes("SET assisted_at_ms = ?")) {
+            const [at, id, accountId] = args;
+            const row = attempts.get(String(id));
+            if (!row || row.account_id !== String(accountId) || row.kind !== "practice" || row.status !== "active" || row.assisted_at_ms !== null)
+              return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
+            row.assisted_at_ms = Number(at);
+            return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
+          }
           if (sql.includes("SET answers_exposed_at_ms = ?")) {
             const [at, id, accountId] = args;
             const row = attempts.get(String(id));
@@ -139,7 +157,7 @@ async function fixture() {
               questions_json: String(questionsJson), state_json: String(stateJson), state_version: 0,
               created_at_ms: Number(createdAt), started_at_ms: null, deadline_at_ms: null,
               completed_at_ms: null, result_json: null, answers_exposed_at_ms: null, editor_token_hash: null,
-              editor_lease_expires_at_ms: null,
+              editor_lease_expires_at_ms: null, assisted_at_ms: null,
             });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
@@ -407,6 +425,59 @@ it("rejects counts that exceed the selected Section and Module pool", async () =
   expect(await response.json()).toMatchObject({ error: { code: "invalid_attempt" } });
 });
 
+it("filters Practice questions by a published category and retains it for resume and History", async () => {
+  const { credentials, call } = await fixture();
+  const response = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-rw", section: "Reading and Writing", modules: [1, 2],
+      count: 2, ordering: "source", timing: { mode: "elapsed" }, category: "Grammar" } });
+  expect(response.status).toBe(201);
+  const created = await response.json() as { attemptId: string; category: string; questionIds: string[] };
+  expect(created).toMatchObject({ category: "Grammar", questionIds: ["q1", "q3"] });
+  const resumed = await call(`/api/attempts/${created.attemptId}`, { who: credentials[0] });
+  expect(await resumed.json()).toMatchObject({ category: "Grammar", questionIds: ["q1", "q3"] });
+  const history = await call("/api/attempts", { who: credentials[0] });
+  expect(await history.json()).toMatchObject({ attempts: [{ category: "Grammar", questionCount: 2 }] });
+});
+
+it("rejects a category absent from published metadata without creating an Attempt", async () => {
+  const { credentials, call, attempts } = await fixture();
+  const response = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-math", section: "Math", modules: [1], count: 1,
+      ordering: "source", timing: { mode: "elapsed" }, category: "Algebra" } });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "invalid_attempt", message: expect.stringMatching(/category/i) } });
+  const unknown = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-rw", section: "Reading and Writing", modules: [1], count: 1,
+      ordering: "source", timing: { mode: "elapsed" }, category: "Invented" } });
+  expect(unknown.status).toBe(400);
+  expect(await unknown.json()).toMatchObject({ error: { message: expect.stringMatching(/published Question Category/i) } });
+  expect(attempts.size).toBe(0);
+});
+
+it("keeps unfiltered Practice available when the revision has no category metadata", async () => {
+  const { credentials, call } = await fixture();
+  const response = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { revisionId: "reviewed-math", section: "Math", modules: [1], count: 2,
+      ordering: "source", timing: { mode: "elapsed" } } });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ category: null, questionIds: ["math-q1", "math-q2"] });
+});
+
+it("reports zero eligible questions and insufficient filtered counts", async () => {
+  const { credentials, call, attempts } = await fixture();
+  const base = { revisionId: "reviewed-rw", section: "Reading and Writing", ordering: "source",
+    timing: { mode: "elapsed" }, category: "Vocabulary" };
+  const empty = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { ...base, modules: [2], count: 1 } });
+  expect(empty.status).toBe(400);
+  expect(await empty.json()).toMatchObject({ error: { message: expect.stringMatching(/no.*questions/i) } });
+  const short = await call("/api/attempts", { method: "POST", who: credentials[0],
+    body: { ...base, modules: [1, 2], count: 2 } });
+  expect(short.status).toBe(400);
+  expect(await short.json()).toMatchObject({ error: { message: expect.stringMatching(/only 1.*category/i) } });
+  expect(attempts.size).toBe(0);
+});
+
 it("starts the server clock and editor lease only after the Loading Gate", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-27T01:00:00.000Z"));
@@ -430,6 +501,27 @@ it("starts the server clock and editor lease only after the Loading Gate", async
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("classifies the whole active Practice Attempt once and cannot reverse Assisted status", async () => {
+  const { credentials, attempts, requestMeasurements, call } = await fixture();
+  const who = credentials[0];
+  const { attemptId } = await startPractice(call, who);
+  const deniedOwner = await call(`/api/attempts/${attemptId}/assisted`, { method: "POST", who: credentials[1], body: {} });
+  expect(deniedOwner.status).toBe(404);
+
+  const first = await call(`/api/attempts/${attemptId}/assisted`, { method: "POST", who, body: {} });
+  expect(first.status).toBe(200);
+  expect(await first.json()).toMatchObject({ attemptId, assisted: true, status: "active" });
+  const firstTimestamp = attempts.get(attemptId)!.assisted_at_ms;
+  expect(firstTimestamp).not.toBeNull();
+  expect(requestMeasurements.at(-1)?.rowsWritten).toBe(1);
+
+  const repeated = await call(`/api/attempts/${attemptId}/assisted`, { method: "POST", who, body: { assisted: false } });
+  expect(repeated.status).toBe(200);
+  expect(await repeated.json()).toMatchObject({ attemptId, assisted: true });
+  expect(attempts.get(attemptId)!.assisted_at_ms).toBe(firstTimestamp);
+  expect(requestMeasurements.at(-1)?.rowsWritten).toBe(0);
 });
 
 async function startPractice(call: Awaited<ReturnType<typeof fixture>>["call"], who: Credential) {

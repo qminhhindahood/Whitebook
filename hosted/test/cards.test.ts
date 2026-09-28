@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { cardRoute } from "../src/cards";
@@ -12,7 +12,7 @@ const CSRF_B = "d".repeat(64);
 
 function d1FromMigrations(): AccountEnv["DB"] {
   const db = new DatabaseSync(":memory:");
-  for (const name of ["0001_staging_fixture.sql", "0002_learner_accounts.sql", "0003_personal_cards.sql"])
+  for (const name of ["0001_staging_fixture.sql", "0002_learner_accounts.sql", "0003_personal_cards.sql", "0005_starter_decks.sql"])
     db.exec(readFileSync(new URL(`../migrations/${name}`, import.meta.url), "utf8"));
   return {
     prepare(sql: string) {
@@ -32,6 +32,18 @@ function d1FromMigrations(): AccountEnv["DB"] {
           return { success: true, meta: { changes, rows_read: 0, rows_written: changes } };
         },
       };
+    },
+    async batch(statements: { run(): Promise<unknown> }[]) {
+      db.exec("BEGIN");
+      try {
+        const results: unknown[] = [];
+        for (const statement of statements) results.push(await statement.run());
+        db.exec("COMMIT");
+        return results;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     },
   } as AccountEnv["DB"];
 }
@@ -62,6 +74,97 @@ function request(path: string, options: { method?: string; token?: string; csrf?
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
   });
 }
+
+it("saves a reviewed card batch atomically and echoes only its exact inserted rows", async () => {
+  const env = await environment();
+  const originalBatch = env.DB.batch.bind(env.DB);
+  env.DB.batch = async statements => {
+    await originalBatch(statements);
+    const timestamp = await env.DB.prepare("SELECT max(created_at) AS created_at FROM personal_cards").first<{ created_at: number }>();
+    const now = timestamp!.created_at;
+    await env.DB.prepare(`INSERT INTO personal_cards (id, account_id, deck, deck_key, front, front_key, definition, vietnamese, part_of_speech, pronunciation, synonyms, example, archived_at, created_at, updated_at)
+      VALUES ('concurrent-row', 'account-a', 'Other deck', 'other deck', 'concurrent', 'concurrent', 'Unrelated same-second card', '', '', '', '', '', NULL, ?, ?)`)
+      .bind(now, now).run();
+    return [];
+  };
+
+  const response = await cardRoute(request("/api/cards/batch", { method: "POST", token: SESSION_A, csrf: CSRF_A, originHeader: origin,
+    body: { cards: [
+      { front: "aberrant", deck: "Vocabulary", definition: "Departing from the usual." },
+      { front: "benevolent", deck: "Vocabulary", definition: "Kind and generous." },
+    ] } }), env)!;
+  expect(response.status).toBe(201);
+  const { cards } = await (response as Response).json() as { cards: { id: string; deck: string; front: string; definition: string }[] };
+  expect(cards.map(({ deck, front, definition }) => ({ deck, front, definition }))).toEqual([
+    { deck: "Vocabulary", front: "aberrant", definition: "Departing from the usual." },
+    { deck: "Vocabulary", front: "benevolent", definition: "Kind and generous." },
+  ]);
+  expect(cards).toHaveLength(2);
+  expect(new Set(cards.map(card => card.id)).size).toBe(2);
+  expect(cards.some(card => card.id === "concurrent-row")).toBe(false);
+});
+
+it("rolls back every card when any insert in the reviewed batch fails", async () => {
+  const env = await environment();
+  await env.DB.prepare(`INSERT INTO personal_cards (id, account_id, deck, deck_key, front, front_key, definition, vietnamese, part_of_speech, pronunciation, synonyms, example, archived_at, created_at, updated_at)
+    VALUES ('00000000-0000-0000-0000-000000000002', 'account-a', 'Existing', 'existing', 'kept', 'kept', 'Keep this card.', '', '', '', '', '', NULL, 10, 10)`).run();
+  const uuid = vi.spyOn(crypto, "randomUUID").mockReturnValueOnce("00000000-0000-0000-0000-000000000001").mockReturnValueOnce("00000000-0000-0000-0000-000000000002");
+  const response = await cardRoute(request("/api/cards/batch", { method: "POST", token: SESSION_A, csrf: CSRF_A, originHeader: origin,
+    body: { cards: [
+      { front: "first new", deck: "Vocabulary", definition: "This insert should roll back." },
+      { front: "second new", deck: "Vocabulary", definition: "This insert collides with an id." },
+    ] } }), env)!;
+  expect(uuid).toHaveBeenCalledTimes(2);
+  expect(response.status).toBe(503);
+  const cards = await env.DB.prepare("SELECT id, front FROM personal_cards WHERE account_id = 'account-a' ORDER BY id").all();
+  expect(cards.results).toEqual([{ id: "00000000-0000-0000-0000-000000000002", front: "kept" }]);
+});
+
+it("keeps shared Starter Deck content and ratings read-only during a Personal Card batch save", async () => {
+  const env = await environment();
+  env.DB.prepare("INSERT INTO starter_deck_versions VALUES ('starter-vocab', 1, 'Starter Vocabulary', 'published', 'cards-hash', 'manifest-hash', 1, 1)").run();
+  env.DB.prepare("INSERT INTO starter_deck_cards (deck_id, version, stable_id, front, definition_en) VALUES ('starter-vocab', 1, 'starter-word', 'immutable', 'Shared reviewed content')").run();
+  env.DB.prepare("INSERT INTO starter_card_rating_events VALUES ('starter-rating', 'account-a', 'starter-vocab', 'starter-word', 'sure', 'UTC', '2030-01-01', 1)").run();
+  const before = {
+    versions: await env.DB.prepare("SELECT count(*) AS count FROM starter_deck_versions").first<{ count: number }>(),
+    cards: await env.DB.prepare("SELECT count(*) AS count FROM starter_deck_cards").first<{ count: number }>(),
+    ratings: await env.DB.prepare("SELECT count(*) AS count FROM starter_card_rating_events").first<{ count: number }>(),
+  };
+  const response = await cardRoute(request("/api/cards/batch", { method: "POST", token: SESSION_A, csrf: CSRF_A, originHeader: origin,
+    body: { cards: [{ front: "new personal word", deck: "Starter Vocabulary", definition: "A separate learner-owned card." }] } }), env)!;
+  expect(response.status).toBe(201);
+  expect((await (response as Response).json() as { cards: { deck: string }[] }).cards).toMatchObject([{ deck: "Starter Vocabulary" }]);
+  expect(await env.DB.prepare("SELECT count(*) AS count FROM starter_deck_versions").first()).toEqual(before.versions);
+  expect(await env.DB.prepare("SELECT deck_id, version, title FROM starter_deck_versions").first()).toMatchObject({ deck_id: "starter-vocab", version: 1, title: "Starter Vocabulary" });
+  expect(await env.DB.prepare("SELECT front, definition_en FROM starter_deck_cards").all()).toMatchObject({ results: [{ front: "immutable", definition_en: "Shared reviewed content" }] });
+  expect(await env.DB.prepare("SELECT count(*) AS count FROM starter_card_rating_events").first()).toEqual(before.ratings);
+  expect((await env.DB.prepare("SELECT count(*) AS count FROM personal_cards WHERE account_id = 'account-a'").first() as { count: number }).count).toBe(1);
+});
+
+it("reports batch duplicates and validation findings per draft without changing existing cards", async () => {
+  const env = await environment();
+  await env.DB.prepare(`INSERT INTO personal_cards (id, account_id, deck, deck_key, front, front_key, definition, vietnamese, part_of_speech, pronunciation, synonyms, example, archived_at, created_at, updated_at)
+    VALUES ('existing-vocab', 'account-a', 'Vocabulary', 'vocabulary', 'aberrant', 'aberrant', 'Keep the existing sense.', '', '', '', '', '', NULL, 1, 1)`).run();
+  const duplicate = await cardRoute(request("/api/cards/batch", { method: "POST", token: SESSION_A, csrf: CSRF_A, originHeader: origin,
+    body: { cards: [{ front: " ABERRANT ", deck: "Vocabulary", definition: "Do not overwrite." }] } }), env)!;
+  expect(duplicate.status).toBe(409);
+  expect(await (duplicate as Response).json()).toMatchObject({ error: { code: "batch_duplicates", duplicates: { "0": { id: "existing-vocab", front: "aberrant" } } } });
+
+  const internalDuplicate = await cardRoute(request("/api/cards/batch", { method: "POST", token: SESSION_A, csrf: CSRF_A, originHeader: origin,
+    body: { cards: [{ front: "novel term", deck: "Vocabulary", definition: "First sense." }, { front: " Novel   Term ", deck: "Vocabulary", definition: "Second sense." }] } }), env)!;
+  expect(internalDuplicate.status).toBe(400);
+  expect(await (internalDuplicate as Response).json()).toMatchObject({ error: { code: "batch_invalid", fieldErrors: { "1": { duplicate: expect.any(String) } } } });
+
+  const invalid = await cardRoute(request("/api/cards/batch", { method: "POST", token: SESSION_A, csrf: CSRF_A, originHeader: origin,
+    body: { cards: [{ front: "another term", deck: "Vocabulary", definition: "Valid." }, { front: "", deck: "Vocabulary", definition: "Missing front." }] } }), env)!;
+  expect(invalid.status).toBe(400);
+  expect(await (invalid as Response).json()).toMatchObject({ error: { code: "batch_invalid", fieldErrors: { "1": { front: expect.any(String) } } } });
+  expect(await env.DB.prepare("SELECT id, front, definition FROM personal_cards WHERE account_id = 'account-a'").all()).toMatchObject({ results: [{ id: "existing-vocab", front: "aberrant", definition: "Keep the existing sense." }] });
+
+  const learnerB = await cardRoute(request("/api/cards/batch", { method: "POST", token: SESSION_B, csrf: CSRF_B, originHeader: origin,
+    body: { cards: [{ front: "aberrant", deck: "Vocabulary", definition: "Independent learner copy." }] } }), env)!;
+  expect(learnerB.status).toBe(201);
+});
 
 
 it("creates, lists, and shows personal cards with only the fields that are present", async () => {
