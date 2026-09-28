@@ -4,9 +4,9 @@ import type { CSSProperties, ReactNode } from "react";
 import { postJson, putJson } from "../api";
 import { DesmosCalculatorPanel, ScientificCalculator } from "../calculator";
 import { usePdf } from "../pdf";
+import { AnswerPreview } from "../AnswerPreview";
 import {
   AnswerChoices,
-  AnswerPreview,
   QuestionContent,
 } from "../QuestionContent";
 import { playerLayout, presentationIssue } from "../questionPresentation";

@@ -58,6 +58,33 @@
   overflow: auto;
 }
 
+.hosted-practice-player .player-body--split > .player-divider {
+  z-index: 1;
+  min-height: 0;
+}
+
+.hosted-practice-player .spr-directions {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 30px;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.hosted-practice-player .spr-directions h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+
+.hosted-practice-player .spr-directions ul {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.hosted-practice-player .answer-preview {
+  margin: 14px 0 0;
+}
+
 .hosted-practice-player .player-body--centered > .response-panel {
   width: min(100% - 48px, 760px);
   margin: 24px auto 36px;
@@ -108,6 +135,10 @@
   .hosted-practice-player .player-body--split {
     display: block;
     overflow: auto;
+  }
+
+  .hosted-practice-player .player-body--split > .player-divider {
+    display: none;
   }
 
   .hosted-practice-player .player-pane--left,
