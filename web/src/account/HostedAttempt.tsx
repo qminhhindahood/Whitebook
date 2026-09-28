@@ -136,6 +136,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const [navigationPending, setNavigationPending] = useState(false);
   const [exitPending, setExitPending] = useState(false);
   const [assistedPending, setAssistedPending] = useState(false);
+  const [assistedConfirmOpen, setAssistedConfirmOpen] = useState(false);
   const [split, setSplit] = useState(() => readStoredSplit(initial.attemptId));
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState("");
@@ -664,18 +665,25 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
           onClick={() => setNavigatorOpen((open) => !open)}>Question {currentIndex + 1} of {questionLinks.length}</button>
         <div className="player-footer__actions">
           {!completed && snapshot.kind === "practice" && !snapshot.assisted && <button type="button" className="pill pill--soft" disabled={!canEdit || assistedPending || submitting || navigationPending || exitPending}
-            onClick={() => void enterAssistedPractice()}>{assistedPending ? "Enabling Assisted Practice…" : "Use Assisted Practice"}</button>}
+            onClick={() => setAssistedConfirmOpen(true)}>{assistedPending ? "Enabling Assisted Practice…" : "Use Assisted Practice"}</button>}
           {!completed && <button type="button" className="pill pill--soft" disabled={!canEdit || submitting || navigationPending || exitPending}
             onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit Attempt"}</button>}
           <button type="button" className="pill pill--outline" disabled={currentIndex === 0 || navigationPending || submitting} onClick={() => void goTo(currentIndex - 1)}>Previous question</button>
           <button type="button" className="pill pill--primary" disabled={currentIndex === questionLinks.length - 1 || navigationPending || submitting} onClick={() => void goTo(currentIndex + 1)}>Next question</button>
         </div>
       </footer>
+      {assistedConfirmOpen && <section className="hosted-attempt__assisted-confirm" role="group" aria-labelledby="assisted-confirm-heading">
+        <h3 id="assisted-confirm-heading">Confirm Assisted Practice</h3>
+        <p>Continuing with assistance classifies this whole Attempt as Assisted Practice. Every question in it will be excluded from unassisted Progress evidence. This choice cannot be undone for this Attempt.</p>
+        <button type="button" className="practice-button" disabled={assistedPending} onClick={() => void enterAssistedPractice()}>Continue with Assisted Practice</button>
+        <button type="button" className="practice-button practice-button--quiet" disabled={assistedPending} onClick={() => setAssistedConfirmOpen(false)}>Cancel</button>
+      </section>}
       <div className="accent-strip" aria-hidden="true" />
     </main>;
   }
 
   async function enterAssistedPractice() {
+    setAssistedConfirmOpen(false);
     if (snapshotRef.current.status !== "active" || snapshotRef.current.kind !== "practice" || snapshotRef.current.assisted) return;
     setAssistedPending(true); setSyncError("");
     try {
@@ -802,7 +810,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
             <button type="button" className="practice-button practice-button--quiet" disabled={currentIndex === 0 || !canEdit || navigationPending}
               onClick={() => void goTo(currentIndex - 1)}>Previous question</button>
             <span>Question {currentIndex + 1} of {questionLinks.length}</span>
-             {snapshot.kind === "practice" && !snapshot.assisted && <button type="button" className="practice-button practice-button--quiet" disabled={!canEdit || assistedPending || submitting || navigationPending} onClick={() => void enterAssistedPractice()}>{assistedPending ? "Enabling Assisted Practice…" : "Use Assisted Practice"}</button>}
+             {snapshot.kind === "practice" && !snapshot.assisted && <button type="button" className="practice-button practice-button--quiet" disabled={!canEdit || assistedPending || submitting || navigationPending} onClick={() => setAssistedConfirmOpen(true)}>{assistedPending ? "Enabling Assisted Practice…" : "Use Assisted Practice"}</button>}
              {currentIndex < questionLinks.length - 1 ?
               <button type="button" className="practice-button" disabled={!canEdit || navigationPending || submitting} onClick={() => void goTo(currentIndex + 1)}>Next question</button> :
               (sectionExam ? null : <button type="button" className="practice-button" disabled={!canEdit || submitting || navigationPending}

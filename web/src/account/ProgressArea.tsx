@@ -109,7 +109,7 @@ export function ProgressArea({ onSessionEnded }: { onSessionEnded: () => void })
           {progress.excludedAssisted > 0 && ` ${progress.excludedAssisted} questions from Assisted Practice Attempts excluded from Raw Accuracy.`}
           {" "}Guided retries stay in History and do not add graded Attempts.</p>
         {progress.completedAttempts === 0 ? <p className="progress-empty">No graded Attempts yet. Complete a Practice or Section Exam Attempt to build a baseline.</p>
-          : progress.sections.length === 0 ? <p className="progress-empty">No unassisted graded questions yet. Assisted Practice Attempts stay outside Raw Accuracy.</p> : <>
+          : progress.sections.length === 0 ? <p className="progress-empty">No unassisted graded questions yet. Every question in an Assisted Practice Attempt stays outside Raw Accuracy.</p> : <>
           <EvidenceTable title="By Section" rows={progress.sections} label="section" />
           <EvidenceTable title="By Question Category" rows={progress.categories} label="category" />
           <EvidenceTable title="By Content Domain" rows={progress.domains} label="domain" />

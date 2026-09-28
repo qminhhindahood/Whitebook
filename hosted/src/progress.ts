@@ -144,7 +144,7 @@ export function progressRoute(request: Request, env: AccountEnv): Promise<Respon
   return (async () => {
     const session = await currentSession(request, env);
     if (!session) return failure(401, "signed_out", "Sign in to see your progress evidence.");
-    const result = await env.DB.prepare("SELECT id, revision_id, kind, completed_at_ms, questions_json, result_json, state_json " +
+    const result = await env.DB.prepare("SELECT id, revision_id, kind, completed_at_ms, questions_json, result_json, state_json, assisted_at_ms " +
       "FROM learner_attempts WHERE account_id = ? AND status = 'completed' AND result_json IS NOT NULL ORDER BY completed_at_ms DESC")
       .bind(session.account_id).all();
     const attempts = result.results as AttemptRow[];

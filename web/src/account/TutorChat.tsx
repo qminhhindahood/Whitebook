@@ -4,7 +4,7 @@ import "./tutorChat.css";
 
 type Provider = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: string[]; vision: boolean; quota: string; healthy: boolean };
 type Turn = { role: "learner" | "assistant"; text: string; provider?: Provider };
-type Preview = { previewId: string; expiresAt: number; payload: string; provider: Provider; neverSent: string[]; retention: string };
+type Preview = { previewId: string; expiresAt: number; payload: string; visuals?: { width: number; height: number; alt: string; mimeType: string }[]; provider: Provider; neverSent: string[]; retention: string };
 type Options = { options: Provider[]; credential: { lastFour: string } | null };
 type ReviewChoice = { reviewId: string; attemptId: string; revisionId: string; questionId: string; section: string; module: number; questionNumber: number; completedAt: number };
 class ChatFailure extends Error {
@@ -21,6 +21,18 @@ function ProviderDetails({ provider }: { provider: Provider }) {
     <div><dt>Capabilities</dt><dd>{provider.languages.map(l => l === "vi" ? "Vietnamese" : "English").join(", ")} · {provider.vision ? "Vision supported; text only in this chat" : "Text only"}</dd></div>
     <div><dt>Terms</dt><dd>{provider.terms} <a href={provider.termsUrl} target="_blank" rel="noreferrer">Read Gemini terms</a> ({provider.termsVersion})</dd></div>
   </dl>;
+}
+
+function previewRequest(payload: string) {
+  const request = JSON.parse(payload) as { contents?: { parts?: { inlineData?: { mimeType?: string; data?: string } }[] }[] };
+  const images = (request.contents ?? []).flatMap(content => content.parts ?? []).flatMap(part => part.inlineData?.data && part.inlineData.mimeType
+    ? [{ mimeType: part.inlineData.mimeType, data: part.inlineData.data }]
+    : []);
+  const display = request;
+  for (const content of display.contents ?? []) for (const part of content.parts ?? []) if (part.inlineData?.data) {
+    part.inlineData.data = "[Exact image bytes rendered below]";
+  }
+  return { formatted: JSON.stringify(display, null, 2), images };
 }
 
 // Mounted for the signed-in workspace, even while hidden by another area. Nothing
@@ -52,6 +64,7 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
   const previewHeading = useRef<HTMLHeadingElement>(null);
   const active = workspaceView === "tutor";
   const provider = options?.options.find(p => selectionId(p) === selection);
+  const preparedPreview = preview ? previewRequest(preview.payload) : null;
 
   useEffect(() => {
     const controllers = pending.current;
@@ -190,8 +203,17 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
       {preview && <section className="tutor-preview" aria-labelledby="tutor-preview-heading">
         <h3 id="tutor-preview-heading" tabIndex={-1} ref={previewHeading}>Included in this send</h3>
         <ProviderDetails provider={preview.provider} />
-        <p>Exact Gemini request, including instructions, capped prior messages, your new message, and reply limit:</p>
-        <pre aria-label="Exact Gemini request">{JSON.stringify(JSON.parse(preview.payload), null, 2)}</pre>
+        <p>Gemini request, including instructions, capped prior messages, your new message, and reply limit. Image bytes are rendered below exactly as sent.</p>
+        <pre aria-label="Gemini request fields and image placeholders">{preparedPreview?.formatted}</pre>
+        {!!preview.visuals?.length && <div className="tutor-preview-visuals" aria-label="Images included in this send">
+          {preparedPreview?.images.map((image, index) => {
+            const info = preview.visuals?.[index];
+            if (!info || image.mimeType !== info.mimeType || info.mimeType !== "image/png") return null;
+            return <figure key={`${index}-${info.width}x${info.height}`}><figcaption>{info.width} × {info.height} · {info.alt}</figcaption>
+              <img src={`data:${image.mimeType};base64,${image.data}`} alt={info.alt} width={info.width} height={info.height} />
+            </figure>;
+          })}
+        </div>}
         <p>Never attached automatically: {preview.neverSent.join(", ")}.</p>
         <p>{preview.retention}</p>
         {clock >= preview.expiresAt ? <p role="status">This preview expired. Preview again to consent.</p> : <p>Consent expires at {new Date(preview.expiresAt).toLocaleTimeString()}.</p>}

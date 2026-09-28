@@ -59,6 +59,25 @@ it("shows pending until the server confirms a response save", async () => {
   expect((screen.getByRole("radio", { name: /AOption A/ }) as HTMLInputElement).checked).toBe(true);
 });
 
+it("explains whole-Attempt evidence exclusion and asks for confirmation before Assisted Practice", async () => {
+  const { calls, view } = fixture(async path => path.endsWith("/assisted")
+    ? Response.json(attempt({ assisted: true }))
+    : Promise.reject(new Error(path)));
+  view(attempt({ kind: "practice" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Use Assisted Practice" })[0]);
+  expect(await screen.findByRole("group", { name: "Confirm Assisted Practice" })).toBeTruthy();
+  expect(screen.getByText(/this whole Attempt as Assisted Practice.*Every question.*excluded from unassisted Progress evidence.*cannot be undone/i)).toBeTruthy();
+  expect(calls.some(call => call.path.endsWith("/assisted"))).toBe(false);
+
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("group", { name: "Confirm Assisted Practice" })).toBeNull();
+  fireEvent.click(screen.getAllByRole("button", { name: "Use Assisted Practice" })[0]);
+  fireEvent.click(await screen.findByRole("button", { name: "Continue with Assisted Practice" }));
+  await waitFor(() => expect(calls.filter(call => call.path.endsWith("/assisted"))).toHaveLength(1));
+  expect(JSON.parse(String(calls.find(call => call.path.endsWith("/assisted"))?.init?.body))).toEqual({});
+  expect(screen.queryByRole("button", { name: "Use Assisted Practice" })).toBeNull();
+});
+
 it("coalesces rapid typed responses into one idle save and previews the learner entry", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(now);

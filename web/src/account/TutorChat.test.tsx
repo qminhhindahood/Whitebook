@@ -5,16 +5,18 @@ import { AccountApp } from "./AccountApp";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 const option = { route: "shared_gemini", model: "gemini-test", payer: "Shared AI Access", price: "USD 0 fixture", terms: "Fixture terms", termsUrl: "https://ai.google.dev/gemini-api/terms", termsVersion: "test", quota: "Fixture quota", languages: ["en", "vi"], vision: false, healthy: true };
-function setup(enabled = true) {
+function setup(enabled = true, vision = false) {
   vi.stubEnv("VITE_AI_RELEASE_ENABLED", enabled ? "true" : "false");
+  const availableOption = { ...option, vision };
   const calls: { path: string; body: any }[] = [];
   const fetch = vi.fn(async (path: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined; calls.push({ path, body });
     if (path === "/api/account/me") return Response.json({ account: { id: "a", email: "private@invalid.test", displayName: "Learner", nickname: "", timeZone: "", role: "learner" }, session: { expiresAt: 9999999999 } });
     if (path === "/api/account/sat-dates") return Response.json({ catalog: { dates: [] }, selection: { dates: [], primary: null } });
     if (path === "/api/account/scores") return Response.json({ results: [] });
-    if (path === "/api/assistant/options") return Response.json({ options: [option], credential: null });
-    if (path === "/api/assistant/preview") return Response.json({ previewId: "opaque-" + calls.length, expiresAt: Date.now() + 300000, provider: option, payload: JSON.stringify({ contents: [...body.priorMessages, { role: "learner", text: body.currentMessage }], locale: body.locale }), neverSent: ["Account profile", "Scores"], retention: "Visit only" });
+    if (path === "/api/assistant/options") return Response.json({ options: [availableOption], credential: null });
+    if (path === "/api/assistant/attachments") return Response.json({ reviews: [{ reviewId: "review-1", attemptId: "attempt-1", revisionId: "revision-1", questionId: "question-1", section: "Math", module: 1, questionNumber: 4, completedAt: 1 }] });
+    if (path === "/api/assistant/preview") return Response.json({ previewId: "opaque-" + calls.length, expiresAt: Date.now() + 300000, provider: availableOption, payload: JSON.stringify({ contents: [...body.priorMessages, { role: "learner", text: body.currentMessage }, ...(body.includeVisuals ? [{ role: "learner", parts: [{ inlineData: { mimeType: "image/png", data: "c3ludGhldGljLWltYWdl" } }] }] : [])], locale: body.locale }), visuals: body.includeVisuals ? [{ width: 320, height: 180, alt: "A line graph", mimeType: "image/png" }] : [], neverSent: ["Account profile", "Scores"], retention: "Visit only" });
     if (path === "/api/assistant/send") return Response.json({ text: "Fixture tutor reply", provider: option, verified: false });
     if (path === "/api/auth/signout") return new Response(null, { status: 204 });
     throw new Error("Unexpected route " + path);
@@ -34,7 +36,7 @@ it("previews exact text for each consent, preserves the visit across navigation,
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Explain slope" } });
   fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
   expect(await screen.findByRole("heading", { name: "Included in this send" })).toBeTruthy();
-  expect(screen.getByLabelText("Exact Gemini request").textContent).toContain("Explain slope");
+  expect(screen.getByLabelText("Gemini request fields and image placeholders").textContent).toContain("Explain slope");
   fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Explain intercept" } });
   expect(screen.queryByRole("button", { name: "I consent — send to Gemini" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
@@ -69,6 +71,20 @@ it("preserves drafts on provider failures and requires a fresh preview for a del
   expect(screen.getByText(/Retry available/)).toBeTruthy();
   expect(screen.queryByRole("button", { name: "I consent — send to Gemini" })).toBeNull();
   await waitFor(() => expect(screen.getByRole("button", { name: "Preview this send" }).hasAttribute("disabled")).toBe(true));
+});
+
+it("shows the exact reviewed image bytes, dimensions, and alt text before consent", async () => {
+  const f = setup(true, true); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }));
+  fireEvent.change(await screen.findByLabelText("Attach reviewed question (optional)"), { target: { value: "review-1" } });
+  fireEvent.click(screen.getByLabelText("Share selected question visuals with Gemini"));
+  fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Explain this graph" } });
+  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
+  const image = await screen.findByRole("img", { name: "A line graph" });
+  expect(image.getAttribute("src")).toBe("data:image/png;base64,c3ludGhldGljLWltYWdl");
+  expect(image.getAttribute("width")).toBe("320");
+  expect(image.getAttribute("height")).toBe("180");
+  expect(screen.getByText("320 × 180 · A line graph")).toBeTruthy();
+  expect(f.calls.find(c => c.path.endsWith("/preview"))?.body).toMatchObject({ reviewId: "review-1", includeVisuals: true });
 });
 
 it("ends the visit on pagehide and ignores a response that arrives after the visit ended", async () => {

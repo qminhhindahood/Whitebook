@@ -11,7 +11,7 @@ type AttemptRow = {
   id: string; account_id: string; revision_id: string; kind: string; status: string;
   config_json: string; questions_json: string; state_json: string; state_version: number;
   created_at_ms: number; started_at_ms: number | null; deadline_at_ms: number | null;
-  completed_at_ms: number | null; result_json: string | null; answers_exposed_at_ms: number | null;
+  completed_at_ms: number | null; result_json: string | null; answers_exposed_at_ms: number | null; assisted_at_ms: number | null;
   editor_token_hash: string | null; editor_lease_expires_at_ms: number | null;
 };
 
@@ -133,6 +133,14 @@ async function fixture() {
           return { results: [], meta: { rows_read: 0, rows_written: 0 } };
         },
         async run() {
+          if (sql.includes("SET assisted_at_ms = ?")) {
+            const [at, id, accountId] = args;
+            const row = attempts.get(String(id));
+            if (!row || row.account_id !== String(accountId) || row.kind !== "practice" || row.status !== "active" || row.assisted_at_ms !== null)
+              return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
+            row.assisted_at_ms = Number(at);
+            return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
+          }
           if (sql.includes("SET answers_exposed_at_ms = ?")) {
             const [at, id, accountId] = args;
             const row = attempts.get(String(id));
@@ -149,7 +157,7 @@ async function fixture() {
               questions_json: String(questionsJson), state_json: String(stateJson), state_version: 0,
               created_at_ms: Number(createdAt), started_at_ms: null, deadline_at_ms: null,
               completed_at_ms: null, result_json: null, answers_exposed_at_ms: null, editor_token_hash: null,
-              editor_lease_expires_at_ms: null,
+              editor_lease_expires_at_ms: null, assisted_at_ms: null,
             });
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
           }
@@ -493,6 +501,27 @@ it("starts the server clock and editor lease only after the Loading Gate", async
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("classifies the whole active Practice Attempt once and cannot reverse Assisted status", async () => {
+  const { credentials, attempts, requestMeasurements, call } = await fixture();
+  const who = credentials[0];
+  const { attemptId } = await startPractice(call, who);
+  const deniedOwner = await call(`/api/attempts/${attemptId}/assisted`, { method: "POST", who: credentials[1], body: {} });
+  expect(deniedOwner.status).toBe(404);
+
+  const first = await call(`/api/attempts/${attemptId}/assisted`, { method: "POST", who, body: {} });
+  expect(first.status).toBe(200);
+  expect(await first.json()).toMatchObject({ attemptId, assisted: true, status: "active" });
+  const firstTimestamp = attempts.get(attemptId)!.assisted_at_ms;
+  expect(firstTimestamp).not.toBeNull();
+  expect(requestMeasurements.at(-1)?.rowsWritten).toBe(1);
+
+  const repeated = await call(`/api/attempts/${attemptId}/assisted`, { method: "POST", who, body: { assisted: false } });
+  expect(repeated.status).toBe(200);
+  expect(await repeated.json()).toMatchObject({ attemptId, assisted: true });
+  expect(attempts.get(attemptId)!.assisted_at_ms).toBe(firstTimestamp);
+  expect(requestMeasurements.at(-1)?.rowsWritten).toBe(0);
 });
 
 async function startPractice(call: Awaited<ReturnType<typeof fixture>>["call"], who: Credential) {

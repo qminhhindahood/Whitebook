@@ -24,4 +24,7 @@
 .tutor-turn small { color: #52647a; }
 .tutor-preview { margin-top: 24px; padding: clamp(14px, 2vw, 24px); border: 2px solid #6366f1; border-radius: 10px; }
 .tutor-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; padding: 16px; background: #f5f7ff; font-size: .9rem; }
+.tutor-preview-visuals figure { margin: 16px 0; }
+.tutor-preview-visuals figcaption { margin-bottom: 8px; font-weight: 650; }
+.tutor-preview-visuals img { display: block; max-width: 100%; max-height: 420px; height: auto; object-fit: contain; border: 1px solid #dfe3f0; border-radius: 8px; }
 @media (max-width: 560px) { .tutor-provider > div { grid-template-columns: 1fr; gap: 4px; } }
