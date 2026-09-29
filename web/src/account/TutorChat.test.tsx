@@ -31,27 +31,23 @@ it("has no AI Tutor control or assistant request in the current release when dis
   expect(f.calls.some(c => c.path.startsWith("/api/assistant/"))).toBe(false);
 });
 
-it("previews exact text for each consent, preserves the visit across navigation, and clears on sign-out", async () => {
+it("sends message directly, preserves the visit across navigation, and clears on sign-out", async () => {
   const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }, { timeout: 5000 }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Explain slope" } });
-  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
-  expect(await screen.findByRole("heading", { name: "Included in this send" })).toBeTruthy();
-  expect(screen.getByLabelText("Gemini request fields and image placeholders").textContent).toContain("Explain slope");
-  fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "Explain intercept" } });
-  expect(screen.queryByRole("button", { name: "I consent — send to Gemini" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
-  fireEvent.click(await screen.findByRole("button", { name: "I consent — send to Gemini" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(await screen.findByText("Fixture tutor reply")).toBeTruthy();
-  expect(f.calls.filter(c => c.path.endsWith("/preview"))).toHaveLength(2);
+  expect(f.calls.filter(c => c.path.endsWith("/preview"))).toHaveLength(1);
+  expect(f.calls.filter(c => c.path.endsWith("/send"))).toHaveLength(1);
   expect(Object.keys(f.calls.find(c => c.path.endsWith("/send"))!.body).sort()).toEqual(["consent", "previewId", "visitId"]);
   fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
   fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   expect(await screen.findByText("Fixture tutor reply")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "One more" } });
   fireEvent.change(screen.getByLabelText("Response language"), { target: { value: "vi" } });
-  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
-  await screen.findByRole("button", { name: "I consent — send to Gemini" });
-  expect(f.calls.filter(c => c.path.endsWith("/preview")).at(-1)!.body).toMatchObject({ locale: "vi", priorMessages: [{ role: "learner", text: "Explain intercept" }, { role: "assistant", text: "Fixture tutor reply" }] });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText("Fixture tutor reply");
+  await waitFor(() => expect(f.calls.filter(c => c.path.endsWith("/send"))).toHaveLength(2));
+  expect(f.calls.filter(c => c.path.endsWith("/preview")).at(-1)!.body).toMatchObject({ locale: "vi", priorMessages: [{ role: "learner", text: "Explain slope" }, { role: "assistant", text: "Fixture tutor reply" }] });
   fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
   fireEvent.click(screen.getByRole("button", { name: "Account & Settings" }));
   fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
@@ -63,8 +59,7 @@ it("previews exact text for each consent, preserves the visit across navigation,
 it("resets conversation on New chat action", async () => {
   const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "First message" } });
-  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
-  fireEvent.click(await screen.findByRole("button", { name: "I consent — send to Gemini" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(await screen.findByText("Fixture tutor reply")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "New chat" }));
   expect(screen.queryByText("Fixture tutor reply")).toBeNull();
@@ -72,42 +67,46 @@ it("resets conversation on New chat action", async () => {
   expect(screen.getByText("Started a new conversation.")).toBeTruthy();
 });
 
-it("preserves drafts on provider failures and requires a fresh preview for a deliberate retry", async () => {
+it("preserves drafts on provider failures and allows a deliberate retry", async () => {
   const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Keep my draft" } });
-  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
-  await screen.findByRole("button", { name: "I consent — send to Gemini" });
-  f.fetch.mockResolvedValueOnce(Response.json({ error: { code: "quota_exhausted", message: "Gemini quota exhausted", retryAt: Date.now() + 60000 } }, { status: 429 }));
-  fireEvent.click(screen.getByRole("button", { name: "I consent — send to Gemini" }));
+  const originalFetch = f.fetch.getMockImplementation();
+  f.fetch.mockImplementation(async (path: string, init?: RequestInit) => {
+    if (path === "/api/assistant/send") {
+      return Response.json({ error: { code: "quota_exhausted", message: "Gemini quota exhausted", retryAt: Date.now() + 60000 } }, { status: 429 });
+    }
+    return originalFetch!(path, init);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(await screen.findByText(/Gemini quota exhausted/)).toBeTruthy();
   expect((screen.getByLabelText("Your message") as HTMLTextAreaElement).value).toBe("Keep my draft");
   expect(screen.getByText(/Retry available/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "I consent — send to Gemini" })).toBeNull();
-  await waitFor(() => expect(screen.getByRole("button", { name: "Preview this send" }).hasAttribute("disabled")).toBe(true));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true));
 });
 
-it("shows the exact reviewed image bytes, dimensions, and alt text before consent", async () => {
+it("attaches reviewed question and visuals when selected", async () => {
   const f = setup(true, true); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   fireEvent.change(await screen.findByLabelText("Attach reviewed question (optional)"), { target: { value: "review-1" } });
   fireEvent.click(screen.getByLabelText("Share selected question visuals with Gemini"));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Explain this graph" } });
-  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
-  const image = await screen.findByRole("img", { name: "A line graph" });
-  expect(image.getAttribute("src")).toBe("data:image/png;base64,c3ludGhldGljLWltYWdl");
-  expect(image.getAttribute("width")).toBe("320");
-  expect(image.getAttribute("height")).toBe("180");
-  expect(screen.getByText("320 × 180 · A line graph")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(await screen.findByText("Fixture tutor reply")).toBeTruthy();
   expect(f.calls.find(c => c.path.endsWith("/preview"))?.body).toMatchObject({ reviewId: "review-1", includeVisuals: true });
 });
 
 it("ends the visit on pagehide and ignores a response that arrives after the visit ended", async () => {
   const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Discard on close" } });
-  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
-  await screen.findByRole("button", { name: "I consent — send to Gemini" });
   let finish!: (value: Response) => void;
-  f.fetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  fireEvent.click(screen.getByRole("button", { name: "I consent — send to Gemini" }));
+  const originalFetch = f.fetch.getMockImplementation();
+  f.fetch.mockImplementation(async (path: string, init?: RequestInit) => {
+    if (path === "/api/assistant/send") {
+      return new Promise(resolve => { finish = resolve; });
+    }
+    return originalFetch!(path, init);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(finish).toBeDefined());
   fireEvent(window, new Event("pagehide"));
   finish(Response.json({ text: "Late private reply", provider: option }));
   await waitFor(() => expect((screen.getByLabelText("Your message") as HTMLTextAreaElement).value).toBe(""));
@@ -120,11 +119,11 @@ it("clears the transcript on an authenticated 401 and never queues an offline se
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Private draft" } });
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   fireEvent(window, new Event("offline"));
-  expect(screen.getByRole("button", { name: "Preview this send" }).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true);
   expect(f.calls.some(c => c.path.endsWith("/send"))).toBe(false);
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true); fireEvent(window, new Event("online"));
   f.fetch.mockResolvedValueOnce(Response.json({ error: { code: "signed_out" } }, { status: 401 }));
-  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await screen.findByRole("link", { name: "Continue with Google" });
   expect(screen.queryByLabelText("Your message")).toBeNull();
   expect(screen.queryByText("Private draft")).toBeNull();
