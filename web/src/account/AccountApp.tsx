@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type ComponentType } from "react";
 import { areas, Icon, CalendarRail, StudyDashboard, DatesDialog, useWorkspaceData, type Area, type StudyAction } from "./StudyWorkspace";
 import { accountFetch, csrfToken } from "./accountClient";
 import { FlashcardsArea } from "./FlashcardStudy";
@@ -16,7 +16,8 @@ import { PlanArea } from "./PlanArea";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; timeZone: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
-const TutorChat = lazy(() => import.meta.env.VITE_AI_RELEASE_ENABLED === "true"
+type TutorChatProps = { workspaceView: string; onAvailability: (available: boolean) => void; onSessionEnded: () => void };
+const TutorChat = lazy<ComponentType<TutorChatProps>>(() => import.meta.env.VITE_AI_RELEASE_ENABLED === "true"
   ? import("./TutorChat") : Promise.resolve({ default: () => null }));
 
 export { accountFetch, csrfToken } from "./accountClient";
