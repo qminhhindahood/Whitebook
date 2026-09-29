@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
-import { assistantRoute, type AssistantEnv } from "../src/assistant";
+import { assistantRoute, executeWithModelFallback, GEMINI_CANDIDATE_MODELS, type AssistantEnv } from "../src/assistant";
 import type { AccountEnv } from "../src/accounts";
 import { accountDataRoute } from "../src/accountData";
 import { accountRoute } from "../src/accounts";
@@ -554,4 +554,53 @@ it("returns generic JSON from the Worker for assistant storage errors without lo
   expect(response.status).toBe(503);
   expect(await response.text()).not.toContain("SECRET");
   expect(logged).not.toHaveBeenCalled();
+});
+it("falls back through Gemini candidate models when gemini-3.8-flash experiences temporary high demand", async () => {
+  const adapter = vi.fn()
+    .mockRejectedValueOnce(new GeminiFailure("provider_error", 10, "This model is currently experiencing high demand. Spikes in demand are usually temporary."))
+    .mockResolvedValueOnce("Successful response from fallback model");
+
+  const result = await executeWithModelFallback(
+    adapter,
+    JSON.stringify({ contents: [], generationConfig: { maxOutputTokens: 100 } }),
+    "gemini-3.8-flash",
+    "test-key"
+  );
+
+  expect(result.text).toBe("Successful response from fallback model");
+  expect(result.model).toBe("gemini-3.7-flash");
+  expect(result.attempted).toEqual(["gemini-3.8-flash", "gemini-3.7-flash"]);
+  expect(adapter).toHaveBeenCalledTimes(2);
+});
+
+it("does not cascade fallback for credential_invalid or blocked_content errors", async () => {
+  const adapter = vi.fn().mockRejectedValueOnce(new GeminiFailure("credential_invalid"));
+  await expect(executeWithModelFallback(
+    adapter,
+    "{}",
+    "gemini-3.8-flash",
+    "test-key"
+  )).rejects.toThrow("credential_invalid");
+  expect(adapter).toHaveBeenCalledTimes(1);
+});
+
+it("tests all models and returns diagnostic results via /api/assistant/test-models", async () => {
+  const f = await fixture();
+  f.adapter.mockImplementation(async (_p, model) => {
+    if (model === "gemini-3.8-flash") {
+      throw new GeminiFailure("provider_error", 10, "This model is currently experiencing high demand.");
+    }
+    return "ok";
+  });
+
+  const response = await f.call("test-models", {});
+  expect(response.status).toBe(200);
+  const data = await response.json() as { models: { model: string; working: boolean; status: number }[]; recommendedModel: string };
+  expect(data.models).toBeInstanceOf(Array);
+  const m38 = data.models.find(m => m.model === "gemini-3.8-flash");
+  expect(m38?.working).toBe(false);
+  expect(m38?.status).toBe(503);
+  const m37 = data.models.find(m => m.model === "gemini-3.7-flash");
+  expect(m37?.working).toBe(true);
+  expect(data.recommendedModel).toBeTruthy();
 });

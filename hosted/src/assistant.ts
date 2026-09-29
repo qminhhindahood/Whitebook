@@ -123,12 +123,84 @@ function estimateTokens(payload: string, visuals: Attachment["visuals"] = []): n
 function generationConfigOf(model: unknown, maxOutputTokens: number): Record<string, unknown> {
   const config: Record<string, unknown> = { maxOutputTokens };
   const m = typeof model === "string" ? model : "";
-  if (m.includes("3.")) {
+  if (m.includes("3.") || m.includes("gemini-3")) {
     config.thinkingConfig = { thinkingLevel: "low" };
   } else if (m.includes("2.5") || m.includes("2.0-flash-thinking")) {
     config.thinkingConfig = { thinkingBudget: 0 };
   }
   return config;
+}
+export const GEMINI_CANDIDATE_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+];
+
+export function adaptPayloadForModel(rawPayload: string, targetModel: string): string {
+  try {
+    const parsed = JSON.parse(rawPayload);
+    if (parsed && typeof parsed === "object" && parsed.generationConfig) {
+      const maxTokens = Number(parsed.generationConfig.maxOutputTokens) || MAX_OUTPUT;
+      parsed.generationConfig = generationConfigOf(targetModel, maxTokens);
+      return JSON.stringify(parsed);
+    }
+  } catch {
+    // If not parseable JSON, return raw payload
+  }
+  return rawPayload;
+}
+
+export async function executeWithModelFallback(
+  adapter: GeminiAdapter,
+  payload: string,
+  primaryModel: string,
+  key: string
+): Promise<{ text: string; model: string; attempted: string[] }> {
+  const isCandidate = GEMINI_CANDIDATE_MODELS.includes(primaryModel) || primaryModel.startsWith("gemini-3") || primaryModel.startsWith("gemini-2");
+  const models = isCandidate
+    ? [primaryModel, ...GEMINI_CANDIDATE_MODELS.filter(m => m !== primaryModel)]
+    : [primaryModel];
+
+  let lastError: unknown = null;
+  const attempted: string[] = [];
+
+  for (let i = 0; i < models.length; i++) {
+    const candidateModel = models[i];
+    attempted.push(candidateModel);
+    const candidatePayload = adaptPayloadForModel(payload, candidateModel);
+    try {
+      const text = await adapter(candidatePayload, candidateModel, key);
+      return { text, model: candidateModel, attempted };
+    } catch (err) {
+      lastError = err;
+      const failure = err instanceof GeminiFailure ? err : null;
+      if (failure && (failure.code === "credential_invalid" || failure.code === "blocked_content")) {
+        throw err;
+      }
+      console.warn("gemini_model_fallback_retry", {
+        attempt: i + 1,
+        failedModel: candidateModel,
+        reason: failure?.message || (err instanceof Error ? err.message : String(err)),
+        nextModel: i < models.length - 1 ? models[i + 1] : null,
+      });
+      if (i < models.length - 1) {
+        const jitter = Math.floor(Math.random() * 80) + 40;
+        await new Promise(resolve => setTimeout(resolve, jitter));
+      }
+    }
+  }
+
+  if (lastError instanceof GeminiFailure) {
+    const isTransient = ["provider_error", "quota_exhausted", "model_unavailable", "timeout"].includes(lastError.code);
+    if (isTransient && attempted.length > 1) {
+      const summaryMsg = `All tested models (${attempted.join(", ")}) are currently experiencing high demand or rate limits. Spikes in demand are temporary. Please try again in a few moments.`;
+      throw new GeminiFailure(lastError.code, Math.max(lastError.retrySeconds, 10), summaryMsg);
+    }
+  }
+
+  throw lastError;
 }
 
 function payloadOf(body: Record<string, unknown>, attachment: Attachment | null): string | null {
@@ -339,7 +411,17 @@ async function flashcardSend(body: Record<string, unknown>, env: AssistantEnv, s
   const retry = Math.ceil((HOUR - now % HOUR) / 1000);
   if (!await reserve(env, `send:${session.account_id}`, snapshot.tokens, 20, 80000, now)) return rateLimitedResponse("rate_limited", retry, now);
   if (provider.route === "shared_gemini" && !await reserve(env, "shared", snapshot.tokens, 100, 400000, now)) return rateLimitedResponse("quota_exhausted", retry, now);
-  try { const text = await adapter(snapshot.payload, provider.model, key.key); if (!text.trim() || text.length > 12000 || text.includes(key.key)) return failure(502, "provider_error", "Flashcard Assistant returned an unavailable draft."); return json({ text, provider, verified: false }); }
+  try {
+    const result = await executeWithModelFallback(adapter, snapshot.payload, provider.model, key.key);
+    const text = result.text;
+    if (!text.trim() || text.length > 12000 || text.includes(key.key)) return failure(502, "provider_error", "Flashcard Assistant returned an unavailable draft.");
+    return json({
+      text,
+      provider: { ...provider, model: result.model },
+      verified: false,
+      ...(result.model !== provider.model ? { fallback: { originalModel: provider.model, activeModel: result.model } } : {})
+    });
+  }
   catch { return failure(502, "provider_error", "Flashcard Assistant could not complete this request. Your draft is preserved."); }
 }
 
@@ -553,6 +635,63 @@ async function planAccept(body: Record<string, unknown>, request: Request, env: 
     proposal.selection, proposal.settings, proposal.envelope, proposal.proposals);
 }
 
+async function testModels(body: Record<string, unknown>, env: AssistantEnv, session: Session, options: Option[], adapter: GeminiAdapter, now: number): Promise<Response> {
+  const requestedRoute = body.route === "personal_gemini" ? "personal_gemini" : "shared_gemini";
+  let targetOption = options.find(o => o.route === requestedRoute);
+  if (!targetOption && options.length > 0) {
+    targetOption = options[0];
+  }
+  if (!targetOption) {
+    return failure(503, "provider_error", "No configured Gemini routes are available.");
+  }
+  const key = await routeKey(env, session.account_id, targetOption);
+  if (!key) {
+    return failure(409, "credential_required", requestedRoute === "personal_gemini" ? "Personal Gemini credential is not configured." : "Shared Gemini route is unavailable.");
+  }
+
+  const modelsToTest = Array.from(new Set([
+    ...GEMINI_CANDIDATE_MODELS,
+    ...options.map(o => o.model).filter(m => !m.includes("test")),
+  ]));
+
+  const results: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[] = [];
+
+  for (const model of modelsToTest) {
+    const start = Date.now();
+    const testPayload = JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: "ping" }] }],
+      generationConfig: generationConfigOf(model, 2),
+    });
+    try {
+      await adapter(testPayload, model, key.key, 8000);
+      const latencyMs = Date.now() - start;
+      results.push({ model, working: true, status: 200, latencyMs });
+    } catch (err) {
+      const latencyMs = Date.now() - start;
+      const failure = err instanceof GeminiFailure ? err : null;
+      let errorDesc = failure?.message || (err instanceof Error ? err.message : "Unavailable");
+      let status: number | string = 502;
+      if (failure?.code === "quota_exhausted") status = 429;
+      else if (failure?.code === "timeout") status = 504;
+      else if (failure?.code === "model_unavailable") status = 404;
+      else if (failure?.code === "credential_invalid") status = 401;
+      else if (errorDesc.toLowerCase().includes("high demand")) status = 503;
+
+      results.push({ model, working: false, status, latencyMs, error: errorDesc });
+    }
+  }
+
+  const working = results.filter(r => r.working);
+  const recommendedModel = working.length > 0 ? working.sort((a, b) => a.latencyMs - b.latencyMs)[0].model : null;
+
+  return json({
+    route: targetOption.route,
+    models: results,
+    recommendedModel,
+    testedAt: now,
+  });
+}
+
 export function assistantRoute(request: Request, env: AssistantEnv, adapter: GeminiAdapter = geminiAdapter, now: () => number = Date.now): Promise<Response> | null {
   const path = new URL(request.url).pathname;
   if (!path.startsWith("/api/assistant/")) return null;
@@ -577,6 +716,7 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
      if (request.method === "GET" && path === "/api/assistant/attachments") return attachmentList(env, session.account_id);
     if (request.method !== "POST") return failure(405, "method_not_allowed", "This Tutor Chat action is unavailable.");
     const body = await bodyOf(request, path === "/api/assistant/send" ? MAX_SEND_BODY_BYTES : 70000); if (!body) return invalid();
+    if (path === "/api/assistant/test-models") return testModels(body, env, session, options, adapter, time);
      if (path === "/api/assistant/preview") return preview(body, env, session, options, time, request.url);
      if (path === "/api/assistant/reasoning-preview") return reasoningPreview(body, env, session, options, time);
      if (path === "/api/assistant/send") return send(body, env, session, options, adapter, time, request.url);

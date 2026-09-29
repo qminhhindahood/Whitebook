@@ -40,6 +40,38 @@ export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => vo
   const [error, setError] = useState("");
   const [selection, setSelection] = useState(() => localStorage.getItem("whitebook_tutor_route") || "");
   const [locale, setLocale] = useState(() => localStorage.getItem("whitebook_tutor_lang") || "en");
+  const [testingModels, setTestingModels] = useState(false);
+  const [modelDiagnostic, setModelDiagnostic] = useState<{
+    models: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
+    recommendedModel: string | null;
+  } | null>(null);
+
+  async function handleTestAllModels() {
+    setTestingModels(true);
+    setNotice("Testing candidate Gemini models for live availability…");
+    setError("");
+    try {
+      const res = await accountFetch("/api/assistant/test-models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
+        body: JSON.stringify({ route: provider?.route || "shared_gemini" }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message ?? "Could not test models.");
+      }
+      const diag = await res.json() as {
+        models: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
+        recommendedModel: string | null;
+      };
+      setModelDiagnostic(diag);
+      setNotice(diag.recommendedModel ? `Live test completed. Active working model: ${diag.recommendedModel}.` : "Test completed. All tested models are currently experiencing high demand.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not test models.");
+    } finally {
+      setTestingModels(false);
+    }
+  }
 
   useEffect(() => {
     let live = true;
@@ -190,6 +222,62 @@ export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => vo
     <p className="account-hint" style={{ marginTop: 14 }}>
       Up to 8 prior messages are included, capped at 16 KB per request. Maximum reply: 1,024 tokens. Account limit: 20 sends and 80,000 reserved tokens per hour; failed sends also use this allowance.
     </p>
+
+    <div style={{ marginTop: 24, paddingTop: 18, borderTop: "1px solid #eef2f8" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h3 style={{ fontSize: 14, margin: "0 0 4px", color: "#343a30" }}>Gemini Model Health &amp; Diagnostics</h3>
+          <p className="account-hint" style={{ margin: 0 }}>
+            Test live connectivity and latency across all supported Gemini models (3.8 Flash, 3.7 Flash, 3 Flash, etc.) to see which are currently active.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={testingModels || busy}
+          onClick={handleTestAllModels}
+          style={{ whiteSpace: "nowrap", padding: "8px 14px", borderRadius: 7 }}
+        >
+          {testingModels ? "Testing models…" : "⚡ Test all models"}
+        </button>
+      </div>
+
+      {modelDiagnostic && (
+        <div style={{ marginTop: 14, padding: 14, background: "#fff", border: "1px solid #e6e5dc", borderRadius: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+            {modelDiagnostic.models.map(m => (
+              <div
+                key={m.model}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 6,
+                  border: m.working ? "1px solid #b8dab2" : "1px solid #f6c4be",
+                  background: m.working ? "#f4f9f2" : "#fdf4f2",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  fontSize: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, color: "#343a30" }}>{m.model}</div>
+                  <div style={{ fontSize: 11, color: m.working ? "#2e5b27" : "#c5221f" }}>
+                    {m.working ? `Working · ${m.latencyMs}ms` : (m.status === 503 ? "High demand (503)" : (m.error || "Unavailable"))}
+                  </div>
+                </div>
+                {m.working && (
+                  <span style={{ fontSize: 14, color: "#2e5b27" }}>✓</span>
+                )}
+              </div>
+            ))}
+          </div>
+          {modelDiagnostic.recommendedModel && (
+            <p style={{ margin: "10px 0 0", fontSize: 12, color: "#4c6243" }}>
+              Recommended active model: <strong>{modelDiagnostic.recommendedModel}</strong>. Automatic fallback cascade is active during study sessions.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
 
     <div style={{ marginTop: 24, paddingTop: 18, borderTop: "1px solid #eef2f8" }}>
       <h3 style={{ fontSize: 14, margin: "0 0 6px", color: "#343a30" }}>

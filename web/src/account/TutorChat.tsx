@@ -4,7 +4,8 @@ import { Icon } from "./StudyWorkspace";
 import "./tutorChat.css";
 
 type Provider = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: string[]; vision: boolean; quota: string; healthy: boolean };
-type Turn = { role: "learner" | "assistant"; text: string; provider?: Provider };
+type FallbackInfo = { originalModel: string; activeModel: string; message?: string };
+type Turn = { role: "learner" | "assistant"; text: string; provider?: Provider; fallback?: FallbackInfo };
 type Preview = { previewId: string; expiresAt: number; payload: string; visuals?: { width: number; height: number; alt: string; mimeType: string }[]; provider: Provider; neverSent: string[]; retention: string };
 type Options = { options: Provider[]; credential: { lastFour: string } | null };
 type ReviewChoice = { reviewId: string; attemptId: string; revisionId: string; questionId: string; section: string; module: number; questionNumber: number; completedAt: number };
@@ -154,6 +155,38 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
   const [reviewId, setReviewId] = useState("");
   const [includeVisuals, setIncludeVisuals] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [testingModels, setTestingModels] = useState(false);
+  const [modelDiagnostic, setModelDiagnostic] = useState<{
+    models: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
+    recommendedModel: string | null;
+  } | null>(null);
+
+  async function handleTestModels() {
+    setTestingModels(true);
+    setNotice("Testing candidate Gemini models for live availability…");
+    try {
+      const res = await accountFetch("/api/assistant/test-models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
+        body: JSON.stringify({ route: provider?.route }),
+      });
+      if (!res.ok) throw new Error("Could not test models.");
+      const data = await res.json() as {
+        models: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
+        recommendedModel: string | null;
+      };
+      setModelDiagnostic(data);
+      if (data.recommendedModel) {
+        setNotice(`Model check complete. Active working model: ${data.recommendedModel}.`);
+      } else {
+        setError("All tested models are currently experiencing high demand. Spikes in demand are temporary.");
+      }
+    } catch {
+      setError("Unable to test models right now. Try retrying your request.");
+    } finally {
+      setTestingModels(false);
+    }
+  }
 
   const generation = useRef(0);
   const pending = useRef(new Set<AbortController>());
@@ -332,7 +365,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
         priorMessages: priorTurns.slice(-8).map(t => ({ role: t.role, text: t.text })),
         ...(reviewId ? { reviewId, includeVisuals } : {}),
       });
-      const reply = await request<{ text: string; provider: Provider }>("send", {
+      const reply = await request<{ text: string; provider: Provider; fallback?: FallbackInfo }>("send", {
         previewId: next.previewId,
         visitId,
         consent: true,
@@ -340,7 +373,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
       if (epoch !== generation.current) return;
       setTurns(current => [
         ...current,
-        { role: "assistant" as const, text: reply.text, provider: reply.provider },
+        { role: "assistant" as const, text: reply.text, provider: reply.provider, fallback: reply.fallback },
       ].slice(-40));
     }, textToSend);
   }
@@ -443,9 +476,95 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
     </header>
 
     {!online && <p className="tutor-status-banner" role="status">You are offline. Reconnect when ready; messages will not send automatically.</p>}
-    {error && <p className="tutor-status-banner tutor-status-banner--error" role="alert">{error}</p>}
+    {error && (
+      <div className="tutor-status-banner tutor-status-banner--error" role="alert">
+        <span>{error}</span>
+        <div className="tutor-banner-actions">
+          <button
+            type="button"
+            className="tutor-banner-action-btn"
+            onClick={() => {
+              setRetryAt(0);
+              setError("");
+              handleSend();
+            }}
+          >
+            Retry now
+          </button>
+          <button
+            type="button"
+            className="tutor-banner-action-btn"
+            disabled={testingModels}
+            onClick={() => void handleTestModels()}
+          >
+            {testingModels ? "Testing models…" : "⚡ Test all models"}
+          </button>
+        </div>
+      </div>
+    )}
     {notice && <p className="tutor-status-banner tutor-status-banner--notice" role="status">{notice}</p>}
-    {retryAt > clock && <p className="tutor-status-banner tutor-status-banner--retry" role="status">Retry available in {Math.ceil((retryAt - clock) / 1000)} seconds, at {new Date(retryAt).toLocaleTimeString()}.</p>}
+    {retryAt > clock && (
+      <div className="tutor-status-banner tutor-status-banner--retry" role="status">
+        <span>Retry available in {Math.ceil((retryAt - clock) / 1000)} seconds, at {new Date(retryAt).toLocaleTimeString()}.</span>
+        <div className="tutor-banner-actions">
+          <button
+            type="button"
+            className="tutor-banner-action-btn"
+            onClick={() => {
+              setRetryAt(0);
+              handleSend();
+            }}
+          >
+            Retry now
+          </button>
+          <button
+            type="button"
+            className="tutor-banner-action-btn"
+            disabled={testingModels}
+            onClick={() => void handleTestModels()}
+          >
+            {testingModels ? "Testing models…" : "⚡ Test all models"}
+          </button>
+        </div>
+      </div>
+    )}
+
+    {modelDiagnostic && (
+      <div className="tutor-model-diagnostic-panel" role="region" aria-label="Model availability results">
+        <div className="tutor-model-diagnostic-header">
+          <strong>Gemini Model Status Check</strong>
+          <button type="button" className="subtle-button tutor-close-diag-btn" onClick={() => setModelDiagnostic(null)} aria-label="Close diagnostics">✕</button>
+        </div>
+        <div className="tutor-model-list">
+          {modelDiagnostic.models.map(m => (
+            <div key={m.model} className={`tutor-model-pill ${m.working ? "tutor-model-pill--ok" : "tutor-model-pill--fail"}`}>
+              <span className="tutor-model-dot">{m.working ? "●" : "✕"}</span>
+              <span className="tutor-model-name">{m.model}</span>
+              <span className="tutor-model-status">
+                {m.working ? `${m.latencyMs}ms` : (m.status === 503 ? "High demand" : (m.error || "Unavailable"))}
+              </span>
+            </div>
+          ))}
+        </div>
+        {modelDiagnostic.recommendedModel && (
+          <div className="tutor-model-diagnostic-footer">
+            <span>Fastest active model: <strong>{modelDiagnostic.recommendedModel}</strong></span>
+            <button
+              type="button"
+              className="tutor-banner-action-btn tutor-banner-action-btn--primary"
+              onClick={() => {
+                setRetryAt(0);
+                setError("");
+                setModelDiagnostic(null);
+                handleSend();
+              }}
+            >
+              Retry now (Auto-fallback)
+            </button>
+          </div>
+        )}
+      </div>
+    )}
 
     {!options ? (
       <div className="tutor-unavailable-action">
@@ -534,6 +653,11 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
                           {formatGeminiContent(turn.text)}
                           <div className="tutor-turn-footer">
                             <small>Not verified against the answer key</small>
+                            {turn.fallback && (
+                              <span className="tutor-fallback-badge" title={turn.fallback.message || `Switched from ${turn.fallback.originalModel}`}>
+                                ✨ Fallback to {turn.fallback.activeModel}
+                              </span>
+                            )}
                             <CopyButton text={turn.text} />
                           </div>
                         </div>
