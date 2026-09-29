@@ -1,9 +1,11 @@
 export class GeminiFailure extends Error {
-  constructor(public code: "provider_error" | "quota_exhausted" | "model_unavailable" | "blocked_content" | "timeout" | "credential_invalid", public retrySeconds = 0) { super(code); }
+  constructor(public code: "provider_error" | "quota_exhausted" | "model_unavailable" | "blocked_content" | "timeout" | "credential_invalid", public retrySeconds = 0, message?: string) {
+    super(message || code);
+  }
 }
 export type GeminiAdapter = (payload: string, model: string, key: string) => Promise<string>;
 
-// The payload is already serialized in the learner's preview. Never augment it here.
+// The payload is already serialized in the learner's request. Never augment it here.
 export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -15,16 +17,28 @@ export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
       body: payload, signal: controller.signal, redirect: "manual",
     });
     if (!response.ok) {
-      // Operational diagnostics must never contain credentials, prompts, or provider bodies.
-      console.error("gemini_provider_failure", { phase: "http", status: response.status, model });
-      await response.body?.cancel();
+      let reason = "";
+      let detailMessage = "";
+      try {
+        const text = await response.text();
+        const errorData = JSON.parse(text);
+        reason = errorData?.error?.details?.[0]?.reason ?? errorData?.error?.status ?? "";
+        detailMessage = errorData?.error?.message ?? "";
+      } catch {
+        // Plain text or unparseable upstream body
+      }
+      console.error("gemini_provider_failure", { phase: "http", status: response.status, model, reason, message: detailMessage });
       if (response.status === 429) {
         const seconds = Number(response.headers.get("Retry-After"));
         throw new GeminiFailure("quota_exhausted", Number.isFinite(seconds) && seconds > 0 ? Math.min(3600, Math.ceil(seconds)) : 60);
       }
-      if (response.status === 401 || response.status === 403) throw new GeminiFailure("credential_invalid");
-      if (response.status === 404) throw new GeminiFailure("model_unavailable");
-      throw new GeminiFailure("provider_error", 30);
+      if (response.status === 401 || response.status === 403 || reason === "API_KEY_INVALID") {
+        throw new GeminiFailure("credential_invalid");
+      }
+      if (response.status === 404) {
+        throw new GeminiFailure("model_unavailable");
+      }
+      throw new GeminiFailure("provider_error", 10, detailMessage);
     }
     // Bound even malformed upstream responses, without logging their body or headers.
     const reader = response.body?.getReader();
@@ -36,7 +50,7 @@ export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
     while (true) {
       const chunk = await reader.read(); if (chunk.done) break;
       length += chunk.value.length;
-      if (length > 65536) { await reader.cancel(); throw new GeminiFailure("provider_error"); }
+      if (length > 262144) { await reader.cancel(); throw new GeminiFailure("provider_error"); }
       chunks.push(chunk.value);
     }
     const all = new Uint8Array(length); let offset = 0;
@@ -55,6 +69,6 @@ export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
     if (controller.signal.aborted) throw new GeminiFailure("timeout", 5);
     if (error instanceof GeminiFailure) throw error;
     console.error("gemini_provider_failure", { phase: "transport_or_parse", kind: error instanceof Error ? error.name : typeof error, model });
-    throw new GeminiFailure("provider_error", 30);
+    throw new GeminiFailure("provider_error", 10);
   } finally { clearTimeout(timeout); }
 };

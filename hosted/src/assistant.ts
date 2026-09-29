@@ -138,7 +138,7 @@ function payloadOf(body: Record<string, unknown>, attachment: Attachment | null)
     { inlineData: { mimeType: visual.mimeType, data: visual.data } },
   ]) ?? [];
   contents.push({ role: "user", parts: [{ text: body.currentMessage + attachmentText }, ...visualParts] });
-  const serialize = () => JSON.stringify({ systemInstruction: { parts: [{ text: `You are a study tutor. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Your responses are unverified learning help, not authoritative grades.` }] }, contents, generationConfig: { maxOutputTokens: MAX_OUTPUT }, store: false });
+  const serialize = () => JSON.stringify({ systemInstruction: { parts: [{ text: `You are a study tutor. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Your responses are unverified learning help, not authoritative grades.` }] }, contents, generationConfig: { maxOutputTokens: MAX_OUTPUT } });
   const maxPayload = attachment?.visuals.length ? MAX_MULTIMODAL_PAYLOAD : MAX_PAYLOAD;
   while (contents.length > 1 && new TextEncoder().encode(serialize()).length > maxPayload) contents.shift();
   const result = serialize();
@@ -239,7 +239,7 @@ async function reasoningPreview(body: Record<string, unknown>, env: AssistantEnv
   const responseText = context.revealed ? context.response ?? "unanswered" : "Withheld until the learner reveals the answer.";
   const visibleQuestionText = providerQuestionText(context.presentation, context.acceptedAnswers, context.revealed);
   const instruction = `You are Guided Reasoning for a reviewed Whitebook question. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Before reveal, provide only answer-neutral reasoning steps and never identify, quote, paraphrase, eliminate choices toward, or narrow to the accepted answer. After reveal, explain the answer but do not claim grading authority.${mathHelp}`;
-  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: "user", parts: [{ text: `${body.stage}: ${body.message}\nQuestion presentation text: ${JSON.stringify(visibleQuestionText)}\nLearner response: ${responseText}${answer}` }] }], generationConfig: { maxOutputTokens: MAX_OUTPUT }, store: false });
+  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: "user", parts: [{ text: `${body.stage}: ${body.message}\nQuestion presentation text: ${JSON.stringify(visibleQuestionText)}\nLearner response: ${responseText}${answer}` }] }], generationConfig: { maxOutputTokens: MAX_OUTPUT } });
   if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return invalid();
   const key = await routeKey(env, session.account_id, provider);
   if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
@@ -306,7 +306,7 @@ async function flashcardPreview(body: Record<string, unknown>, env: AssistantEnv
   const userPrompt = body.mode === "deck_advice"
     ? { mode: body.mode, question: String(body.words).slice(0, 4000), selectedDeck: body.deck, deckSnapshot: selected, context: typeof body.context === "string" ? body.context.slice(0, 2000) : "" }
     : { mode: body.mode, sourceWords: selected, context: typeof body.context === "string" ? body.context.slice(0, 2000) : "", destinationDeck: body.deck };
-  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are Flashcard Assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Propose learner-editable Personal Card content only; never save cards. ${outputFormat}` }] }, contents: [{ role: "user", parts: [{ text: JSON.stringify(userPrompt) }] }], generationConfig: { maxOutputTokens: MAX_OUTPUT }, store: false });
+  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are Flashcard Assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Propose learner-editable Personal Card content only; never save cards. ${outputFormat}` }] }, contents: [{ role: "user", parts: [{ text: JSON.stringify(userPrompt) }] }], generationConfig: { maxOutputTokens: MAX_OUTPUT } });
   if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return invalid();
   const key = await routeKey(env, session.account_id, provider); if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
   if (!await reserve(env, `preview:${session.account_id}`, 0, 60, 1, now)) return rateLimitedResponse("rate_limited", Math.ceil((HOUR - now % HOUR) / 1000), now);
@@ -443,12 +443,21 @@ async function send(body: Record<string, unknown>, env: AssistantEnv, session: S
     if (!text.trim() || text.length > 8000 || text.includes(key.key) || /(?:AIza[0-9A-Za-z_-]{30,}|AQ\.[0-9A-Za-z_-]{20,})/.test(text)) return failure(502, "blocked_content", "Gemini returned content that cannot be displayed.");
     return json({ text, provider, verified: false });
   } catch (error) {
-    const known = error instanceof GeminiFailure ? error : new GeminiFailure("provider_error", 30);
+    const known = error instanceof GeminiFailure ? error : new GeminiFailure("provider_error", 10);
     if (known.code === "quota_exhausted" && provider.route === "shared_gemini") {
       await env.DB.prepare("UPDATE assistant_limits SET requests = 100 WHERE scope = 'shared' AND window_ms = ?").bind(Math.floor(now / HOUR) * HOUR).run();
       return rateLimitedResponse(known.code, retry, now);
     }
-    return Response.json({ error: { code: known.code, message: "Gemini could not complete this request. Your draft is preserved. Preview again before retrying.", ...(known.retrySeconds ? { retryAt: now + known.retrySeconds * 1000 } : {}) } }, { status: known.code === "timeout" ? 504 : known.code === "quota_exhausted" ? 429 : 502, headers: { ...noStore, ...(known.retrySeconds ? { "Retry-After": String(known.retrySeconds) } : {}) } });
+    const message = known.code === "credential_invalid"
+      ? "Gemini API key is invalid or unauthorized. Please check AI Settings in your Account."
+      : known.code === "model_unavailable"
+      ? `The Gemini model (${provider.model}) is currently unavailable.`
+      : known.code === "blocked_content"
+      ? "Gemini returned content that cannot be displayed."
+      : known.code === "timeout"
+      ? "Gemini request timed out. Your draft is preserved."
+      : (known.message && known.message !== "provider_error" ? known.message : "Gemini could not complete this request. Your draft is preserved. Try sending again.");
+    return Response.json({ error: { code: known.code, message, ...(known.retrySeconds ? { retryAt: now + known.retrySeconds * 1000 } : {}) } }, { status: known.code === "timeout" ? 504 : known.code === "quota_exhausted" ? 429 : 502, headers: { ...noStore, ...(known.retrySeconds ? { "Retry-After": String(known.retrySeconds) } : {}) } });
   }
 }
 
@@ -466,7 +475,7 @@ async function planPreview(body: Record<string, unknown>, request: Request, env:
     .bind(session.account_id).first<{ id: string }>();
   if ((latest?.id ?? null) !== body.expectedVersionId) return failure(409, "plan_changed", "Reload the latest Study Plan before previewing suggestions.");
   const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are a Study Plan assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Return exactly one JSON array of 1 to 20 proposed tasks, with no markdown or extra prose. Each task must contain date, kind, title, minutes, action, and explanation. Use kind "cards" only when dueCardTotal is positive, with action {"area":"cards"}; or kind "practice" with action {"area":"practice","revisionId":"an activityCatalog revisionId","section":"its section"}. Select only real activityCatalog pairs. Do not propose review tasks because individual review links are not shared. The server's current study date is ${assembled.envelope.today}; schedule only on study days from that date (inclusive) through the day before ${assembled.envelope.primarySatTarget}. Stay within dailyMinutes. Never predict SAT point gains, invent packages or questions, or equate Whitebook Raw Accuracy with SAT points. Do not save the plan.` }] },
-    contents: [{ role: "user", parts: [{ text: JSON.stringify(assembled.envelope) }] }], generationConfig: { maxOutputTokens: PLAN_OUTPUT }, store: false });
+    contents: [{ role: "user", parts: [{ text: JSON.stringify(assembled.envelope) }] }], generationConfig: { maxOutputTokens: PLAN_OUTPUT } });
   if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return failure(413, "too_large", "The selected evidence is too large to preview.");
   const key = await routeKey(env, session.account_id, provider);
   if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
