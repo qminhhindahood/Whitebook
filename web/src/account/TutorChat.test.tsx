@@ -32,7 +32,7 @@ it("has no Tutor Chat control or assistant request in the current release", asyn
 });
 
 it("previews exact text for each consent, preserves the visit across navigation, and clears on sign-out", async () => {
-  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }, {}, { timeout: 5000 }));
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }, { timeout: 5000 }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Explain slope" } });
   fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
   expect(await screen.findByRole("heading", { name: "Included in this send" })).toBeTruthy();
