@@ -13,6 +13,7 @@ import "./assistant-experience.css";
 import studyIllustration from "./design-assets/study-illustration.webp";
 import { ProgressArea } from "./ProgressArea";
 import { PlanArea } from "./PlanArea";
+import { AssistantSettings } from "./AssistantSettings";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; timeZone: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
@@ -233,7 +234,7 @@ export function AccountApp() {
           view === "history" ? <HistoryArea initialTarget={historyTarget} onResume={resumeAttempt} onSessionEnded={handleSessionEnded} /> :
           view === "progress" ? <ProgressArea onSessionEnded={handleSessionEnded} /> :
           view === "plan" ? <PlanArea onSessionEnded={handleSessionEnded} onGoDates={() => setDatesOpen(true)} onAction={followAction} /> :
-            <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
+            <><section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
               <h2 id="account-heading">Account</h2>
               <p>Signed in as {me.account.email}</p>
               <form onSubmit={saveNickname}>
@@ -252,7 +253,9 @@ export function AccountApp() {
                 <p className="account-hint">This permanently removes your study data and signs out every device. Download a copy first if you want to keep it. Type DELETE MY ACCOUNT to confirm.</p>
                 <div className="account-row"><input id="delete-confirmation" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /><button type="submit" disabled={busy || deleteConfirmation !== "DELETE MY ACCOUNT"}>Permanently delete account</button></div>
               </form>
-            </section>}
+            </section>
+            {tutorEnabled && <AssistantSettings onSessionEnded={handleSessionEnded} />}
+          </>}
         <footer className="workspace-footer">Made for your pace. Built for your possibilities.<span>Whitebook</span></footer>
       </main>{view === "dashboard" && <CalendarRail data={workspace.data} timeZone={me.account.timeZone} onDates={() => setDatesOpen(true)} onPlan={() => navigate("plan")} onAction={followAction} />}</div></div>
       {datesOpen && <DatesDialog timeZone={me.account.timeZone} onSessionEnded={handleSessionEnded} onClose={() => { setDatesOpen(false); setRefreshKey(value => value + 1); }} />}

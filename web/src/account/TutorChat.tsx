@@ -133,7 +133,11 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
       void accountFetch("/api/assistant/attachments").then(async res => {
         if (res.ok) setReviews(((await res.json()) as { reviews: ReviewChoice[] }).reviews);
       }).catch(() => { /* Attachment picker remains empty when unavailable. */ });
-      setSelection(current => data.options.some(p => selectionId(p) === current) ? current : data.options[0] ? selectionId(data.options[0]) : "");
+      const savedRoute = localStorage.getItem("whitebook_tutor_route");
+      setSelection(current => {
+        if (savedRoute && data.options.some(p => selectionId(p) === savedRoute)) return savedRoute;
+        return data.options.some(p => selectionId(p) === current) ? current : data.options[0] ? selectionId(data.options[0]) : "";
+      });
     }).catch(() => {
       if (live && !controller.signal.aborted) {
         setOptions(null);
@@ -233,39 +237,42 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
       </div>
     ) : (
       <>
-        <details className="tutor-settings-collapsible">
-          <summary>Tutor settings &amp; question attachment</summary>
-          <div className="tutor-controls">
-            <label>Gemini route and model<select disabled={busy} value={selection} onChange={e => { setSelection(e.target.value); invalidate(); }}>
-              {options.options.map(p => <option key={selectionId(p)} value={selectionId(p)}>{p.route === "shared_gemini" ? "Shared Gemini" : "Personal Gemini"} · {p.model}</option>)}
-            </select></label>
-            <label>Response language<select disabled={busy} value={locale} onChange={e => { setLocale(e.target.value); invalidate(); }}>
-              <option value="en" disabled={!provider?.languages.includes("en")}>English</option>
-              <option value="vi" disabled={!provider?.languages.includes("vi")}>Vietnamese</option>
-            </select></label>
-            <label>Attach reviewed question (optional)<select disabled={busy} value={reviewId} onChange={e => { setReviewId(e.target.value); invalidate(); }}><option value="">No question attached</option>{reviews.map(review => <option key={review.reviewId} value={review.reviewId}>{review.section} · Q{review.questionNumber} · {new Date(review.completedAt).toLocaleDateString()}</option>)}</select></label>
+        <div className="tutor-chat-bar">
+          <div className="tutor-chat-bar__left">
+            <label className="tutor-compact-label">
+              <span>Response language</span>
+              <select disabled={busy} value={locale} onChange={e => { setLocale(e.target.value); invalidate(); }}>
+                <option value="en" disabled={!provider?.languages.includes("en")}>English</option>
+                <option value="vi" disabled={!provider?.languages.includes("vi")}>Vietnamese</option>
+              </select>
+            </label>
+            {reviews.length > 0 && (
+              <label className="tutor-compact-label">
+                <span>Attach reviewed question (optional)</span>
+                <select disabled={busy} value={reviewId} onChange={e => { setReviewId(e.target.value); invalidate(); }}>
+                  <option value="">No question attached</option>
+                  {reviews.map(review => (
+                    <option key={review.reviewId} value={review.reviewId}>
+                      {review.section} · Q{review.questionNumber} · {new Date(review.completedAt).toLocaleDateString()}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {reviewId && (
+              <label className="tutor-visuals-label">
+                <input type="checkbox" checked={includeVisuals} disabled={busy || !provider?.vision} onChange={e => { setIncludeVisuals(e.target.checked); invalidate(); }} />
+                <span>Share selected question visuals with Gemini</span>
+              </label>
+            )}
           </div>
-          {reviewId && <label className="tutor-visuals-label"><input type="checkbox" checked={includeVisuals} disabled={busy || !provider?.vision} onChange={e => { setIncludeVisuals(e.target.checked); invalidate(); }} /> Share selected question visuals with Gemini</label>}
-          {provider && <ProviderDetails provider={provider} />}
-          <p className="account-hint">Up to 8 prior messages are included, capped at 16 KB per request. Maximum reply: 1,024 tokens. Account limit: 20 sends and 80,000 reserved tokens per hour; failed sends also use this allowance.</p>
-          <details className="tutor-key"><summary>Personal Gemini credential{options.credential ? ` · ending ${options.credential.lastFour}` : ""}</summary>
-            <p>Your key is encrypted on the server. It is never included in the chat text or shown again after saving.</p>
-            <form onSubmit={e => { e.preventDefault(); invalidate(); void action(async epoch => {
-              try {
-                const saved = await request<{ lastFour: string }>("credential", { key });
-                if (epoch !== generation.current) return;
-                setOptions(current => current ? { ...current, credential: saved } : null); setNotice("Gemini credential saved.");
-              } finally { if (epoch === generation.current) setKey(""); }
-            }); }}>
-              <label>Gemini API key<input type="password" autoComplete="off" maxLength={256} value={key} disabled={busy} onChange={e => setKey(e.target.value)} /></label>
-              <button disabled={unavailable || !key}>Save credential</button>
-              {options.credential && <button type="button" disabled={unavailable} onClick={() => { invalidate(); void action(async epoch => {
-                await request("credential/remove", {}); if (epoch !== generation.current) return;
-                setOptions(current => current ? { ...current, credential: null } : null); setNotice("Gemini credential removed.");
-              }); }}>Remove credential</button>}
-            </form>
-          </details>
-        </details>
+          <div className="tutor-chat-bar__right">
+            <a href="#settings" className="tutor-settings-link" title="Open AI Tutor &amp; Gemini Settings in Account">
+              <Icon name="settings" />
+              <span>AI Settings</span>
+            </a>
+          </div>
+        </div>
 
         <div className="tutor-thread-container">
           <ol className="tutor-transcript" aria-label="Visit conversation" aria-live="polite" aria-relevant="additions">
