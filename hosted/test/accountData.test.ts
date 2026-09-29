@@ -50,6 +50,7 @@ it("exports all account data without other learners or secrets, then deletes onl
     INSERT INTO study_plan_versions (id, account_id, version, primary_date, settings_json, source_json, created_at_ms) VALUES ('version-${owner}', '${owner}', 1, '2026-10-03', '{"studyDays":[1],"dailyMinutes":30}', '{}', 1);
     INSERT INTO study_plan_tasks (id, account_id, version_id, scheduled_date, kind, title, estimated_minutes, action_json, evidence_count, tentative, explanation, status, updated_at_ms) VALUES ('task-${owner}', '${owner}', 'version-${owner}', '2026-09-28', 'practice', 'Practice', 10, '{}', 0, 0, '', 'done', 1);
     INSERT INTO study_plan_task_events (id, account_id, version_id, task_id, event_json, created_at_ms) VALUES ('event-${owner}', '${owner}', 'version-${owner}', 'task-${owner}', '{}', 1);
+    INSERT INTO reminder_dismissals (account_id, reminder_key, dismissed_at_ms) VALUES ('${owner}', 'personal_gemini_key', 1);
   `);
   const env = { DB: db, APP_ORIGIN: origin } as never;
   const exported = await accountDataRoute(req("a", "/api/account/export"), env)!;
@@ -61,7 +62,7 @@ it("exports all account data without other learners or secrets, then deletes onl
   for (const forbidden of ["sub-b", "response-b", "note-b", "editor-secret-a", "hidden-answer", "token_hash", "csrf_hash"]) expect(payload).not.toContain(forbidden);
   const parsed = JSON.parse(payload) as { schemaVersion: number; data: Record<string, unknown[]> };
   expect(parsed.schemaVersion).toBe(1);
-  for (const name of ["attempts", "guidedReviews", "studyNotes", "personalCards", "cardRatings", "starterCardRatings", "officialSatResults", "satDates", "planVersions", "planTasks", "planTaskEvents", "privateRevisionEntitlements"])
+  for (const name of ["attempts", "guidedReviews", "studyNotes", "personalCards", "cardRatings", "starterCardRatings", "officialSatResults", "satDates", "planVersions", "planTasks", "planTaskEvents", "reminderDismissals", "privateRevisionEntitlements"])
     expect(parsed.data[name], name).toHaveLength(1);
   expect((await accountDataRoute(req("a", "/api/account/delete", "POST", { confirmation: "wrong" }), env)!).status).toBe(400);
   expect((await accountDataRoute(req("a", "/api/account/delete", "POST", { confirmation: "DELETE MY ACCOUNT" }, "1", false), env)!).status).toBe(403);
@@ -71,7 +72,7 @@ it("exports all account data without other learners or secrets, then deletes onl
   expect(deleted.headers.getSetCookie().join(" ")).toContain("Max-Age=0");
   expect((await accountDataRoute(req("a", "/api/account/export", "GET", undefined, "2"), env)!).status).toBe(401);
   expect((await accountDataRoute(req("b", "/api/account/export"), env)!).status).toBe(200);
-  for (const table of ["learner_sessions", "private_revision_entitlements", "learner_sat_dates", "official_sat_results", "personal_cards", "card_rating_events", "starter_card_rating_events", "learner_attempts", "guided_reviews", "study_notes", "study_plan_versions", "study_plan_tasks", "study_plan_task_events"]) {
+  for (const table of ["learner_sessions", "private_revision_entitlements", "learner_sat_dates", "reminder_dismissals", "official_sat_results", "personal_cards", "card_rating_events", "starter_card_rating_events", "learner_attempts", "guided_reviews", "study_notes", "study_plan_versions", "study_plan_tasks", "study_plan_task_events"]) {
     expect((await db.prepare(`SELECT account_id FROM ${table} WHERE account_id = 'a'`).all()).results, table).toHaveLength(0);
     expect((await db.prepare(`SELECT account_id FROM ${table} WHERE account_id = 'b'`).all()).results, table).toHaveLength(table === "learner_sessions" ? 2 : 1);
   }

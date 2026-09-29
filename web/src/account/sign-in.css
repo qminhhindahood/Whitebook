@@ -1,0 +1,25 @@
+.whitebook-workspace .wb-signin { display: flex; flex-direction: column; min-height: 100dvh; max-width: none; width: 100%; padding: 0; background: #faf9f5; color: #343a30; }
+.wb-signin__top,.wb-signin__bottom { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 23px clamp(24px,5vw,78px); }
+.wb-signin__top { border-bottom: 1px solid #e6e5dc; }
+.wb-signin__top>.brand { font: 27px Lora,serif; }
+.wb-signin__top>span,.wb-signin__bottom { color: #737b69; font-size: 11px; }
+.wb-signin__content { width: min(100%,1320px); margin: auto; padding: clamp(34px,5vw,80px) clamp(24px,5vw,78px); display: grid; grid-template-columns: minmax(0,1fr) minmax(300px,.88fr); align-items: center; gap: clamp(35px,6vw,110px); }
+.wb-signin__eyebrow { display: block; margin-bottom: 16px; color: #718566; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; }
+.whitebook-workspace .wb-signin h1 { font: clamp(38px,4.2vw,65px)/1.17 Lora,serif; letter-spacing: -.045em; }
+.wb-signin h1 em { color: #708763; font-weight: 400; }
+.wb-signin__copy>p { max-width: 53ch; margin: 19px 0 28px; color: #646b59; font-size: 14px; line-height: 1.8; }
+.wb-signin__card { width: min(100%,455px); border: 1px solid #e6e5dc; border-radius: 14px; background: #fffefa; padding: clamp(22px,3vw,32px); box-shadow: 0 16px 40px #3f53300b; }
+.wb-signin__card h2 { font: 23px Lora,serif; margin: 0 0 8px; }
+.wb-signin__card p { color: #646b59; font-size: 12px; line-height: 1.7; }
+.wb-signin__google { display: flex; align-items: center; justify-content: center; gap: 13px; width: 100%; min-height: 49px; margin: 23px 0 13px; border: 1px solid #4c6243; border-radius: 8px; background: #4c6243; color: #fffaf0; font-size: 13px; font-weight: 700; }
+.wb-signin__google:hover { background: #374e30; }
+.wb-signin__google svg { width: 19px; height: 19px; padding: 2px; border-radius: 50%; background: #fff; stroke: none; }
+.wb-signin__card small { display: block; color: #8b8e81; text-align: center; font-size: 10px; }
+.wb-signin__art { position: relative; display: flex; flex-direction: column; justify-content: space-between; min-height: min(70vh,660px); overflow: hidden; border-radius: 19px; background: #9eb084; padding: 27px; }
+.wb-signin__art::after { content: ''; position: absolute; inset: 0; background: url('./design-assets/paper.png'); opacity: .17; mix-blend-mode: multiply; pointer-events: none; }
+.wb-signin__art img { display: block; width: 100%; height: 68%; object-fit: contain; mix-blend-mode: multiply; }
+.wb-signin__art-label,.wb-signin__art-footer { position: relative; z-index: 1; color: #fff9e9; font: italic 23px Lora,serif; }
+.wb-signin__art-footer { align-self: end; font-size: 15px; }
+.wb-signin__bottom { border-top: 1px solid #e6e5dc; }
+@media(max-width:800px) { .wb-signin__content { grid-template-columns: 1fr; } .wb-signin__art { min-height: 300px; } .wb-signin__art img { position: absolute; right: 0; top: 0; width: 48%; height: 100%; } }
+@media(max-width:500px) { .wb-signin__top,.wb-signin__bottom { padding: 17px 22px; } .wb-signin__top>span { display: none; } .wb-signin__content { padding: 36px 22px; } .wb-signin__art { min-height: 235px; } .wb-signin__art-label { max-width: 55%; } .wb-signin__art-footer { max-width: 52%; text-align: right; } }

@@ -1,0 +1,23 @@
+.wb-reminders { margin: 0 0 28px; padding: 22px 26px; border: 1px solid #cbd0bf; border-radius: 11px; background: #f3f5ed; }
+.wb-reminders__heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; }
+.whitebook-workspace .wb-reminders h2 { margin: 0; font: 400 22px/1.3 Lora, Georgia, serif; }
+.wb-reminders__heading span { color: #526647; font: 600 12px/1.4 Merriweather, Georgia, serif; }
+.wb-reminders>p { margin: 9px 0 0; color: #4b5945; }
+.wb-reminders__list { list-style: none; display: grid; gap: 12px; padding: 0; margin: 18px 0 0; }
+.wb-reminders__item { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding: 15px 17px; border-radius: 9px; background: #fffefa; }
+.wb-reminders__item strong { display: block; color: #303b2b; font-size: 14px; }
+.wb-reminders__item p { margin: 5px 0 0; max-width: 65ch; color: #53614d; font-size: 12px; }
+.wb-reminders__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.wb-reminders__actions button,.wb-reminder-dialog__footer button { min-height: 40px; padding: 9px 14px; border: 1px solid #4c6243; border-radius: 6px; background: #4c6243; color: #fff9e9; font: 600 12px/1.4 Merriweather, Georgia, serif; cursor: pointer; }
+.wb-reminders__actions .wb-reminders__dismiss { background: transparent; color: #415239; border-color: #9ea996; }
+.wb-reminders__actions button:hover,.wb-reminder-dialog__footer button:hover { filter: brightness(.92); }
+.wb-reminders__actions button:disabled { cursor: wait; opacity: .55; }
+.wb-reminder-dialog { width: min(720px,calc(100% - 32px)); max-height: min(82vh,800px); overflow: auto; padding: 26px; border: 1px solid #cbd0bf; border-radius: 14px; background: #faf9f5; color: #343a30; box-shadow: 0 22px 60px rgb(25 36 21 / 22%); }
+.wb-reminder-dialog::backdrop { background: rgb(20 28 17 / 48%); }
+.wb-reminder-dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.wb-reminder-dialog__header h2 { margin: 0; font: 400 clamp(24px,3vw,30px)/1.25 Lora, Georgia, serif; }
+.wb-reminder-dialog__header p { margin: 9px 0 0; color: #53614d; font: 12px/1.6 Merriweather, Georgia, serif; }
+.wb-reminder-dialog__close { min-height: 40px; padding: 8px 12px; border: 1px solid #9ea996; border-radius: 6px; background: #fffefa; color: #415239; font: 600 12px Merriweather, Georgia, serif; cursor: pointer; }
+.wb-reminder-dialog__footer { display: flex; justify-content: flex-end; margin-top: 22px; }
+.wb-reminder-dialog :focus-visible,.wb-reminders :focus-visible { outline: 2px solid #526b45; outline-offset: 3px; }
+@media (max-width:600px) { .wb-reminders,.wb-reminder-dialog { padding: 18px; } .wb-reminders__item { align-items: stretch; } .wb-reminders__actions { width: 100%; } .wb-reminders__actions button { flex: 1; } }

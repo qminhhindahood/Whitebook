@@ -1,5 +1,6 @@
 import { accountRoute, type AccountEnv } from "./accounts";
 import { accountDataRoute } from "./accountData";
+import { remindersRoute } from "./reminders";
 import { satDateRoute } from "./satDates";
 import { cardRoute } from "./cards";
 import { scoresRoute } from "./scores";
@@ -173,6 +174,8 @@ export default {
       if (satResponse) return await satResponse;
       const accountDataResponse = accountDataRoute(request, env);
       if (accountDataResponse) return await accountDataResponse;
+      const remindersResponse = remindersRoute(request, env);
+      if (remindersResponse) return await remindersResponse;
       const accountResponse = accountRoute(request, env);
       if (accountResponse) return await accountResponse;
       const studyResponse = studyRoute(request, env);
@@ -194,7 +197,7 @@ export default {
       const contentMatch = request.method === "GET" && CONTENT_PATH.exec(path);
       if (contentMatch) return measured(await content(request, env, meter, contentMatch[1], contentMatch[2], contentMatch[3]), meter);
     } catch {
-      if (path.startsWith("/api/assistant/") || path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/cards/") || path.startsWith("/api/library") || path.startsWith("/api/attempts") || path.startsWith("/api/review/") || path.startsWith("/api/math/") || path.startsWith("/content/"))
+      if (path.startsWith("/api/assistant/") || path.startsWith("/api/account/") || path.startsWith("/api/auth/") || path.startsWith("/api/reminders") || path.startsWith("/api/cards/") || path.startsWith("/api/library") || path.startsWith("/api/attempts") || path.startsWith("/api/review/") || path.startsWith("/api/math/") || path.startsWith("/content/"))
         return Response.json({ error: { code: "service_unavailable", message: "Whitebook could not reach your account. Try again." } },
           { status: 503, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
       return closed(503);

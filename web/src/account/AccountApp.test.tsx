@@ -12,7 +12,7 @@ it("shows Google sign-in when the private API says the browser is signed out", a
   render(<AccountApp />);
   const link = await screen.findByRole("link", { name: "Continue with Google" });
   expect(link.getAttribute("href")).toBe("/api/auth/google/start");
-  expect(screen.queryByText(/Welcome/)).toBeNull();
+  expect(screen.queryByText(/Welcome back/)).toBeNull();
 });
 
 it("requires the deletion phrase and sends the account mutation with CSRF", async () => {
@@ -161,7 +161,7 @@ it("opens the Flashcards area from the dashboard navigation and reaches the stud
   render(<AccountApp />);
   fireEvent.click(await screen.findByRole("button", { name: "Flashcards" }));
   expect(await screen.findByRole("heading", { name: "Study" })).toBeTruthy();
-  expect(screen.getByText("Nothing is due today. Come back tomorrow — new words and reviews will appear here.")).toBeTruthy();
+  expect(screen.getByText("Nothing is due today. Your next review will appear here.")).toBeTruthy();
 
   fireEvent.click(screen.getByRole("tab", { name: "My cards" }));
   expect(await screen.findByRole("heading", { name: "Flashcards", level: 1 })).toBeTruthy();

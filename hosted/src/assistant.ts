@@ -544,7 +544,8 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
       const body = await bodyOf(request); if (!body) return invalid();
       return planAccept(body, request, env, session, time);
     }
-    const options = catalog(env, time);
+    // A shared route is not usable until the operator supplies its credential.
+    const options = catalog(env, time).filter(option => option.route !== "shared_gemini" || !!env.GEMINI_SHARED_KEY);
     if (!options.length) return failure(503, "eligibility_required", "Tutor Chat is awaiting a current provider eligibility and failure review.");
      if (request.method === "GET" && path === "/api/assistant/options") {
       const saved = await credential(env, session.account_id);

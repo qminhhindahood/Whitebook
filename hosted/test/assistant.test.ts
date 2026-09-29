@@ -48,6 +48,15 @@ async function fixture() {
 }
 
 const visualBytes = new TextEncoder().encode("synthetic reviewed image bytes");
+
+it("offers Personal Gemini without advertising an unconfigured shared key", async () => {
+  const f = await fixture();
+  f.env.GEMINI_SHARED_KEY = undefined;
+  const response = await f.call("options");
+  expect(response.status).toBe(200);
+  const data = await response.json() as { options: { route: string }[] };
+  expect(data.options.map(option => option.route)).toEqual(["personal_gemini"]);
+});
 const visualHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", visualBytes)), byte => byte.toString(16).padStart(2, "0")).join("");
 
 async function seedRevealedAttachment(f: Awaited<ReturnType<typeof fixture>>, revealed = true) {

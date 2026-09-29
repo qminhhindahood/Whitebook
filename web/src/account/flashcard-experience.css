@@ -1,0 +1,70 @@
+.whitebook-workspace .wb-flash-home { border: 0; background: transparent; padding: 0; font-family: Merriweather, Georgia, serif; }
+.wb-flash-home__intro { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
+.wb-flash-eyebrow { display: block; margin-bottom: 6px; color: #738265; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+.whitebook-workspace .wb-flash-home h2 { font: 31px Lora, Georgia, serif; margin: 0 0 6px; color: #343a30; }
+.wb-flash-home__intro p { color: #646b59; font-size: 13px; }
+.wb-flash-home__new { border: 1px solid #cbd0bf; border-radius: 8px; background: #fffefa; padding: 11px 16px; white-space: nowrap; }
+.wb-flash-due { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 23px 27px; border: 1px solid #d8dfd1; border-radius: 15px; background: #eef0e7; }
+.wb-flash-due strong { display: block; font: 21px Lora, Georgia, serif; }
+.wb-flash-due p { margin: 6px 0; color: #415239; font-size: 13px; }
+.wb-flash-due small { color: #6c755f; font-size: 11px; }
+.whitebook-workspace .wb-flash-due .study-start { background: #4c6243; border-radius: 8px; flex-shrink: 0; }
+.wb-flash-search { margin: 26px 0 22px; max-width: 410px; }
+.wb-flash-search label { display: block; margin-bottom: 7px; font-size: 11px; color: #646b59; }
+.wb-flash-search input { width: 100%; border: 1px solid #d9ddcf; border-radius: 9px; background: #fffefa; padding: 12px 15px; color: #343a30; }
+.wb-flash-home__section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 13px; }
+.wb-flash-home__section-head h3 { font: 21px Lora, Georgia, serif; }
+.wb-flash-home__section-head span { color: #76796b; font-size: 11px; }
+.wb-flash-decks { display: grid; grid-template-columns: repeat(auto-fill,minmax(230px,1fr)); gap: 15px; }
+.wb-flash-deck { position: relative; overflow: hidden; min-height: 160px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #ece9e3; border-radius: 12px; padding: 17px 18px; background: #f3e8e7; }
+.wb-flash-deck::after { content: ''; position: absolute; right: -22px; bottom: -32px; width: 104px; height: 104px; border: 18px solid #ffffff77; border-radius: 34px; transform: rotate(32deg); pointer-events: none; }
+.wb-flash-deck--1 { background: #e9f0e5; } .wb-flash-deck--2 { background: #e9eef3; } .wb-flash-deck--3 { background: #f2ecdf; }
+.wb-flash-deck__kind { display: block; color: #646b59; font-size: 10px; letter-spacing: .09em; text-transform: uppercase; }
+.wb-flash-deck h4 { margin: 7px 0 12px; font: 18px/1.25 Lora, Georgia, serif; overflow-wrap: anywhere; }
+.wb-flash-deck__bottom { position: relative; z-index: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; font-size: 11px; }
+.wb-flash-deck__bottom>span { background: #fffefaaf; border-radius: 5px; padding: 4px 6px; }
+.wb-flash-deck__bottom button { margin-left: auto; color: #374e30; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.wb-flash-home>.study-decks-note { margin-top: 22px; font-size: 11px; color: #646b59; }
+
+.whitebook-workspace .wb-flash-session { position: fixed; z-index: 1000; inset: 0; display: flex; flex-direction: column; min-height: 0; width: 100%; border: 0; border-radius: 0; padding: 0; background: #f5f7f8; color: #202233; font: 14px/1.5 Arial, sans-serif; }
+.wb-flash-session__header { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 72px; padding: 12px clamp(18px,3vw,46px); background: #fff; border-bottom: 1px solid #e6e8ed; }
+.wb-flash-session__title { display: flex; align-items: baseline; gap: 18px; min-width: 0; }
+.wb-flash-session__title>span:first-child { font-weight: 700; white-space: nowrap; }
+.wb-flash-session__title>span:nth-child(2) { color: #9ba3b2; }
+.whitebook-workspace .wb-flash-session__title h2 { margin: 0; color: #69758a; font: 14px Arial, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-flash-session__header button { border: 1px solid #dce3ee; border-radius: 9px; background: #fff; padding: 9px 14px; font-weight: 650; white-space: nowrap; }
+.wb-flash-session__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 22px 18px 26px; }
+.wb-flash-session__stage { width: min(100%,800px); display: flex; flex-direction: column; align-items: center; flex: 1; }
+.wb-flash-session__position { align-self: start; border: 1px solid #e1e6ee; border-radius: 99px; background: #fff; color: #54647b; font-size: 12px; font-weight: 700; padding: 8px 13px; margin-bottom: 15px; }
+.whitebook-workspace .wb-flash-study-card { width: 100%; min-height: min(58vh,650px); flex: 1; display: flex; flex-direction: column; padding: clamp(26px,4vw,54px); border: 1px solid #eceef3; border-radius: 28px; background: #fff; box-shadow: 0 22px 35px #222b4310; }
+.wb-flash-study-card .study-card-head { min-height: 28px; }
+.wb-flash-study-card__front { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; gap: 23px; text-align: center; overflow-wrap: anywhere; }
+.wb-flash-study-card__front span { font: 700 clamp(36px,5vw,68px)/1.14 Arial,sans-serif; letter-spacing: -.055em; }
+.wb-flash-study-card__front small { color: #969aab; font-size: 14px; font-weight: 600; }
+.whitebook-workspace .wb-flash-study-card--back .study-front { font: 700 clamp(30px,4vw,54px)/1.18 Arial,sans-serif; letter-spacing: -.045em; margin: 0 0 25px; }
+.wb-flash-study-card--back .study-front small { color: #9498a8; font-size: 16px; font-style: italic; letter-spacing: 0; }
+.wb-flash-answer { display: grid; gap: 13px; overflow-wrap: anywhere; }
+.wb-flash-answer__pronunciation { color: #616b7f; font-size: 19px; }
+.wb-flash-answer__meaning { font-size: 23px; font-weight: 700; }
+.wb-flash-answer__definition { font-size: 18px; color: #4f5667; }
+.wb-flash-answer__synonyms { margin-top: 16px; }
+.wb-flash-answer__synonyms strong,.wb-flash-answer__example strong { display: block; margin-bottom: 10px; color: #878fa1; font-size: 11px; text-transform: uppercase; letter-spacing: .09em; }
+.wb-flash-answer__synonyms>div { display: flex; flex-wrap: wrap; gap: 8px; }
+.wb-flash-answer__synonyms span { border-radius: 40px; background: #eef0f5; padding: 7px 13px; }
+.wb-flash-answer__example { margin-top: 14px; border-radius: 13px; background: #eeeeff; padding: 17px 20px; }
+.wb-flash-answer__example p { margin: 4px 0; font-size: 16px; }
+.wb-flash-answer__extra { color: #69758a; }
+.wb-flash-session .study-controls { width: 100%; justify-content: center; margin: 17px 0 12px; }
+.whitebook-workspace .wb-flash-session .study-reveal { background: #5858da; border-radius: 10px; }
+.whitebook-workspace .wb-flash-session .study-rate { flex: 1 1 190px; max-width: 380px; border: 1px solid #e4e7ed; border-radius: 14px; background: #fff; color: #a97616; font-size: 18px; box-shadow: 0 4px 11px #222b430a; }
+.whitebook-workspace .wb-flash-session .study-rate--sure { color: #2a8055; }
+.wb-flash-session .study-rate small { display: block; color: #969bab; font-size: 12px; font-weight: 400; }
+.wb-flash-progress { width: 100%; height: 6px; border-radius: 5px; background: #e0e5ee; overflow: hidden; margin-top: auto; }
+.wb-flash-progress>div { height: 100%; border-radius: inherit; background: #655deb; }
+.wb-flash-session__footer { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 20px; min-height: 70px; padding: 12px clamp(18px,3vw,46px); border-top: 1px solid #e6e8ed; background: #fff; }
+.wb-flash-session__reviewed { color: #566176; font-size: 12px; }
+.wb-flash-session .study-nav { display: flex; margin: 0; gap: 10px; }
+.whitebook-workspace .wb-flash-session .study-nav button { border-color: #e2e7f0; color: #323858; }
+.whitebook-workspace .wb-flash-session .study-nav button:last-child { background: #5858da; color: #fff; border-color: #5858da; }
+.wb-flash-session .study-position { color: #69758a; font-size: 12px; }
+@media(max-width:650px) { .wb-flash-home__intro,.wb-flash-due { align-items: stretch; flex-direction: column; } .wb-flash-decks { grid-template-columns: 1fr; } .wb-flash-session__title { gap: 7px; } .wb-flash-session__title>span:nth-child(2) { display: none; } .wb-flash-session__header { min-height: 60px; } .whitebook-workspace .wb-flash-study-card { min-height: 47vh; padding: 24px; } .wb-flash-answer__meaning { font-size: 18px; } .wb-flash-session__footer { flex-direction: column; align-items: stretch; gap: 4px; } .wb-flash-session .study-nav { justify-content: space-between; } .wb-flash-session .study-position { display: none; } }

@@ -2,11 +2,15 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { areas, Icon, CalendarRail, StudyDashboard, DatesDialog, useWorkspaceData, type Area, type StudyAction } from "./StudyWorkspace";
 import { accountFetch, csrfToken } from "./accountClient";
 import { FlashcardsArea } from "./FlashcardStudy";
+import { Reminders } from "./Reminders";
 import { deviceZone } from "./satCountdown";
 import { CuratedLibrary } from "./CuratedLibrary";
 import { PracticeArea } from "./PracticeArea";
 import { HistoryArea } from "./HistoryArea";
 import "./cards.css";
+import "./sign-in.css";
+import "./assistant-experience.css";
+import studyIllustration from "./design-assets/study-illustration.webp";
 import { ProgressArea } from "./ProgressArea";
 import { PlanArea } from "./PlanArea";
 
@@ -221,7 +225,7 @@ export function AccountApp() {
       <div className={`columns${view === "dashboard" ? "" : " columns--study"}`}><main className="study-main" id="study-main">
         {view !== "dashboard" && <div className="greeting"><h1 id="page-heading" tabIndex={-1}>{areas.find(item => item.id === view)?.label ?? (tutorEnabled ? "Tutor Chat" : "")}</h1></div>}
         {tutorEnabled && <Suspense fallback={null}><TutorChat key={me.account.id} workspaceView={view} onAvailability={setTutorAvailable} onSessionEnded={handleSessionEnded} /></Suspense>}
-        {view === "dashboard" ? <><StudyDashboard data={workspace.data} name={name} timeZone={me.account.timeZone} onNavigate={navigate} onDates={() => setDatesOpen(true)} onPractice={startPractice} onResume={resumeAttempt} />{workspace.error && <p className="workspace-notice" role="status">{workspace.error} <button className="secondary" onClick={workspace.retry}>Retry</button></p>}</> :
+        {view === "dashboard" ? <><Reminders accountId={me.account.id} refreshKey={refreshKey} onChooseDate={() => setDatesOpen(true)} onSessionEnded={handleSessionEnded} /><StudyDashboard data={workspace.data} name={name} timeZone={me.account.timeZone} onNavigate={navigate} onDates={() => setDatesOpen(true)} onPractice={startPractice} onResume={resumeAttempt} />{workspace.error && <p className="workspace-notice" role="status">{workspace.error} <button className="secondary" onClick={workspace.retry}>Retry</button></p>}</> :
           view === "tutor" && tutorEnabled ? null :
           view === "cards" ? <FlashcardsArea onSessionEnded={handleSessionEnded} /> :
           view === "library" ? <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={startPractice} /> :
@@ -252,7 +256,11 @@ export function AccountApp() {
         <footer className="workspace-footer">Made for your pace. Built for your possibilities.<span>Whitebook</span></footer>
       </main>{view === "dashboard" && <CalendarRail data={workspace.data} timeZone={me.account.timeZone} onDates={() => setDatesOpen(true)} onPlan={() => navigate("plan")} onAction={followAction} />}</div></div>
       {datesOpen && <DatesDialog timeZone={me.account.timeZone} onSessionEnded={handleSessionEnded} onClose={() => { setDatesOpen(false); setRefreshKey(value => value + 1); }} />}
-    </> : <main className="sign-in-page"><a href="/dashboard" className="brand"><Icon name="leaf" />whitebook.</a><section className="account-card"><h1>Study in your own space</h1><p>Sign in with Google to open your private Whitebook account.</p>{signInReady ? <a className="account-button" href="/api/auth/google/start">Continue with Google</a> : <p role="status">Google sign-in is being set up. Please return later.</p>}</section></main>}
+    </> : <main className="sign-in-page wb-signin"><div className="wb-signin__top"><a href="/dashboard" className="brand"><span className="brand-mark"><Icon name="leaf" /></span><span>whitebook<span className="brand-dot">.</span></span></a><span>Your private study space</span></div>
+      <div className="wb-signin__content"><div className="wb-signin__copy"><span className="wb-signin__eyebrow">A quieter way to prepare</span><h1>Small steps.<br /><em>Big possibilities.</em></h1><p>Practice, review, and keep your study story in one place. Every session starts with your own Whitebook workspace.</p>
+        <section className="wb-signin__card" aria-label="Sign in"><h2>Welcome to Whitebook</h2><p>Use your Google account to continue to your private study space.</p>{signInReady ? <a className="wb-signin__google" href="/api/auth/google/start"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.28 5.48-4.8 7.18l7.73 6C44.38 38.03 46.98 31.88 46.98 24.55z"/><path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.2A23.9 23.9 0 0 0 0 24c0 3.87.93 7.5 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.92-2.13 15.88-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.15 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.97 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continue with Google</a> : <p role="status">Google sign-in is being set up. Please return later.</p>}<small>One account for your cards, practice, and progress.</small></section></div>
+        <div className="wb-signin__art" aria-hidden="true"><span className="wb-signin__art-label">Made for your pace</span><img src={studyIllustration} alt="" /><span className="wb-signin__art-footer">A little growth, every day.</span></div></div>
+      <div className="wb-signin__bottom"><span>Made for your pace. Built for your possibilities.</span><span>Whitebook</span></div></main>}
     {loginError && !me && <p className="account-message" role="alert">{loginError === "google_cancelled" ? "Google sign-in was cancelled. You can try again." : "Google sign-in could not be completed. Please try again."}</p>}
     {message && <p className="account-message workspace-toast" role="status">{message}</p>}
   </div>;

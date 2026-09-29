@@ -1,0 +1,56 @@
+/* The four future Gemini flows share the hosted workspace's quiet study desk. */
+.whitebook-workspace .tutor-chat,
+.whitebook-workspace .plan-assistant,
+.whitebook-workspace .cards-assistant { border: 1px solid #e6e5dc; border-radius: 14px; background: #fffefa; color: #343a30; box-shadow: 0 9px 27px #343a3008; }
+.whitebook-workspace .tutor-chat h2,
+.whitebook-workspace .plan-assistant h3,
+.whitebook-workspace .cards-assistant h3 { font: 26px Lora,serif; letter-spacing: -.03em; color: #343a30; }
+.whitebook-workspace .tutor-chat header { padding-bottom: 18px; border-bottom: 1px solid #e6e5dc; }
+.whitebook-workspace .tutor-chat header p,
+.whitebook-workspace .cards-assistant>p,
+.whitebook-workspace .plan-assistant>p { color: #646b59; font-size: 12px; }
+.whitebook-workspace .tutor-chat label,
+.whitebook-workspace .cards-assistant label,
+.whitebook-workspace .guided-reasoning__guidance label { color: #415239; font-size: 12px; font-weight: 600; }
+.whitebook-workspace .tutor-chat :is(select,textarea,input),
+.whitebook-workspace .cards-assistant :is(select,textarea,input),
+.whitebook-workspace .guided-reasoning__guidance :is(select,textarea),
+.whitebook-workspace .plan-assistant select { border: 1px solid #cbd0bf; border-radius: 7px; background: #fffefa; color: #343a30; }
+.whitebook-workspace .tutor-chat :is(button:not(:disabled),summary),
+.whitebook-workspace .cards-assistant button:not(:disabled),
+.whitebook-workspace .plan-assistant button:not(:disabled) { cursor: pointer; }
+.whitebook-workspace .tutor-chat button,
+.whitebook-workspace .cards-assistant button,
+.whitebook-workspace .plan-assistant button { border-radius: 7px; background: #4c6243; color: #fffaf0; padding: 10px 14px; font: 600 12px Merriweather,Arial,sans-serif; }
+.whitebook-workspace .tutor-chat button:hover:not(:disabled),
+.whitebook-workspace .cards-assistant button:hover:not(:disabled),
+.whitebook-workspace .plan-assistant button:hover:not(:disabled) { background: #374e30; }
+.whitebook-workspace .tutor-chat button:disabled,
+.whitebook-workspace .cards-assistant button:disabled,
+.whitebook-workspace .plan-assistant button:disabled { opacity: .55; }
+.whitebook-workspace .tutor-chat :is(button,select,textarea,input,summary,a):focus-visible,
+.whitebook-workspace .cards-assistant :is(button,select,textarea,input,a):focus-visible,
+.whitebook-workspace .plan-assistant :is(button,select,input,a):focus-visible,
+.whitebook-workspace .guided-reasoning :is(button,select,textarea):focus-visible { outline: 2px solid #526b45; outline-offset: 3px; }
+.whitebook-workspace .tutor-key { border-color: #e6e5dc; }
+.whitebook-workspace .tutor-turn { border-color: #e6e5dc; }
+.whitebook-workspace .tutor-turn--learner strong { color: #4c6243; }
+.whitebook-workspace .tutor-provider>div { border-color: #e6e5dc; }
+.whitebook-workspace .tutor-preview,
+.whitebook-workspace .cards-assistant__preview,
+.whitebook-workspace .plan-assistant__preview,
+.whitebook-workspace .guided-reasoning__preview { border: 1px solid #cbd0bf; border-radius: 10px; background: #f3f3eb; padding: 18px; }
+.whitebook-workspace :is(.tutor-preview,.cards-assistant__preview,.plan-assistant,.guided-reasoning__preview) pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; border: 1px solid #e6e5dc; border-radius: 7px; background: #fffefa; padding: 14px; color: #343a30; }
+.whitebook-workspace .cards-assistant__advice,
+.whitebook-workspace .cards-assistant__draft,
+.whitebook-workspace .guided-reasoning__note { border-color: #e6e5dc; background: #faf9f5; }
+.whitebook-workspace .guided-reasoning { gap: 14px; }
+.whitebook-workspace .guided-reasoning__question,
+.whitebook-workspace .guided-reasoning__guidance { border: 1px solid #e6e5dc; background: #fffefa; border-radius: 11px; padding: 22px; }
+.whitebook-workspace .guided-reasoning__question h4,
+.whitebook-workspace .guided-reasoning__guidance h4 { font: 21px Lora,serif; margin: 0 0 15px; }
+.whitebook-workspace .guided-reasoning__reply { border-left-color: #9eb084; background: #e0e7d5; }
+.whitebook-workspace .guided-reasoning__switch button[aria-selected=true] { border-color: #738b5e; background: #e0e7d5; color: #415239; }
+.whitebook-workspace .cards-assistant__draft { padding: 17px; }
+.whitebook-workspace .plan-assistant fieldset { border-top: 1px solid #e6e5dc; padding-top: 15px; }
+@media(max-width:700px) { .whitebook-workspace .tutor-chat,.whitebook-workspace .cards-assistant,.whitebook-workspace .plan-assistant { padding: 18px; } .whitebook-workspace .guided-reasoning__question,.whitebook-workspace .guided-reasoning__guidance { padding: 16px; } }

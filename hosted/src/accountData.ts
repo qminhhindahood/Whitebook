@@ -15,6 +15,7 @@ const owned = [
   { name: "planVersions", table: "study_plan_versions", fields: "id, version, primary_date, settings_json, source_json, created_at_ms", order: "version" },
   { name: "planTasks", table: "study_plan_tasks", fields: "id, version_id, scheduled_date, kind, title, estimated_minutes, action_json, evidence_count, tentative, explanation, status, revision, updated_at_ms", order: "scheduled_date, id" },
   { name: "planTaskEvents", table: "study_plan_task_events", fields: "id, version_id, task_id, event_json, created_at_ms", order: "created_at_ms, id" },
+  { name: "reminderDismissals", table: "reminder_dismissals", fields: "reminder_key, dismissed_at_ms", order: "reminder_key" },
 ] as const;
 
 const jsonNames: Record<string, string> = {
@@ -69,7 +70,7 @@ async function deleteAccount(request: Request, env: AccountEnv, session: Session
   const order = [
     "study_plan_task_events", "study_plan_tasks", "study_plan_versions",
     "study_notes", "guided_reviews", "card_rating_events", "starter_card_rating_events",
-    "personal_cards", "learner_attempts", "official_sat_results", "learner_sat_dates",
+    "personal_cards", "learner_attempts", "official_sat_results", "learner_sat_dates", "reminder_dismissals",
     "private_revision_entitlements", "learner_sessions",
   ];
   await env.DB.batch([

@@ -60,7 +60,7 @@ it("labels a study day from a date-only value in English", () => {
 it("shows due counts per deck with the shared-decks note, without inventing audio", async () => {
   stubFetch(overviewHandler());
   render(<FlashcardsArea />);
-  expect(await screen.findByText("Friday, October 2")).toBeTruthy();
+  expect(await screen.findByText(/Study day Friday, October 2/)).toBeTruthy();
   expect((await screen.findByText("Start studying (3)")).textContent).toBe("Start studying (3)");
   expect(screen.getByText("1 due of 4 cards")).toBeTruthy();
   expect(screen.getByText("2 due of 839 cards")).toBeTruthy();
@@ -74,7 +74,7 @@ it("shows due counts per deck with the shared-decks note, without inventing audi
 it("a deck with nothing due offers no Study deck button and shows the caught-up state when started empty", async () => {
   stubFetch(overviewHandler());
   render(<FlashcardsArea />);
-  const decks = await screen.findAllByRole("button", { name: "Study deck" });
+  const decks = await screen.findAllByRole("button", { name: /^Study deck / });
   expect(decks).toHaveLength(2); // personal deck with 1 due + starter deck with 2 due
 });
 
