@@ -403,7 +403,7 @@ async function preview(body: Record<string, unknown>, env: AssistantEnv, session
   if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
   const personal = await credential(env, session.account_id);
   const secrets = [key.key, env.GEMINI_SHARED_KEY, personal ? await unseal(personal.ciphertext, env.ASSISTANT_KEY_KEK!, `credential:${session.account_id}`) : null];
-  if (/AIza[0-9A-Za-z_-]{30,}|-----BEGIN .*PRIVATE KEY-----/.test(payload) || secrets.some(s => s && payload.includes(s))) return failure(400, "blocked_content", "Remove credentials from the prompt and preview again.");
+  if (/(?:AIza[0-9A-Za-z_-]{30,}|AQ\.[0-9A-Za-z_-]{20,}|-----BEGIN .*PRIVATE KEY-----)/.test(payload) || secrets.some(s => s && payload.includes(s))) return failure(400, "blocked_content", "Remove credentials from the prompt and preview again.");
   if (!await reserve(env, `preview:${session.account_id}`, 0, 60, 1, now)) return rateLimitedResponse("rate_limited", Math.ceil((HOUR - now % HOUR) / 1000), now);
    const snapshot: Snapshot = { id: crypto.randomUUID(), account: session.account_id, session: session.token_hash, visit: body.visitId, expires: now + 5 * 60000, provider, credentialVersion: key.version, payload, tokens: estimateTokens(payload, attached?.visuals), ...(attached ? { attachmentReviewId: attached.reviewId, attachmentVisuals: body.includeVisuals === true, attachmentHash: await sha256(JSON.stringify(attached)) } : {}) };
   const previewId = await seal(JSON.stringify(snapshot), env.ASSISTANT_SNAPSHOT_KEY!, "tutor-preview");
@@ -437,7 +437,7 @@ async function send(body: Record<string, unknown>, env: AssistantEnv, session: S
   if (provider.route === "shared_gemini" && !await reserve(env, "shared", snapshot.tokens, 100, 400000, now)) return rateLimitedResponse("quota_exhausted", retry, now);
   try {
     const text = await adapter(snapshot.payload, provider.model, key.key);
-    if (!text.trim() || text.length > 8000 || text.includes(key.key) || /AIza[0-9A-Za-z_-]{30,}/.test(text)) return failure(502, "blocked_content", "Gemini returned content that cannot be displayed.");
+    if (!text.trim() || text.length > 8000 || text.includes(key.key) || /(?:AIza[0-9A-Za-z_-]{30,}|AQ\.[0-9A-Za-z_-]{20,})/.test(text)) return failure(502, "blocked_content", "Gemini returned content that cannot be displayed.");
     return json({ text, provider, verified: false });
   } catch (error) {
     const known = error instanceof GeminiFailure ? error : new GeminiFailure("provider_error", 30);
@@ -563,7 +563,7 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
      if (path === "/api/assistant/plan-preview") return planPreview(body, request, env, session, options, time);
      if (path === "/api/assistant/plan-send") return planSend(body, request, env, session, options, adapter, time);
     if (path === "/api/assistant/credential") {
-      if (!bodyHasExactly(body, ["key"]) || typeof body.key !== "string" || !/^[A-Za-z0-9_-]{20,256}$/.test(body.key)) return invalid();
+      if (!bodyHasExactly(body, ["key"]) || typeof body.key !== "string" || !/^[A-Za-z0-9_.-]{20,256}$/.test(body.key)) return invalid();
       const encrypted = await seal(body.key, env.ASSISTANT_KEY_KEK!, `credential:${session.account_id}`);
       await env.DB.prepare("INSERT INTO assistant_credentials (account_id, version, ciphertext, last_four) VALUES (?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET version = excluded.version, ciphertext = excluded.ciphertext, last_four = excluded.last_four")
         .bind(session.account_id, crypto.randomUUID(), encrypted, body.key.slice(-4)).run();

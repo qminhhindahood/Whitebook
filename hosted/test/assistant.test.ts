@@ -389,7 +389,7 @@ it("requires new consent for changed text, visit, model, payer, terms, price, cr
 
 it("rejects client evidence, attachments, non-Gemini routes and known credentials; caps the exact prior turns", async () => {
   const f = await fixture();
-  for (const extra of [{ account: { email: "private" } }, { acceptedAnswer: "C" }, { attachment: "review" }, { credentialId: "key" }, { route: "openrouter" }, { currentMessage: "test-shared-credential" }, { currentMessage: "AIza" + "x".repeat(35) }])
+  for (const extra of [{ account: { email: "private" } }, { acceptedAnswer: "C" }, { attachment: "review" }, { credentialId: "key" }, { route: "openrouter" }, { currentMessage: "test-shared-credential" }, { currentMessage: "AIza" + "x".repeat(35) }, { currentMessage: "AQ." + "x".repeat(35) }])
     expect((await f.call("preview", { ...f.input, ...extra })).status).toBe(400);
   const p = await f.preview({ locale: "vi", priorMessages: Array.from({ length: 12 }, (_, i) => ({ role: i % 2 ? "assistant" : "learner", text: `Turn ${i}` })) });
   const payload = JSON.parse(p.payload);
@@ -404,7 +404,7 @@ it("rejects client evidence, attachments, non-Gemini routes and known credential
 
 it("encrypts personal credentials, redacts reads and export, and revokes old previews on key replacement", async () => {
   const f = await fixture();
-  const secret = "personal-test-credential-12345";
+  const secret = "AQ.personal-test-credential-12345";
   const saved = await f.call("credential", { key: secret });
   expect(await saved.json()).toEqual({ lastFour: "2345" });
   expect(JSON.stringify(f.db.prepare("SELECT * FROM assistant_credentials").all())).not.toContain(secret);
