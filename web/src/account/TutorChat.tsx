@@ -56,7 +56,7 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
   const [online, setOnline] = useState(navigator.onLine);
   const [key, setKey] = useState("");
   const [refresh, setRefresh] = useState(0);
-  const [assessmentBlocked, setAssessmentBlocked] = useState<"none" | "active_section_exam" | "assisted_practice_required">("none");
+  const [assessmentBlocked, setAssessmentBlocked] = useState<"none" | "active_section_exam">("none");
   const [blockMessage, setBlockMessage] = useState("");
   const [reviews, setReviews] = useState<ReviewChoice[]>([]);
   const [reviewId, setReviewId] = useState("");
@@ -115,9 +115,7 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
           if (code === "active_section_exam") {
             setAssessmentBlocked("active_section_exam");
             setBlockMessage(data.error?.message ?? "Finish the active Section Exam before opening AI Tutor.");
-          } else if (code === "assisted_practice_required") {
-            setAssessmentBlocked("assisted_practice_required");
-            setBlockMessage(data.error?.message ?? "AI Tutor is unavailable during unassisted Practice.");
+
           } else {
             setAssessmentBlocked("none");
             setError(data.error?.message ?? "AI Tutor is temporarily unavailable.");
@@ -206,32 +204,7 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
     </section>;
   }
 
-  if (assessmentBlocked === "assisted_practice_required") {
-    return <section hidden={!active} className="tutor-chat tutor-chat--locked" aria-labelledby="tutor-heading">
-      <header className="tutor-header">
-        <div>
-          <h2 id="tutor-heading">AI Tutor</h2>
-          <p>Your private SAT study tutor.</p>
-        </div>
-      </header>
-      <div className="tutor-blocked-card tutor-blocked-card--practice" role="region" aria-label="Assisted Practice required">
-        <div className="tutor-blocked-card__icon" aria-hidden="true"><Icon name="pen" /></div>
-        <h3>Assisted Practice Required</h3>
-        <p role="alert">{blockMessage || "AI Tutor is unavailable during unassisted Practice."}</p>
-        <div className="tutor-blocked-card__body">
-          <p>To ask questions during an active Practice Attempt, the attempt must be in <strong>Assisted Practice</strong> mode.</p>
-          <p>How to enter Assisted Practice:</p>
-          <ol>
-            <li>Return to your active Attempt in <strong>Practice</strong>.</li>
-            <li>Select <strong>Enable Assisted Practice</strong> (or start a new Assisted Practice session).</li>
-            <li>Return here to ask questions while you study.</li>
-          </ol>
-          <p className="account-hint">Note: Assisted Practice attempts are excluded from your unassisted Progress metrics to maintain clean diagnostic evidence.</p>
-        </div>
-        <button type="button" className="secondary" onClick={() => setRefresh(n => n + 1)}>Check availability again</button>
-      </div>
-    </section>;
-  }
+
 
   return <section hidden={!active} className="tutor-chat" aria-labelledby="tutor-heading">
     <header className="tutor-header">

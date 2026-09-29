@@ -142,15 +142,10 @@ it("keeps sidebar tab visible and suppresses chat controls if a Section Exam bec
   expect(screen.getByText(/Section Exam in Progress/i)).toBeTruthy();
 });
 
-it("explains how to enter Assisted Practice when options return 409 assisted_practice_required", async () => {
+it("answers general questions without being blocked by unassisted practice", async () => {
   const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   await screen.findByLabelText("Your message");
-  f.fetch.mockResolvedValueOnce(Response.json({ error: { code: "assisted_practice_required", message: "Tutor Chat is unavailable during unassisted Practice." } }, { status: 409 }));
-  fireEvent(window, new Event("focus"));
-  await waitFor(() => expect(screen.getByRole("button", { name: "AI Tutor" })).toBeTruthy());
-  await waitFor(() => expect(screen.queryByLabelText("Your message")).toBeNull());
-  expect(screen.getByText(/Assisted Practice Required/i)).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Check availability again" })).toBeTruthy();
+  expect(screen.queryByText(/Assisted Practice Required/i)).toBeNull();
 });
 
 it("keeps tab visible and shows retry when options return 503 provider failure", async () => {

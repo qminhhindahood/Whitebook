@@ -79,8 +79,7 @@ async function routeKey(env: AssistantEnv, account: string, option: Option): Pro
 async function assessmentBlock(env: AssistantEnv, account: string): Promise<Response | null> {
   const exam = await env.DB.prepare("SELECT id FROM learner_attempts WHERE account_id = ? AND kind = 'section_exam' AND status = 'active' LIMIT 1").bind(account).first();
   if (exam) return failure(409, "active_section_exam", "Finish the active Section Exam before opening Tutor Chat.");
-  const practice = await env.DB.prepare("SELECT id FROM learner_attempts WHERE account_id = ? AND kind = 'practice' AND status = 'active' AND assisted_at_ms IS NULL LIMIT 1").bind(account).first();
-  return practice ? failure(409, "assisted_practice_required", "Tutor Chat is unavailable during unassisted Practice.") : null;
+  return null;
 }
 function rateLimitedResponse(code: string, seconds: number, now: number): Response {
   return Response.json({ error: { code, message: `Tutor Chat is unavailable. Try again in ${seconds} seconds.`, retryAt: now + seconds * 1000 } }, { status: 429, headers: { ...noStore, "Retry-After": String(seconds) } });
