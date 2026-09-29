@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
+import { Icon } from "./StudyWorkspace";
 import "./tutorChat.css";
 
 type Provider = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: string[]; vision: boolean; quota: string; healthy: boolean };
@@ -55,7 +56,8 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
   const [online, setOnline] = useState(navigator.onLine);
   const [key, setKey] = useState("");
   const [refresh, setRefresh] = useState(0);
-  const [assessmentBlocked, setAssessmentBlocked] = useState(false);
+  const [assessmentBlocked, setAssessmentBlocked] = useState<"none" | "active_section_exam" | "assisted_practice_required">("none");
+  const [blockMessage, setBlockMessage] = useState("");
   const [reviews, setReviews] = useState<ReviewChoice[]>([]);
   const [reviewId, setReviewId] = useState("");
   const [includeVisuals, setIncludeVisuals] = useState(false);
@@ -100,23 +102,50 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
     const controller = new AbortController(); pending.current.add(controller);
     const timeout = setTimeout(() => controller.abort(), 15000);
     let live = true;
-    // Recheck account-owned assessment state on workspace navigation and focus.
     onAvailability(false);
     void accountFetch("/api/assistant/options", { signal: controller.signal }).then(async response => {
       if (!live) return;
       if (response.status === 401) { onSessionEnded(); return; }
       if (!response.ok) {
-        const data = await response.json();
-        if (live) { setOptions(null); setPreview(null); setAssessmentBlocked(["active_section_exam", "assisted_practice_required"].includes(data.error?.code)); setError(data.error?.message ?? "Tutor Chat is unavailable."); }
+        const data = await response.json().catch(() => ({}));
+        if (live) {
+          setOptions(null);
+          setPreview(null);
+          const code = data.error?.code;
+          if (code === "active_section_exam") {
+            setAssessmentBlocked("active_section_exam");
+            setBlockMessage(data.error?.message ?? "Finish the active Section Exam before opening AI Tutor.");
+          } else if (code === "assisted_practice_required") {
+            setAssessmentBlocked("assisted_practice_required");
+            setBlockMessage(data.error?.message ?? "AI Tutor is unavailable during unassisted Practice.");
+          } else {
+            setAssessmentBlocked("none");
+            setError(data.error?.message ?? "AI Tutor is temporarily unavailable.");
+          }
+          if (data.error?.retryAt) setRetryAt(data.error.retryAt);
+        }
         return;
       }
       const data = await response.json() as Options;
       if (!live) return;
-       setOptions(data); setAssessmentBlocked(false); onAvailability(true);
-       void accountFetch("/api/assistant/attachments").then(async response => { if (response.ok) setReviews((await response.json() as { reviews: ReviewChoice[] }).reviews); }).catch(() => { /* Attachment picker remains empty when unavailable. */ });
+      setOptions(data);
+      setAssessmentBlocked("none");
+      setError("");
+      onAvailability(true);
+      void accountFetch("/api/assistant/attachments").then(async res => {
+        if (res.ok) setReviews(((await res.json()) as { reviews: ReviewChoice[] }).reviews);
+      }).catch(() => { /* Attachment picker remains empty when unavailable. */ });
       setSelection(current => data.options.some(p => selectionId(p) === current) ? current : data.options[0] ? selectionId(data.options[0]) : "");
-    }).catch(() => { if (live) { setOptions(null); setError("Tutor Chat could not connect. Your draft is preserved."); } })
-      .finally(() => { clearTimeout(timeout); pending.current.delete(controller); });
+    }).catch(() => {
+      if (live && !controller.signal.aborted) {
+        setOptions(null);
+        setAssessmentBlocked("none");
+        setError("AI Tutor could not connect. Your draft is preserved.");
+      }
+    }).finally(() => {
+      clearTimeout(timeout);
+      pending.current.delete(controller);
+    });
     return () => { live = false; controller.abort(); clearTimeout(timeout); pending.current.delete(controller); };
   }, [workspaceView, refresh, onAvailability, onSessionEnded]);
 
@@ -129,7 +158,7 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() }, body: JSON.stringify(body) });
       if (response.status === 401) { onSessionEnded(); throw new ChatFailure("Your session ended. Sign in again."); }
       const data = await response.json();
-      if (!response.ok) throw new ChatFailure(data.error?.message ?? "Tutor Chat is unavailable. Preview again to retry.", data.error?.retryAt ?? 0);
+      if (!response.ok) throw new ChatFailure(data.error?.message ?? "AI Tutor is unavailable. Preview again to retry.", data.error?.retryAt ?? 0);
       return data as T;
     } finally { clearTimeout(timeout); pending.current.delete(controller); }
   }
@@ -140,93 +169,218 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
     catch (failure) {
       if (epoch !== generation.current) return;
       setPreview(null);
-      setError(failure instanceof ChatFailure ? failure.message : "Tutor Chat could not connect or timed out. Your draft is preserved. Preview again to retry.");
+      setError(failure instanceof ChatFailure ? failure.message : "AI Tutor could not connect or timed out. Your draft is preserved. Preview again to retry.");
       setRetryAt(failure instanceof ChatFailure ? failure.retryAt : 0);
     } finally { if (epoch === generation.current) setBusy(false); }
   }
   function invalidate() { setPreview(null); setNotice(""); }
+  function handleNewChat() {
+    generation.current++;
+    pending.current.forEach(c => c.abort());
+    pending.current.clear();
+    setTurns([]);
+    setDraft("");
+    setPreview(null);
+    setReviewId("");
+    setIncludeVisuals(false);
+    setVisitId(crypto.randomUUID());
+    setError("");
+    setNotice("Started a new conversation.");
+  }
   const unavailable = busy || !online || clock < retryAt;
-  if (assessmentBlocked) return null;
+
+  if (assessmentBlocked === "active_section_exam") {
+    return <section hidden={!active} className="tutor-chat tutor-chat--locked" aria-labelledby="tutor-heading">
+      <header className="tutor-header">
+        <div>
+          <h2 id="tutor-heading">AI Tutor</h2>
+          <p>Your private SAT study tutor.</p>
+        </div>
+      </header>
+      <div className="tutor-blocked-card" role="region" aria-label="Section Exam lock">
+        <div className="tutor-blocked-card__icon" aria-hidden="true"><Icon name="pen" /></div>
+        <h3>Section Exam in Progress</h3>
+        <p role="alert">{blockMessage || "Finish the active Section Exam before opening AI Tutor."}</p>
+        <p className="account-hint">AI Tutor is locked during an active Section Exam to safeguard exam conditions and scoring integrity. Complete or exit your exam attempt to return to AI Tutor.</p>
+      </div>
+    </section>;
+  }
+
+  if (assessmentBlocked === "assisted_practice_required") {
+    return <section hidden={!active} className="tutor-chat tutor-chat--locked" aria-labelledby="tutor-heading">
+      <header className="tutor-header">
+        <div>
+          <h2 id="tutor-heading">AI Tutor</h2>
+          <p>Your private SAT study tutor.</p>
+        </div>
+      </header>
+      <div className="tutor-blocked-card tutor-blocked-card--practice" role="region" aria-label="Assisted Practice required">
+        <div className="tutor-blocked-card__icon" aria-hidden="true"><Icon name="pen" /></div>
+        <h3>Assisted Practice Required</h3>
+        <p role="alert">{blockMessage || "AI Tutor is unavailable during unassisted Practice."}</p>
+        <div className="tutor-blocked-card__body">
+          <p>To ask questions during an active Practice Attempt, the attempt must be in <strong>Assisted Practice</strong> mode.</p>
+          <p>How to enter Assisted Practice:</p>
+          <ol>
+            <li>Return to your active Attempt in <strong>Practice</strong>.</li>
+            <li>Select <strong>Enable Assisted Practice</strong> (or start a new Assisted Practice session).</li>
+            <li>Return here to ask questions while you study.</li>
+          </ol>
+          <p className="account-hint">Note: Assisted Practice attempts are excluded from your unassisted Progress metrics to maintain clean diagnostic evidence.</p>
+        </div>
+        <button type="button" className="secondary" onClick={() => setRefresh(n => n + 1)}>Check availability again</button>
+      </div>
+    </section>;
+  }
+
   return <section hidden={!active} className="tutor-chat" aria-labelledby="tutor-heading">
-    <header><h2 id="tutor-heading">Tutor Chat</h2><p>Ask about a topic in your own words. Nothing from your account or current question is attached.</p></header>
+    <header className="tutor-header">
+      <div>
+        <h2 id="tutor-heading">AI Tutor</h2>
+        <p>Ask about a topic in your own words. Nothing from your account or current question is attached.</p>
+      </div>
+      <div className="tutor-header__actions">
+        <button type="button" className="subtle-button tutor-new-chat-btn" aria-label="New chat" onClick={handleNewChat}>
+          <Icon name="chat" />
+          <span>New chat</span>
+        </button>
+      </div>
+    </header>
     <p className="account-hint">This conversation ends on sign-out, reload, or closing this browser tab. It does not sync or become account history.</p>
     {!online && <p role="status">You are offline. Reconnect when ready; messages will not send automatically.</p>}
     {error && <p role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
     {retryAt > clock && <p role="status">Retry available in {Math.ceil((retryAt - clock) / 1000)} seconds, at {new Date(retryAt).toLocaleTimeString()}.</p>}
-    {!options ? <button onClick={() => setRefresh(n => n + 1)}>Check Tutor Chat availability</button> : <>
-      <div className="tutor-controls">
-        <label>Gemini route and model<select disabled={busy} value={selection} onChange={e => { setSelection(e.target.value); invalidate(); }}>
-          {options.options.map(p => <option key={selectionId(p)} value={selectionId(p)}>{p.route === "shared_gemini" ? "Shared Gemini" : "Personal Gemini"} · {p.model}</option>)}
-        </select></label>
-        <label>Response language<select disabled={busy} value={locale} onChange={e => { setLocale(e.target.value); invalidate(); }}>
-          <option value="en" disabled={!provider?.languages.includes("en")}>English</option>
-          <option value="vi" disabled={!provider?.languages.includes("vi")}>Vietnamese</option>
-        </select></label>
+
+    {!options ? (
+      <div className="tutor-unavailable-action">
+        <button type="button" disabled={busy || clock < retryAt} onClick={() => setRefresh(n => n + 1)}>
+          Check AI Tutor availability
+        </button>
       </div>
-      {provider && <ProviderDetails provider={provider} />}
-      <p className="account-hint">Up to 8 prior messages are included, capped at 16 KB per request. Maximum reply: 1,024 tokens. Account limit: 20 sends and 80,000 reserved tokens per hour; failed sends also use this allowance.</p>
-      <details className="tutor-key"><summary>Personal Gemini credential{options.credential ? ` · ending ${options.credential.lastFour}` : ""}</summary>
-        <p>Your key is encrypted on the server. It is never included in the chat text or shown again after saving.</p>
-        <form onSubmit={e => { e.preventDefault(); invalidate(); void action(async epoch => {
-          try {
-            const saved = await request<{ lastFour: string }>("credential", { key });
-            if (epoch !== generation.current) return;
-            setOptions(current => current ? { ...current, credential: saved } : null); setNotice("Gemini credential saved.");
-          } finally { if (epoch === generation.current) setKey(""); }
+    ) : (
+      <>
+        <details className="tutor-settings-collapsible">
+          <summary>Tutor settings &amp; question attachment</summary>
+          <div className="tutor-controls">
+            <label>Gemini route and model<select disabled={busy} value={selection} onChange={e => { setSelection(e.target.value); invalidate(); }}>
+              {options.options.map(p => <option key={selectionId(p)} value={selectionId(p)}>{p.route === "shared_gemini" ? "Shared Gemini" : "Personal Gemini"} · {p.model}</option>)}
+            </select></label>
+            <label>Response language<select disabled={busy} value={locale} onChange={e => { setLocale(e.target.value); invalidate(); }}>
+              <option value="en" disabled={!provider?.languages.includes("en")}>English</option>
+              <option value="vi" disabled={!provider?.languages.includes("vi")}>Vietnamese</option>
+            </select></label>
+            <label>Attach reviewed question (optional)<select disabled={busy} value={reviewId} onChange={e => { setReviewId(e.target.value); invalidate(); }}><option value="">No question attached</option>{reviews.map(review => <option key={review.reviewId} value={review.reviewId}>{review.section} · Q{review.questionNumber} · {new Date(review.completedAt).toLocaleDateString()}</option>)}</select></label>
+          </div>
+          {reviewId && <label className="tutor-visuals-label"><input type="checkbox" checked={includeVisuals} disabled={busy || !provider?.vision} onChange={e => { setIncludeVisuals(e.target.checked); invalidate(); }} /> Share selected question visuals with Gemini</label>}
+          {provider && <ProviderDetails provider={provider} />}
+          <p className="account-hint">Up to 8 prior messages are included, capped at 16 KB per request. Maximum reply: 1,024 tokens. Account limit: 20 sends and 80,000 reserved tokens per hour; failed sends also use this allowance.</p>
+          <details className="tutor-key"><summary>Personal Gemini credential{options.credential ? ` · ending ${options.credential.lastFour}` : ""}</summary>
+            <p>Your key is encrypted on the server. It is never included in the chat text or shown again after saving.</p>
+            <form onSubmit={e => { e.preventDefault(); invalidate(); void action(async epoch => {
+              try {
+                const saved = await request<{ lastFour: string }>("credential", { key });
+                if (epoch !== generation.current) return;
+                setOptions(current => current ? { ...current, credential: saved } : null); setNotice("Gemini credential saved.");
+              } finally { if (epoch === generation.current) setKey(""); }
+            }); }}>
+              <label>Gemini API key<input type="password" autoComplete="off" maxLength={256} value={key} disabled={busy} onChange={e => setKey(e.target.value)} /></label>
+              <button disabled={unavailable || !key}>Save credential</button>
+              {options.credential && <button type="button" disabled={unavailable} onClick={() => { invalidate(); void action(async epoch => {
+                await request("credential/remove", {}); if (epoch !== generation.current) return;
+                setOptions(current => current ? { ...current, credential: null } : null); setNotice("Gemini credential removed.");
+              }); }}>Remove credential</button>}
+            </form>
+          </details>
+        </details>
+
+        <div className="tutor-thread-container">
+          <ol className="tutor-transcript" aria-label="Visit conversation" aria-live="polite" aria-relevant="additions">
+            {turns.length === 0 ? (
+              <li className="tutor-turn tutor-turn--intro">
+                <div className="tutor-intro-card">
+                  <h3>One-to-One SAT Tutor</h3>
+                  <p>Ask freeform questions about SAT math methods, grammar rules, reading passages, or test strategies. Responses are generated with Gemini in real time.</p>
+                </div>
+              </li>
+            ) : (
+              turns.map((turn, index) => <li key={index} className={`tutor-turn tutor-turn--${turn.role}`}>
+                <div className="tutor-turn__author">
+                  <strong>{turn.role === "learner" ? "You" : `AI Tutor · ${turn.provider?.model ?? "Gemini"}`}</strong>
+                </div>
+                <div className="tutor-turn__bubble">
+                  <p>{turn.text}</p>
+                  {turn.role === "assistant" && <small>Not verified against the answer key</small>}
+                </div>
+              </li>)
+            )}
+          </ol>
+        </div>
+
+        <form className="tutor-composer" onSubmit={e => { e.preventDefault(); if (!provider) return; invalidate(); void action(async epoch => {
+          const next = await request<Preview>("preview", { visitId, route: provider.route, model: provider.model, locale, currentMessage: draft,
+            priorMessages: turns.slice(-8).map(t => ({ role: t.role, text: t.text })), ...(reviewId ? { reviewId, includeVisuals } : {}) });
+          if (epoch === generation.current) { setPreview(next); setClock(Date.now()); }
         }); }}>
-          <label>Gemini API key<input type="password" autoComplete="off" maxLength={256} value={key} disabled={busy} onChange={e => setKey(e.target.value)} /></label>
-          <button disabled={unavailable || !key}>Save credential</button>
-          {options.credential && <button type="button" disabled={unavailable} onClick={() => { invalidate(); void action(async epoch => {
-            await request("credential/remove", {}); if (epoch !== generation.current) return;
-            setOptions(current => current ? { ...current, credential: null } : null); setNotice("Gemini credential removed.");
-          }); }}>Remove credential</button>}
+          <label htmlFor="tutor-user-message">Your message</label>
+          <textarea
+            id="tutor-user-message"
+            aria-label="Your message"
+            rows={3}
+            maxLength={4000}
+            disabled={busy}
+            placeholder="Ask about a problem, concept, or test strategy…"
+            value={draft}
+            onChange={e => { setDraft(e.target.value); invalidate(); }}
+          />
+          <div className="tutor-composer__bottom">
+            <p className="account-hint">Review before sharing. Text you paste may contain personal information; Whitebook cannot fully redact free-form text.</p>
+            <button
+              type="submit"
+              className="primary"
+              disabled={unavailable || !draft.trim() || !provider?.healthy || !provider.languages.includes(locale)}
+            >
+              Preview this send
+            </button>
+          </div>
         </form>
-      </details>
-      <ol className="tutor-transcript" aria-label="Visit conversation" aria-live="polite" aria-relevant="additions">
-        {turns.map((turn, index) => <li key={index} className={`tutor-turn tutor-turn--${turn.role}`}>
-          <strong>{turn.role === "learner" ? "You" : `Gemini · ${turn.provider?.model}`}</strong>
-          <p>{turn.text}</p>{turn.role === "assistant" && <small>Not verified against the answer key</small>}
-        </li>)}
-      </ol>
-      <label>Attach reviewed question (optional)<select disabled={busy} value={reviewId} onChange={e => { setReviewId(e.target.value); invalidate(); }}><option value="">No question attached</option>{reviews.map(review => <option key={review.reviewId} value={review.reviewId}>{review.section} · Q{review.questionNumber} · {new Date(review.completedAt).toLocaleDateString()}</option>)}</select></label>
-      {reviewId && <label><input type="checkbox" checked={includeVisuals} disabled={busy || !provider?.vision} onChange={e => { setIncludeVisuals(e.target.checked); invalidate(); }} /> Share selected question visuals with Gemini</label>}
-      <form onSubmit={e => { e.preventDefault(); if (!provider) return; invalidate(); void action(async epoch => {
-        const next = await request<Preview>("preview", { visitId, route: provider.route, model: provider.model, locale, currentMessage: draft,
-          priorMessages: turns.slice(-8).map(t => ({ role: t.role, text: t.text })), ...(reviewId ? { reviewId, includeVisuals } : {}) });
-        if (epoch === generation.current) { setPreview(next); setClock(Date.now()); }
-      }); }}>
-        <label>Your message<textarea rows={4} maxLength={4000} disabled={busy} value={draft} onChange={e => { setDraft(e.target.value); invalidate(); }} /></label>
-        <p className="account-hint">Review before sharing. Text you paste may contain personal information; Whitebook cannot fully redact free-form text.</p>
-        <button disabled={unavailable || !draft.trim() || !provider?.healthy || !provider.languages.includes(locale)}>Preview this send</button>
-      </form>
-      {preview && <section className="tutor-preview" aria-labelledby="tutor-preview-heading">
-        <h3 id="tutor-preview-heading" tabIndex={-1} ref={previewHeading}>Included in this send</h3>
-        <ProviderDetails provider={preview.provider} />
-        <p>Gemini request, including instructions, capped prior messages, your new message, and reply limit. Image bytes are rendered below exactly as sent.</p>
-        <pre aria-label="Gemini request fields and image placeholders">{preparedPreview?.formatted}</pre>
-        {!!preview.visuals?.length && <div className="tutor-preview-visuals" aria-label="Images included in this send">
-          {preparedPreview?.images.map((image, index) => {
-            const info = preview.visuals?.[index];
-            if (!info || image.mimeType !== info.mimeType || info.mimeType !== "image/png") return null;
-            return <figure key={`${index}-${info.width}x${info.height}`}><figcaption>{info.width} × {info.height} · {info.alt}</figcaption>
-              <img src={`data:${image.mimeType};base64,${image.data}`} alt={info.alt} width={info.width} height={info.height} />
-            </figure>;
-          })}
-        </div>}
-        <p>Never attached automatically: {preview.neverSent.join(", ")}.</p>
-        <p>{preview.retention}</p>
-        {clock >= preview.expiresAt ? <p role="status">This preview expired. Preview again to consent.</p> : <p>Consent expires at {new Date(preview.expiresAt).toLocaleTimeString()}.</p>}
-        <button disabled={unavailable || clock >= preview.expiresAt} onClick={() => void action(async epoch => {
-          const approved = preview; setPreview(null);
-          const reply = await request<{ text: string; provider: Provider }>("send", { previewId: approved.previewId, visitId, consent: true });
-          if (epoch !== generation.current) return;
-          setTurns(current => [...current, { role: "learner", text: draft } as Turn, { role: "assistant", text: reply.text, provider: reply.provider } as Turn].slice(-40));
-          setDraft("");
-        })}>I consent — send to Gemini</button>
-        <button disabled={busy} onClick={() => setPreview(null)}>Cancel preview</button>
-      </section>}
-      {busy && <p role="status">Working on your request…</p>}
-    </>}
+
+        {preview && <section className="tutor-preview" aria-labelledby="tutor-preview-heading">
+          <h3 id="tutor-preview-heading" tabIndex={-1} ref={previewHeading}>Included in this send</h3>
+          <ProviderDetails provider={preview.provider} />
+          <p>Gemini request, including instructions, capped prior messages, your new message, and reply limit. Image bytes are rendered below exactly as sent.</p>
+          <pre aria-label="Gemini request fields and image placeholders">{preparedPreview?.formatted}</pre>
+          {!!preview.visuals?.length && <div className="tutor-preview-visuals" aria-label="Images included in this send">
+            {preparedPreview?.images.map((image, index) => {
+              const info = preview.visuals?.[index];
+              if (!info || image.mimeType !== info.mimeType || info.mimeType !== "image/png") return null;
+              return <figure key={`${index}-${info.width}x${info.height}`}><figcaption>{info.width} × {info.height} · {info.alt}</figcaption>
+                <img src={`data:${image.mimeType};base64,${image.data}`} alt={info.alt} width={info.width} height={info.height} />
+              </figure>;
+            })}
+          </div>}
+          <p>Never attached automatically: {preview.neverSent.join(", ")}.</p>
+          <p>{preview.retention}</p>
+          {clock >= preview.expiresAt ? <p role="status">This preview expired. Preview again to consent.</p> : <p>Consent expires at {new Date(preview.expiresAt).toLocaleTimeString()}.</p>}
+          <div className="tutor-preview__actions">
+            <button
+              type="button"
+              disabled={unavailable || clock >= preview.expiresAt}
+              onClick={() => void action(async epoch => {
+                const approved = preview; setPreview(null);
+                const reply = await request<{ text: string; provider: Provider }>("send", { previewId: approved.previewId, visitId, consent: true });
+                if (epoch !== generation.current) return;
+                setTurns(current => [...current, { role: "learner", text: draft } as Turn, { role: "assistant", text: reply.text, provider: reply.provider } as Turn].slice(-40));
+                setDraft("");
+              })}
+            >
+              I consent — send to Gemini
+            </button>
+            <button type="button" className="secondary" disabled={busy} onClick={() => setPreview(null)}>Cancel preview</button>
+          </div>
+        </section>}
+        {busy && <p role="status">Working on your request…</p>}
+      </>
+    )}
   </section>;
 }

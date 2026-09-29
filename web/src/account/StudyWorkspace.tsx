@@ -11,7 +11,8 @@ export const areas: { id: Area; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "home" }, { id: "library", label: "Library", icon: "book" },
   { id: "practice", label: "Practice", icon: "pen" }, { id: "cards", label: "Flashcards", icon: "cards" },
   { id: "history", label: "History", icon: "review" }, { id: "progress", label: "Progress", icon: "chart" },
-  { id: "plan", label: "Study Plan", icon: "calendar" }, { id: "settings", label: "Account & Settings", icon: "settings" },
+  { id: "plan", label: "Study Plan", icon: "calendar" }, { id: "tutor", label: "AI Tutor", icon: "chat" },
+  { id: "settings", label: "Account & Settings", icon: "settings" },
 ];
 const paths: Record<string, string> = {
   home: "m3 10 9-7 9 7v10H3Z M9 20v-7h6v7", book: "M12 5v16M12 5C9 2 5 3 2 4v15c4-1 7-1 10 2 3-3 6-3 10-2V4c-4-1-7-2-10 1Z",

@@ -25,14 +25,14 @@ function setup(enabled = true, vision = false) {
   return { calls, fetch };
 }
 
-it("has no Tutor Chat control or assistant request in the current release", async () => {
+it("has no AI Tutor control or assistant request in the current release when disabled", async () => {
   const f = setup(false); await screen.findByRole("heading", { name: "Dashboard" });
-  expect(screen.queryByRole("button", { name: "Tutor Chat" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "AI Tutor" })).toBeNull();
   expect(f.calls.some(c => c.path.startsWith("/api/assistant/"))).toBe(false);
 });
 
 it("previews exact text for each consent, preserves the visit across navigation, and clears on sign-out", async () => {
-  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }, { timeout: 5000 }));
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }, { timeout: 5000 }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Explain slope" } });
   fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
   expect(await screen.findByRole("heading", { name: "Included in this send" })).toBeTruthy();
@@ -45,7 +45,7 @@ it("previews exact text for each consent, preserves the visit across navigation,
   expect(f.calls.filter(c => c.path.endsWith("/preview"))).toHaveLength(2);
   expect(Object.keys(f.calls.find(c => c.path.endsWith("/send"))!.body).sort()).toEqual(["consent", "previewId", "visitId"]);
   fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }));
+  fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   expect(await screen.findByText("Fixture tutor reply")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "One more" } });
   fireEvent.change(screen.getByLabelText("Response language"), { target: { value: "vi" } });
@@ -57,11 +57,23 @@ it("previews exact text for each consent, preserves the visit across navigation,
   fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
   await screen.findByText("Signed out of this browser.");
   expect(screen.queryByText("Fixture tutor reply")).toBeNull();
-  expect(screen.queryByRole("button", { name: "Tutor Chat" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "AI Tutor" })).toBeNull();
+});
+
+it("resets conversation on New chat action", async () => {
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
+  fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "First message" } });
+  fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
+  fireEvent.click(await screen.findByRole("button", { name: "I consent — send to Gemini" }));
+  expect(await screen.findByText("Fixture tutor reply")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+  expect(screen.queryByText("Fixture tutor reply")).toBeNull();
+  expect((screen.getByLabelText("Your message") as HTMLTextAreaElement).value).toBe("");
+  expect(screen.getByText("Started a new conversation.")).toBeTruthy();
 });
 
 it("preserves drafts on provider failures and requires a fresh preview for a deliberate retry", async () => {
-  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }));
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Keep my draft" } });
   fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
   await screen.findByRole("button", { name: "I consent — send to Gemini" });
@@ -75,7 +87,7 @@ it("preserves drafts on provider failures and requires a fresh preview for a del
 });
 
 it("shows the exact reviewed image bytes, dimensions, and alt text before consent", async () => {
-  const f = setup(true, true); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }));
+  const f = setup(true, true); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   fireEvent.change(await screen.findByLabelText("Attach reviewed question (optional)"), { target: { value: "review-1" } });
   fireEvent.click(screen.getByLabelText("Share selected question visuals with Gemini"));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Explain this graph" } });
@@ -89,7 +101,7 @@ it("shows the exact reviewed image bytes, dimensions, and alt text before consen
 });
 
 it("ends the visit on pagehide and ignores a response that arrives after the visit ended", async () => {
-  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }));
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Discard on close" } });
   fireEvent.click(screen.getByRole("button", { name: "Preview this send" }));
   await screen.findByRole("button", { name: "I consent — send to Gemini" });
@@ -104,7 +116,7 @@ it("ends the visit on pagehide and ignores a response that arrives after the vis
 });
 
 it("clears the transcript on an authenticated 401 and never queues an offline send", async () => {
-  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }));
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   fireEvent.change(await screen.findByLabelText("Your message"), { target: { value: "Private draft" } });
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   fireEvent(window, new Event("offline"));
@@ -118,12 +130,36 @@ it("clears the transcript on an authenticated 401 and never queues an offline se
   expect(screen.queryByText("Private draft")).toBeNull();
 });
 
-it("suppresses every chat control if a Section Exam becomes active in another tab", async () => {
-  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "Tutor Chat" }));
+it("keeps sidebar tab visible and suppresses chat controls if a Section Exam becomes active", async () => {
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   await screen.findByLabelText("Your message");
   f.fetch.mockResolvedValueOnce(Response.json({ error: { code: "active_section_exam", message: "Finish the exam" } }, { status: 409 }));
   fireEvent(window, new Event("focus"));
-  await waitFor(() => expect(screen.queryByRole("button", { name: "Tutor Chat" })).toBeNull());
+  await waitFor(() => expect(screen.getByRole("button", { name: "AI Tutor" })).toBeTruthy());
   await waitFor(() => expect(screen.queryByLabelText("Your message")).toBeNull());
-  expect(screen.queryByRole("button", { name: "Check Tutor Chat availability" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Check AI Tutor availability/i })).toBeNull();
+  expect(screen.getByText(/Finish the exam/)).toBeTruthy();
+  expect(screen.getByText(/Section Exam in Progress/i)).toBeTruthy();
+});
+
+it("explains how to enter Assisted Practice when options return 409 assisted_practice_required", async () => {
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
+  await screen.findByLabelText("Your message");
+  f.fetch.mockResolvedValueOnce(Response.json({ error: { code: "assisted_practice_required", message: "Tutor Chat is unavailable during unassisted Practice." } }, { status: 409 }));
+  fireEvent(window, new Event("focus"));
+  await waitFor(() => expect(screen.getByRole("button", { name: "AI Tutor" })).toBeTruthy());
+  await waitFor(() => expect(screen.queryByLabelText("Your message")).toBeNull());
+  expect(screen.getByText(/Assisted Practice Required/i)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Check availability again" })).toBeTruthy();
+});
+
+it("keeps tab visible and shows retry when options return 503 provider failure", async () => {
+  const f = setup(); fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
+  await screen.findByLabelText("Your message");
+  f.fetch.mockResolvedValueOnce(Response.json({ error: { code: "eligibility_required", message: "Tutor Chat is awaiting a current provider eligibility and failure review." } }, { status: 503 }));
+  fireEvent(window, new Event("focus"));
+  await waitFor(() => expect(screen.getByRole("button", { name: "AI Tutor" })).toBeTruthy());
+  await waitFor(() => expect(screen.queryByLabelText("Your message")).toBeNull());
+  expect(screen.getByText(/awaiting a current provider eligibility/i)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Check AI Tutor availability" })).toBeTruthy();
 });

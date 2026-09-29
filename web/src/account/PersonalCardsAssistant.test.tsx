@@ -110,3 +110,63 @@ it("previews and shows visit-only advice for one selected Personal Deck without 
   expect(calls.find(call => call.path.endsWith("/flashcards-preview"))?.body).toMatchObject({ mode: "deck_advice", deck: "Vocabulary", words: "What should I review first?", cardIds: [] });
   expect(calls.some(call => call.path === "/api/cards/batch")).toBe(false);
 });
+
+it("distinguishes active Section Exam when options return 409", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string) => {
+    if (path === "/api/assistant/options") {
+      return Response.json({ error: { code: "active_section_exam", message: "Finish the active Section Exam before opening Tutor Chat." } }, { status: 409 });
+    }
+    throw new Error(`Unexpected request ${path}`);
+  }));
+  render(<PersonalCardsAssistant cards={[]} decks={[]} onSaved={async () => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: "Flashcard Assistant" }));
+  expect(await screen.findByText(/Finish the active Section Exam before using Flashcard Assistant/)).toBeTruthy();
+  expect(screen.queryByLabelText("Words or phrases")).toBeNull();
+});
+
+it("distinguishes unassisted Practice when options return 409 assisted_practice_required", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string) => {
+    if (path === "/api/assistant/options") {
+      return Response.json({ error: { code: "assisted_practice_required", message: "Tutor Chat is unavailable during unassisted Practice." } }, { status: 409 });
+    }
+    throw new Error(`Unexpected request ${path}`);
+  }));
+  render(<PersonalCardsAssistant cards={[]} decks={[]} onSaved={async () => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: "Flashcard Assistant" }));
+  expect(await screen.findByText(/Flashcard Assistant is unavailable during unassisted Practice/)).toBeTruthy();
+});
+
+it("distinguishes provider eligibility failure and offers retry", async () => {
+  const fetchMock = vi.fn(async (path: string) => {
+    if (path === "/api/assistant/options") {
+      return Response.json({ error: { code: "eligibility_required", message: "Tutor Chat is awaiting a current provider eligibility and failure review." } }, { status: 503 });
+    }
+    throw new Error(`Unexpected request ${path}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<PersonalCardsAssistant cards={[]} decks={[]} onSaved={async () => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: "Flashcard Assistant" }));
+  expect(await screen.findByText(/Flashcard Assistant is awaiting provider configuration or review/)).toBeTruthy();
+  const retryBtn = screen.getByRole("button", { name: "Retry" });
+  expect(retryBtn).toBeTruthy();
+  fireEvent.click(retryBtn);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it("preserves learner draft when preview fails due to provider rate limit", async () => {
+  const fetchMock = vi.fn(async (path: string) => {
+    if (path === "/api/assistant/options") return Response.json({ options: [option] });
+    if (path === "/api/assistant/flashcards-preview") {
+      return Response.json({ error: { code: "quota_exhausted", message: "Quota exhausted. Try again later." } }, { status: 429 });
+    }
+    throw new Error(`Unexpected request ${path}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<PersonalCardsAssistant cards={[]} decks={[]} onSaved={async () => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: "Flashcard Assistant" }));
+  fireEvent.change(await screen.findByLabelText("Words or phrases"), { target: { value: "ephemeral" } });
+  fireEvent.click(screen.getByRole("button", { name: "Preview assistant request" }));
+  expect(await screen.findByText(/Quota exhausted|Flashcard Assistant is temporarily rate limited/)).toBeTruthy();
+  expect((screen.getByLabelText("Words or phrases") as HTMLTextAreaElement).value).toBe("ephemeral");
+});
+

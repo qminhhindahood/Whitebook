@@ -54,13 +54,40 @@ export function PersonalCardsAssistant({ cards, decks, onSessionEnded, onSaved }
   const canPreview = assistantMode === "deck_advice" ? !!assistantWords.trim() : assistantSource === "words" ? !!assistantWords.trim() : assistantCardIds.length > 0;
 
   async function openAssistant() {
+    setBusy(true);
+    setNotice("");
     try {
       const response = await accountFetch("/api/assistant/options");
       if (response.status === 401) { onSessionEnded?.(); return; }
-      if (!response.ok) throw new Error("assistant unavailable");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const code = data.error?.code;
+        let message = data.error?.message;
+        if (code === "active_section_exam") {
+          message = "Finish the active Section Exam before using Flashcard Assistant. AI tools are locked during an exam.";
+        } else if (code === "assisted_practice_required") {
+          message = "Flashcard Assistant is unavailable during unassisted Practice. Switch to Assisted Practice or complete your Practice Attempt before using the assistant.";
+        } else if (code === "eligibility_required" || response.status === 503) {
+          message = "Flashcard Assistant is awaiting provider configuration or review.";
+        } else if (code === "credential_required") {
+          message = "A Gemini credential is required. Save your API key in AI Tutor before using Flashcard Assistant.";
+        } else if (response.status === 429 || code === "quota_exhausted" || code === "rate_limited") {
+          message = "Flashcard Assistant is temporarily rate limited or at capacity. Please try again shortly.";
+        } else {
+          message = data.error?.message ?? "Flashcard Assistant is unavailable. Your cards still work normally.";
+        }
+        setNotice(message);
+        return;
+      }
       const data = await response.json() as { options: AssistantOption[] };
-      setAssistantOptions(data.options); setAssistantProvider(data.options[0] ? `${data.options[0].route}/${data.options[0].model}` : ""); setAssistantOpen(true);
-    } catch { setNotice("Flashcard Assistant is unavailable. Your cards still work normally."); }
+      setAssistantOptions(data.options);
+      setAssistantProvider(data.options[0] ? `${data.options[0].route}/${data.options[0].model}` : "");
+      setAssistantOpen(true);
+    } catch {
+      setNotice("Flashcard Assistant could not connect. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function previewAssistant() {
@@ -71,20 +98,45 @@ export function PersonalCardsAssistant({ cards, decks, onSessionEnded, onSaved }
       const response = await accountFetch("/api/assistant/flashcards-preview", { method: "POST", headers: { "X-CSRF-Token": csrfToken(), "Content-Type": "application/json" }, body: JSON.stringify({ visitId: assistantVisit, route, model, locale: "en", mode: assistantMode,
         words: assistantMode === "deck_advice" || assistantSource === "words" ? assistantWords : "",
         cardIds: assistantMode === "draft_cards" && assistantSource === "cards" ? assistantCardIds : [], context: assistantContext, deck: assistantDeck }) });
-      if (!response.ok) throw new Error("preview failed");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const code = data.error?.code;
+        const message = data.error?.message;
+        if (response.status === 429 || code === "rate_limited" || code === "quota_exhausted") {
+          throw new Error(message ?? "Flashcard Assistant is temporarily rate limited. Your draft is preserved. Try again in a moment.");
+        } else if (response.status === 502 || response.status === 503) {
+          throw new Error(message ?? "Temporary provider capacity error. Your draft is preserved. Try again in a moment.");
+        } else if (code === "active_section_exam" || code === "assisted_practice_required") {
+          throw new Error(message ?? "Flashcard Assistant is blocked during an active exam or unassisted practice.");
+        } else if (code === "credential_required") {
+          throw new Error(message ?? "A Gemini credential is required. Save your API key in AI Tutor before previewing.");
+        }
+        throw new Error(message ?? "The assistant preview could not be created. Your draft is preserved.");
+      }
       const data = await response.json() as { previewId: string; payload: string };
       if (!assistantProviderDetails) throw new Error("provider unavailable");
       setAssistantPreview({ ...data, provider: assistantProviderDetails, mode: assistantMode, deck: assistantDeck });
-    } catch { setNotice("The assistant preview could not be created. Your draft is preserved."); }
-    finally { setBusy(false); }
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "The assistant preview could not be created. Your draft is preserved.");
+    } finally { setBusy(false); }
   }
 
   async function sendAssistant() {
     if (!assistantPreview) return;
-    setBusy(true);
+    setBusy(true); setNotice("");
     try {
       const response = await accountFetch("/api/assistant/flashcards-send", { method: "POST", headers: { "X-CSRF-Token": csrfToken(), "Content-Type": "application/json" }, body: JSON.stringify({ previewId: assistantPreview.previewId, visitId: assistantVisit, consent: true }) });
-      if (!response.ok) throw new Error("send failed");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const code = data.error?.code;
+        const message = data.error?.message;
+        if (response.status === 429 || code === "rate_limited" || code === "quota_exhausted") {
+          throw new Error(message ?? "Temporary provider capacity or rate limit reached. Your reviewed cards and draft remain unchanged. Please retry shortly.");
+        } else if (response.status === 502 || response.status === 503) {
+          throw new Error(message ?? "Temporary provider capacity error. Your reviewed cards and draft remain unchanged. Please retry shortly.");
+        }
+        throw new Error(message ?? "The assistant request failed. Your reviewed cards and draft remain unchanged.");
+      }
       const data = await response.json() as { text: string };
       if (assistantMode === "deck_advice") setAssistantAdvice(data.text);
       else {
@@ -93,8 +145,9 @@ export function PersonalCardsAssistant({ cards, decks, onSessionEnded, onSaved }
         else { setAssistantRawDraft(data.text); setNotice("Gemini's reply did not match the card format. The complete raw draft is preserved below for manual review."); }
       }
       setAssistantPreview(null);
-    } catch { setNotice("The assistant request failed. Your reviewed cards and draft remain unchanged."); }
-    finally { setBusy(false); }
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "The assistant request failed. Your reviewed cards and draft remain unchanged.");
+    } finally { setBusy(false); }
   }
 
   async function saveAssistantBatch() {
@@ -148,6 +201,6 @@ export function PersonalCardsAssistant({ cards, decks, onSessionEnded, onSaved }
       </div>)}<button type="button" disabled={busy} onClick={() => void saveAssistantBatch()}>Save all reviewed cards</button></section>}
       <button type="button" disabled={busy} onClick={() => setAssistantOpen(false)}>Close Assistant</button>
     </section>}
-    {notice && <p className="cards-notice" role="status">{notice}</p>}
+    {notice && <div className="cards-notice-row"><p className="cards-notice" role="status">{notice}</p>{!assistantOpen && (notice.includes("rate limited") || notice.includes("capacity") || notice.includes("could not connect") || notice.includes("awaiting provider") || notice.includes("credential")) && <button type="button" className="cards-notice-retry" disabled={busy} onClick={() => void openAssistant()}>Retry</button>}</div>}
   </>;
 }
