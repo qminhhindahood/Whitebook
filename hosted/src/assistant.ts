@@ -12,6 +12,8 @@ export type AssistantEnv = AccountEnv & {
   ASSISTANT_CATALOG?: string;
   ASSISTANT_KEY_KEK?: string;
   ASSISTANT_SNAPSHOT_KEY?: string;
+  GCP_GEMINI_SHARED_KEY?: string;
+  /** @deprecated Use GCP_GEMINI_SHARED_KEY. */
   GEMINI_SHARED_KEY?: string;
 };
 type Option = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: ("en" | "vi")[]; vision: boolean; quota: string; healthy: boolean };
@@ -36,6 +38,7 @@ const consentRequired = () => failure(409, "consent_required", "This preview cha
 const bodyHasExactly = (body: Record<string, unknown>, required: string[], optional: string[] = []) =>
   required.every(key => Object.prototype.hasOwnProperty.call(body, key)) && Object.keys(body).every(key => required.includes(key) || optional.includes(key));
 const CARD_FIELDS = ["front", "definition", "vietnamese", "partOfSpeech", "pronunciation", "synonyms", "example"] as const;
+const sharedGeminiKey = (env: AssistantEnv) => env.GCP_GEMINI_SHARED_KEY || env.GEMINI_SHARED_KEY;
 
 // No default model, price, audience eligibility, or capability claims. Operators must
 // supply a dated, reviewed catalog; fixture metadata cannot enable the deployed app.
@@ -65,9 +68,10 @@ async function credential(env: AssistantEnv, account: string) {
 }
 async function routeKey(env: AssistantEnv, account: string, option: Option): Promise<{ key: string; version: string } | null> {
   if (option.route === "shared_gemini") {
-    if (!env.GEMINI_SHARED_KEY) return null;
-    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(env.GEMINI_SHARED_KEY));
-    return { key: env.GEMINI_SHARED_KEY, version: Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2, "0")).join("") };
+    const key = sharedGeminiKey(env);
+    if (!key) return null;
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+    return { key, version: Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2, "0")).join("") };
   }
   const row = await credential(env, account);
   return row ? { key: await unseal(row.ciphertext, env.ASSISTANT_KEY_KEK!, `credential:${account}`), version: row.version } : null;
@@ -402,7 +406,7 @@ async function preview(body: Record<string, unknown>, env: AssistantEnv, session
   const key = await routeKey(env, session.account_id, provider);
   if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
   const personal = await credential(env, session.account_id);
-  const secrets = [key.key, env.GEMINI_SHARED_KEY, personal ? await unseal(personal.ciphertext, env.ASSISTANT_KEY_KEK!, `credential:${session.account_id}`) : null];
+  const secrets = [key.key, sharedGeminiKey(env), personal ? await unseal(personal.ciphertext, env.ASSISTANT_KEY_KEK!, `credential:${session.account_id}`) : null];
   if (/(?:AIza[0-9A-Za-z_-]{30,}|AQ\.[0-9A-Za-z_-]{20,}|-----BEGIN .*PRIVATE KEY-----)/.test(payload) || secrets.some(s => s && payload.includes(s))) return failure(400, "blocked_content", "Remove credentials from the prompt and preview again.");
   if (!await reserve(env, `preview:${session.account_id}`, 0, 60, 1, now)) return rateLimitedResponse("rate_limited", Math.ceil((HOUR - now % HOUR) / 1000), now);
    const snapshot: Snapshot = { id: crypto.randomUUID(), account: session.account_id, session: session.token_hash, visit: body.visitId, expires: now + 5 * 60000, provider, credentialVersion: key.version, payload, tokens: estimateTokens(payload, attached?.visuals), ...(attached ? { attachmentReviewId: attached.reviewId, attachmentVisuals: body.includeVisuals === true, attachmentHash: await sha256(JSON.stringify(attached)) } : {}) };
@@ -462,7 +466,7 @@ async function planPreview(body: Record<string, unknown>, request: Request, env:
   const latest = await env.DB.prepare("SELECT id FROM study_plan_versions WHERE account_id = ? ORDER BY version DESC LIMIT 1")
     .bind(session.account_id).first<{ id: string }>();
   if ((latest?.id ?? null) !== body.expectedVersionId) return failure(409, "plan_changed", "Reload the latest Study Plan before previewing suggestions.");
-  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are a Study Plan assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Return exactly one JSON array of 1 to 20 proposed tasks, with no markdown or extra prose. Each task must contain date, kind, title, minutes, action, and explanation. Use kind "cards" only when dueCardTotal is positive, with action {"area":"cards"}; or kind "practice" with action {"area":"practice","revisionId":"an activityCatalog revisionId","section":"its section"}. Select only real activityCatalog pairs. Do not propose review tasks because individual review links are not shared. Use study days before the Primary SAT Target and stay within dailyMinutes. Never predict SAT point gains, invent packages or questions, or equate Whitebook Raw Accuracy with SAT points. Do not save the plan.` }] },
+  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are a Study Plan assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Return exactly one JSON array of 1 to 20 proposed tasks, with no markdown or extra prose. Each task must contain date, kind, title, minutes, action, and explanation. Use kind "cards" only when dueCardTotal is positive, with action {"area":"cards"}; or kind "practice" with action {"area":"practice","revisionId":"an activityCatalog revisionId","section":"its section"}. Select only real activityCatalog pairs. Do not propose review tasks because individual review links are not shared. The server's current study date is ${assembled.envelope.today}; schedule only on study days from that date (inclusive) through the day before ${assembled.envelope.primarySatTarget}. Stay within dailyMinutes. Never predict SAT point gains, invent packages or questions, or equate Whitebook Raw Accuracy with SAT points. Do not save the plan.` }] },
     contents: [{ role: "user", parts: [{ text: JSON.stringify(assembled.envelope) }] }], generationConfig: { maxOutputTokens: PLAN_OUTPUT }, store: false });
   if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return failure(413, "too_large", "The selected evidence is too large to preview.");
   const key = await routeKey(env, session.account_id, provider);
@@ -545,7 +549,7 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
       return planAccept(body, request, env, session, time);
     }
     // A shared route is not usable until the operator supplies its credential.
-    const options = catalog(env, time).filter(option => option.route !== "shared_gemini" || !!env.GEMINI_SHARED_KEY);
+    const options = catalog(env, time).filter(option => option.route !== "shared_gemini" || !!sharedGeminiKey(env));
     if (!options.length) return failure(503, "eligibility_required", "Tutor Chat is awaiting a current provider eligibility and failure review.");
      if (request.method === "GET" && path === "/api/assistant/options") {
       const saved = await credential(env, session.account_id);

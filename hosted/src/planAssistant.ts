@@ -6,7 +6,7 @@ type Selection = { official: boolean; whitebook: boolean };
 export type Proposal = Pick<PlannedTask, "date" | "kind" | "title" | "minutes" | "action" | "explanation">;
 type Version = { id: string; version: number };
 type CatalogActivity = { revisionId: string; packageTitle: string; section: string; questionCount: number; evidenceCount: number; rawAccuracy: number | null; tentative: boolean };
-export type PlanEnvelope = { flow: "study_plan_suggestion"; officialSatResult: unknown; whitebookSectionExam: unknown;
+export type PlanEnvelope = { flow: "study_plan_suggestion"; today: string; officialSatResult: unknown; whitebookSectionExam: unknown;
   officialScoreGoal: number | null; primarySatTarget: string; aggregateEvidence: unknown; dueCardTotal: number;
   planConstraints: { studyDays: number[]; restDays: number[]; dailyMinutes: number }; activityCatalog: CatalogActivity[] };
 
@@ -44,6 +44,7 @@ export async function planEnvelope(request: Request, env: AccountEnv, accountId:
   const aggregateEvidence = await progressResponse.json();
   const envelope: PlanEnvelope = {
     flow: "study_plan_suggestion",
+    today: ctx.today,
     officialSatResult: score ? { label: "Official SAT Result", resultId: score.id, administrationDate: score.administration_date,
       total: score.total_score, readingWriting: score.reading_writing_score, math: score.math_score,
       skillsInsightBands: Object.fromEntries(BANDS.map((band, index) => [band, score[COLUMNS[index]]])) } : null,

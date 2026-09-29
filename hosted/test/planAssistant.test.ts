@@ -105,7 +105,7 @@ it("previews only selected latest sources with all nullable bands and no questio
   expect(officialEnvelope.officialSatResult.skillsInsightBands).toEqual(Object.fromEntries([
     "informationIdeas", "craftStructure", "expressionOfIdeas", "standardEnglishConventions", "algebra", "advancedMath", "problemSolvingDataAnalysis", "geometryTrigonometry",
   ].map(key => [key, null])));
-  expect(officialEnvelope).toMatchObject({ officialScoreGoal: 1400, primarySatTarget: "2026-10-10", dueCardTotal: 0,
+  expect(officialEnvelope).toMatchObject({ today: "2026-09-28", officialScoreGoal: 1400, primarySatTarget: "2026-10-10", dueCardTotal: 0,
     planConstraints: { studyDays: [1, 2, 3, 4, 5], restDays: [0, 6], dailyMinutes: 30 } });
   expect(officialEnvelope.activityCatalog).toEqual([expect.objectContaining({ revisionId: "revision-1", section: "Math" })]);
   const whitebook = await f.call("plan-preview", { ...f.input, whitebook: true });

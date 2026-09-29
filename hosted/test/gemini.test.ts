@@ -17,7 +17,7 @@ it("uses the real HTTP adapter with exactly the preview body and a header-only c
   const address = server.address() as { port: number };
   vi.stubGlobal("fetch", vi.fn((url: string, init: RequestInit) => {
     expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent");
-    expect(init.redirect).toBe("error");
+    expect(init.redirect).toBe("manual");
     return nativeFetch(`http://127.0.0.1:${address.port}`, init);
   }));
   try {
@@ -26,7 +26,7 @@ it("uses the real HTTP adapter with exactly the preview body and a header-only c
   } finally { await new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve())); }
 });
 
-it.each([[429, "quota_exhausted"], [401, "credential_invalid"], [403, "credential_invalid"], [404, "model_unavailable"], [500, "provider_error"]])("sanitizes HTTP %s without a retry or provider switch", async (status, code) => {
+it.each([[302, "provider_error"], [429, "quota_exhausted"], [401, "credential_invalid"], [403, "credential_invalid"], [404, "model_unavailable"], [500, "provider_error"]])("sanitizes HTTP %s without a retry or provider switch", async (status, code) => {
   const fetch = vi.fn(async () => new Response("SECRET UPSTREAM BODY", { status: Number(status), headers: { "Retry-After": "17" } })); vi.stubGlobal("fetch", fetch);
   await expect(geminiAdapter(payload, "gemini-test", "synthetic-key")).rejects.toMatchObject({ code });
   expect(fetch).toHaveBeenCalledTimes(1);

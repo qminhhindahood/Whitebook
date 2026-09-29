@@ -387,6 +387,20 @@ it("requires new consent for changed text, visit, model, payer, terms, price, cr
   expect(f.adapter).not.toHaveBeenCalled();
 });
 
+it("uses GCP_GEMINI_SHARED_KEY first and revokes previews when it rotates", async () => {
+  const f = await fixture();
+  f.env.GCP_GEMINI_SHARED_KEY = "canonical-gcp-shared-key";
+  const first = await f.preview();
+  const send = { previewId: first.previewId, visitId: f.input.visitId, consent: true };
+  expect((await f.call("send", send)).status).toBe(200);
+  expect(f.adapter.mock.calls[0][2]).toBe("canonical-gcp-shared-key");
+
+  const second = await f.preview();
+  f.env.GCP_GEMINI_SHARED_KEY = "rotated-gcp-shared-key";
+  expect((await f.call("send", { ...send, previewId: second.previewId })).status).toBe(409);
+  expect(f.adapter).toHaveBeenCalledOnce();
+});
+
 it("rejects client evidence, attachments, non-Gemini routes and known credentials; caps the exact prior turns", async () => {
   const f = await fixture();
   for (const extra of [{ account: { email: "private" } }, { acceptedAnswer: "C" }, { attachment: "review" }, { credentialId: "key" }, { route: "openrouter" }, { currentMessage: "test-shared-credential" }, { currentMessage: "AIza" + "x".repeat(35) }, { currentMessage: "AQ." + "x".repeat(35) }])

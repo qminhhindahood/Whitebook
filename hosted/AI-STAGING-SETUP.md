@@ -5,9 +5,11 @@ Whitebook's Google sign-in is separate from Gemini. The staging Worker already h
 ## Complete the provider setup
 
 1. In Cloudflare, open **Workers & Pages → whitebook-hosted-staging → Settings → Variables and Secrets**. Add two **secret** values, each a different, persistent 64-character lowercase hexadecimal string (32 random bytes): `ASSISTANT_KEY_KEK` and `ASSISTANT_SNAPSHOT_KEY`. Never rotate the first one casually: it encrypts learner personal Gemini keys. Never commit either value.
-2. For Whitebook-paid access, create a Gemini API key in the Google project that will pay for requests, then add it as the Worker **secret** `GEMINI_SHARED_KEY`. Until this is present, Whitebook hides the shared route. Learners can use the personal route by entering their own Gemini API key in Tutor Chat after the catalog is enabled.
-3. Review the [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms), [model list](https://ai.google.dev/gemini-api/docs/models), [pricing](https://ai.google.dev/gemini-api/docs/pricing), and your project's access to the model. The owner has stated that staging users are adults. Record the dated audience/provider review and a real key/model failure check. The Worker deliberately refuses a missing or expired review.
-4. Add `ASSISTANT_CATALOG` as a Worker secret containing JSON in the shape below. Replace the evidence text with the actual review, set `reviewedUntil` to a UTC epoch-millisecond timestamp within the next seven days, and set `healthy` only after a successful direct provider check. Review and refresh it at least weekly. As of September 29, 2026, Google's model list includes `gemini-3.5-flash-lite`; the [standard paid prices](https://ai.google.dev/gemini-api/docs/pricing) shown are USD $0.30 input and $2.50 output per million tokens. Confirm these at setup time because pricing and access can change.
+2. For Whitebook-paid access, create a Gemini API key and add it as the Worker **secret** `GCP_GEMINI_SHARED_KEY`. The adapter sends this secret only in the `x-goog-api-key` header. This is the preferred binding name; the Worker still accepts the legacy `GEMINI_SHARED_KEY` if the new one is absent. Until either secret is present, Whitebook hides the shared route. Learners can use their own Gemini API key in Tutor Chat after the catalog is enabled.
+3. Review the [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms), [model list](https://ai.google.dev/gemini-api/docs/models), [pricing](https://ai.google.dev/gemini-api/docs/pricing), and your project's model access. The owner has stated that staging users are adults. Record the dated audience/provider review and a real key/model failure check. The Worker deliberately refuses a missing or expired review.
+4. Add `ASSISTANT_CATALOG` as a Worker secret containing JSON in the shape below. Replace the evidence text with the actual review, set `reviewedUntil` to a UTC epoch-millisecond timestamp within the next seven days, and set `healthy` only after a successful provider check. Review and refresh it at least weekly. As of September 29, 2026, Google's model list includes stable Gemini 3.8 Flash (`gemini-3.8-flash`). Google's introductory standard paid price through December 31, 2026 is USD $0.75 per million input tokens and $3.75 per million output tokens; project tier and billing settings determine the actual charge. Recheck pricing and access at setup time.
+
+The Worker currently calls the Gemini Developer API at `generativelanguage.googleapis.com` with `x-goog-api-key`. This is distinct from the Google Cloud Gemini Enterprise Agent Platform quickstart. Its standard REST route uses `aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` with Google Cloud credentials; express mode has a separate API-key endpoint. The temporary staging key succeeded on the Developer API and returned 403 on the Agent Platform express endpoint, so changing the secret name alone does not switch the provider. See Google's [Agent Platform endpoint guidance](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/express-mode/overview) and [Gemini 3.8 Flash guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-3-8-flash).
 
 ```json
 {
@@ -15,13 +17,13 @@ Whitebook's Google sign-in is separate from Gemini. The staging Worker already h
   "audienceEligibility": "signed_in_adults_18_plus",
   "providerEligibility": "approved",
   "eligibilityEvidence": "Owner review on YYYY-MM-DD: audience, available region, Gemini API terms and model access checked",
-  "failureCheckEvidence": "YYYY-MM-DD: key and gemini-3.5-flash-lite generateContent smoke check passed",
+  "failureCheckEvidence": "YYYY-MM-DD: key and gemini-3.8-flash generateContent smoke check passed",
   "options": [
     {
       "route": "shared_gemini",
-      "model": "gemini-3.5-flash-lite",
+      "model": "gemini-3.8-flash",
       "payer": "Whitebook",
-      "price": "Whitebook pays; standard paid model rate reviewed on YYYY-MM-DD: USD $0.30 input / $2.50 output per 1M tokens",
+      "price": "Whitebook pays; project tier applies. Standard paid rate reviewed on YYYY-MM-DD: USD $0.75 input / $3.75 output per 1M tokens through 2026-12-31",
       "terms": "Gemini API Additional Terms; review data use for the selected billing tier",
       "termsUrl": "https://ai.google.dev/gemini-api/terms",
       "termsVersion": "2026-03-23",
@@ -32,9 +34,9 @@ Whitebook's Google sign-in is separate from Gemini. The staging Worker already h
     },
     {
       "route": "personal_gemini",
-      "model": "gemini-3.5-flash-lite",
+      "model": "gemini-3.8-flash",
       "payer": "Your Google project",
-      "price": "Your Gemini tier applies; standard paid model rate reviewed on YYYY-MM-DD: USD $0.30 input / $2.50 output per 1M tokens",
+      "price": "Your Gemini tier applies; standard paid rate reviewed on YYYY-MM-DD: USD $0.75 input / $3.75 output per 1M tokens through 2026-12-31",
       "terms": "Gemini API Additional Terms; free and paid tiers have different data use",
       "termsUrl": "https://ai.google.dev/gemini-api/terms",
       "termsVersion": "2026-03-23",

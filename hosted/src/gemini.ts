@@ -10,9 +10,13 @@ export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: payload, signal: controller.signal, redirect: "error",
+      // Cloudflare Workers supports manual redirects, not redirect: "error".
+      // Non-2xx responses below reject redirects without forwarding the key.
+      body: payload, signal: controller.signal, redirect: "manual",
     });
     if (!response.ok) {
+      // Operational diagnostics must never contain credentials, prompts, or provider bodies.
+      console.error("gemini_provider_failure", { phase: "http", status: response.status, model });
       await response.body?.cancel();
       if (response.status === 429) {
         const seconds = Number(response.headers.get("Retry-After"));
@@ -24,7 +28,10 @@ export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
     }
     // Bound even malformed upstream responses, without logging their body or headers.
     const reader = response.body?.getReader();
-    if (!reader) throw new GeminiFailure("provider_error");
+    if (!reader) {
+      console.error("gemini_provider_failure", { phase: "missing_body", model });
+      throw new GeminiFailure("provider_error");
+    }
     const chunks: Uint8Array[] = []; let length = 0;
     while (true) {
       const chunk = await reader.read(); if (chunk.done) break;
@@ -37,13 +44,17 @@ export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
     const data = JSON.parse(new TextDecoder().decode(all)) as { promptFeedback?: { blockReason?: string }; candidates?: { finishReason?: string; content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
     const candidate = data.candidates?.[0];
     if (data.promptFeedback?.blockReason || ["SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"].includes(candidate?.finishReason ?? "")) throw new GeminiFailure("blocked_content");
-    if (!candidate || !["STOP", "MAX_TOKENS"].includes(candidate.finishReason ?? "")) throw new GeminiFailure("provider_error");
+    if (!candidate || !["STOP", "MAX_TOKENS"].includes(candidate.finishReason ?? "")) {
+      console.error("gemini_provider_failure", { phase: "invalid_candidate", finishReason: candidate?.finishReason ?? null, model });
+      throw new GeminiFailure("provider_error");
+    }
     const text = candidate.content?.parts?.filter(p => !p.thought).map(p => p.text ?? "").join("");
     if (!text?.trim() || text.length > 8000 || text.includes(key)) throw new GeminiFailure("blocked_content");
     return text;
   } catch (error) {
     if (controller.signal.aborted) throw new GeminiFailure("timeout", 5);
     if (error instanceof GeminiFailure) throw error;
+    console.error("gemini_provider_failure", { phase: "transport_or_parse", kind: error instanceof Error ? error.name : typeof error, model });
     throw new GeminiFailure("provider_error", 30);
   } finally { clearTimeout(timeout); }
 };
