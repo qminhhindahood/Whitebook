@@ -17,7 +17,7 @@ import { AssistantSettings } from "./AssistantSettings";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; timeZone: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
-type TutorChatProps = { workspaceView: string; onAvailability: (available: boolean) => void; onSessionEnded: () => void };
+type TutorChatProps = { workspaceView: string; learnerName?: string; onAvailability: (available: boolean) => void; onSessionEnded: () => void };
 const TutorChat = lazy<ComponentType<TutorChatProps>>(() => import.meta.env.VITE_AI_RELEASE_ENABLED === "true"
   ? import("./TutorChat") : Promise.resolve({ default: () => null }));
 
@@ -224,8 +224,8 @@ export function AccountApp() {
       </aside>
       <div className="app-shell"><header className="topbar"><div className="breadcrumb">My workspace <span>/</span><strong>{areas.find(item => item.id === view)?.label}</strong></div><div className="top-right"><span className="demo-label">Your private study space</span><button className="avatar mini" aria-label="Open account settings" onClick={() => navigate("settings")}>{name[0]}</button></div></header>
       <div className={`columns${view === "dashboard" ? "" : " columns--study"}`}><main className="study-main" id="study-main">
-        {view !== "dashboard" && <div className="greeting"><h1 id="page-heading" tabIndex={-1}>{areas.find(item => item.id === view)?.label ?? (tutorEnabled ? "Tutor Chat" : "")}</h1></div>}
-        {tutorEnabled && <Suspense fallback={null}><TutorChat key={me.account.id} workspaceView={view} onAvailability={setTutorAvailable} onSessionEnded={handleSessionEnded} /></Suspense>}
+        {view !== "dashboard" && view !== "tutor" && <div className="greeting"><h1 id="page-heading" tabIndex={-1}>{areas.find(item => item.id === view)?.label ?? (tutorEnabled ? "Tutor Chat" : "")}</h1></div>}
+        {tutorEnabled && <Suspense fallback={null}><TutorChat key={me.account.id} workspaceView={view} learnerName={name} onAvailability={setTutorAvailable} onSessionEnded={handleSessionEnded} /></Suspense>}
         {view === "dashboard" ? <><Reminders accountId={me.account.id} refreshKey={refreshKey} onChooseDate={() => setDatesOpen(true)} onSessionEnded={handleSessionEnded} /><StudyDashboard data={workspace.data} name={name} timeZone={me.account.timeZone} onNavigate={navigate} onDates={() => setDatesOpen(true)} onPractice={startPractice} onResume={resumeAttempt} />{workspace.error && <p className="workspace-notice" role="status">{workspace.error} <button className="secondary" onClick={workspace.retry}>Retry</button></p>}</> :
           view === "tutor" && tutorEnabled ? null :
           view === "cards" ? <FlashcardsArea onSessionEnded={handleSessionEnded} /> :

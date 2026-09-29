@@ -22,6 +22,13 @@ const paths: Record<string, string> = {
   calendar: "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2ZM7 2v6m10-6v6M3 11h18",
   leaf: "M20 3C8 2 2 7 5 15c7 6 16 0 15-12ZM4 21 15 9", arrow: "M4 12h16m-6-6 6 6-6 6", chevron: "m9 5 7 7-7 7",
   settings: "m10 3-1 3-3 1-3-1-1 4 3 2v3l-1 3 3 3 3-2h3l3 2 3-3-1-3v-3l3-2-1-4-3 1-3-1-1-3ZM9 12a3 3 0 1 0 6 0 3 3 0 0 0-6 0",
+  fullscreen: "M3 3h6v2H5v4H3V3Zm18 0h-6v2h4v4h2V3Zm0 18h-6v-2h4v-4h2v6ZM3 21h6v-2H5v-4H3v6Z",
+  fullscreenExit: "M5 9h4V5H7v2H5v2Zm14 0h-4V5h2v2h2v2Zm0 6h-4v4h2v-2h2v-2ZM5 15h4v4H7v-2H5v-2Z",
+  plus: "M12 5v14m-7-7h14",
+  arrowUp: "M12 19V5m-7 7 7-7 7 7",
+  copy: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2Zm-4 4v12a2 2 0 0 0 2 2h10",
+  check: "m5 13 4 4L19 7",
+  sparkle: "M12 3c.5 3 2.5 5 5.5 5.5-3 .5-5 2.5-5.5 5.5-.5-3-2.5-5-5.5-5.5 3-.5 5-2.5 5.5-5.5Z",
 };
 export function Icon({ name, className = "" }: { name: string; className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name] ?? paths.book} /></svg>;

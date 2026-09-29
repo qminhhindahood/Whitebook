@@ -13,11 +13,128 @@ class ChatFailure extends Error {
 }
 const selectionId = (p: Provider) => `${p.route}/${p.model}`;
 
-// Mounted for the signed-in workspace, even while hidden by another area. Nothing
-// lives in browser storage. Unmount, pagehide (including bfcache), or reload ends it.
-export default function TutorChat({ workspaceView, onAvailability, onSessionEnded }: {
-  workspaceView: string; onAvailability: (available: boolean) => void; onSessionEnded: () => void;
-}) {
+export type TutorChatProps = {
+  workspaceView: string;
+  learnerName?: string;
+  onAvailability: (available: boolean) => void;
+  onSessionEnded: () => void;
+};
+
+const PROMPT_SUGGESTIONS = [
+  { icon: "💡", title: "Math quadratics", text: "How do I recognize when to use the quadratic formula vs factoring on SAT Math?" },
+  { icon: "📖", title: "Paired passages", text: "What is the best strategy for paired historical passages in Reading and Writing?" },
+  { icon: "✍️", title: "Grammar rules", text: "Can you explain semicolon and comma splice rules with SAT examples?" },
+  { icon: "⏱️", title: "Pacing advice", text: "How should I budget my time across the 22 questions in Math Module 2?" },
+];
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="tutor-turn-action-btn"
+      title={copied ? "Copied!" : "Copy response"}
+      aria-label={copied ? "Copied" : "Copy response"}
+      onClick={() => {
+        void navigator.clipboard?.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+    >
+      <Icon name={copied ? "check" : "copy"} />
+      <span>{copied ? "Copied" : "Copy"}</span>
+    </button>
+  );
+}
+
+function renderInline(str: string): React.ReactNode {
+  const parts = str.split(/(\*\*.*?\*\*|`.*?`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
+      return <code key={i} className="tutor-inline-code">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+}
+
+function formatGeminiContent(text: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let listItems: string[] = [];
+  let listType: "ul" | "ol" | null = null;
+
+  const flushList = (key: number) => {
+    if (!listItems.length || !listType) return;
+    if (listType === "ul") {
+      elements.push(
+        <ul key={`ul-${key}`} className="tutor-formatted-list">
+          {listItems.map((item, idx) => (
+            <li key={idx}>{renderInline(item)}</li>
+          ))}
+        </ul>
+      );
+    } else {
+      elements.push(
+        <ol key={`ol-${key}`} className="tutor-formatted-list">
+          {listItems.map((item, idx) => (
+            <li key={idx}>{renderInline(item)}</li>
+          ))}
+        </ol>
+      );
+    }
+    listItems = [];
+    listType = null;
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList(index);
+      return;
+    }
+
+    if (trimmed.startsWith("### ")) {
+      flushList(index);
+      elements.push(<h4 key={index} className="tutor-heading-3">{renderInline(trimmed.slice(4))}</h4>);
+      return;
+    }
+    if (trimmed.startsWith("## ")) {
+      flushList(index);
+      elements.push(<h3 key={index} className="tutor-heading-2">{renderInline(trimmed.slice(3))}</h3>);
+      return;
+    }
+    if (trimmed.startsWith("# ")) {
+      flushList(index);
+      elements.push(<h3 key={index} className="tutor-heading-1">{renderInline(trimmed.slice(2))}</h3>);
+      return;
+    }
+
+    if (/^[*\-•]\s+/.test(trimmed)) {
+      if (listType !== "ul") flushList(index);
+      listType = "ul";
+      listItems.push(trimmed.replace(/^[*\-•]\s+/, ""));
+      return;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      if (listType !== "ol") flushList(index);
+      listType = "ol";
+      listItems.push(trimmed.replace(/^\d+\.\s+/, ""));
+      return;
+    }
+
+    flushList(index);
+    elements.push(<p key={index} className="tutor-text-para">{renderInline(trimmed)}</p>);
+  });
+
+  flushList(lines.length);
+  return elements;
+}
+
+export default function TutorChat({ workspaceView, learnerName, onAvailability, onSessionEnded }: TutorChatProps) {
   const [visitId, setVisitId] = useState(() => crypto.randomUUID());
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
@@ -36,11 +153,50 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
   const [reviews, setReviews] = useState<ReviewChoice[]>([]);
   const [reviewId, setReviewId] = useState("");
   const [includeVisuals, setIncludeVisuals] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const generation = useRef(0);
   const pending = useRef(new Set<AbortController>());
   const threadEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const active = workspaceView === "tutor";
   const provider = options?.options.find(p => selectionId(p) === selection);
+
+  async function toggleFullscreen() {
+    if (!isFullscreen) {
+      setIsFullscreen(true);
+      try {
+        if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch { /* Fallback to CSS fixed mode */ }
+    } else {
+      setIsFullscreen(false);
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          await document.exitFullscreen();
+        }
+      } catch { /* Fallback */ }
+    }
+  }
+
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape" && isFullscreen) {
+        void toggleFullscreen();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isFullscreen]);
 
   useEffect(() => {
     const controllers = pending.current;
@@ -161,6 +317,9 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
     const textToSend = draft.trim();
     const priorTurns = turns;
     setDraft("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
     setNotice("");
     setTurns(current => [...current, { role: "learner", text: textToSend }]);
     void action(async epoch => {
@@ -192,6 +351,9 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
     pending.current.clear();
     setTurns([]);
     setDraft("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
     setReviewId("");
     setIncludeVisuals(false);
     setVisitId(crypto.randomUUID());
@@ -217,24 +379,73 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
     </section>;
   }
 
-  return <section hidden={!active} className="tutor-chat" aria-labelledby="tutor-heading">
+  return <section hidden={!active} className={`tutor-chat ${isFullscreen ? "tutor-chat--fullscreen" : ""}`} aria-labelledby="tutor-heading">
     <header className="tutor-header">
-      <div>
-        <h2 id="tutor-heading">AI Tutor</h2>
-        <p>Ask about a topic in your own words. Powered by Gemini.</p>
+      <div className="tutor-header__brand">
+        <div className="tutor-header__title-row">
+          <span className="tutor-sparkle-icon" aria-hidden="true">
+            <Icon name="sparkle" />
+          </span>
+          <h2 id="tutor-heading">AI Tutor</h2>
+          {provider && (
+            <span className="tutor-model-badge" title={`Model: ${provider.model}`}>
+              {provider.model}
+            </span>
+          )}
+        </div>
+        <p className="tutor-header__subtitle">Ask about a topic in your own words. Powered by Gemini.</p>
       </div>
       <div className="tutor-header__actions">
-        <button type="button" className="subtle-button tutor-new-chat-btn" aria-label="New chat" onClick={handleNewChat}>
+        <label className="tutor-compact-label">
+          <span className="sr-only">Response language</span>
+          <select
+            aria-label="Response language"
+            disabled={busy}
+            value={locale}
+            onChange={e => { setLocale(e.target.value); }}
+          >
+            <option value="en" disabled={!provider?.languages.includes("en")}>English</option>
+            <option value="vi" disabled={!provider?.languages.includes("vi")}>Vietnamese</option>
+          </select>
+        </label>
+
+        <button
+          type="button"
+          className="subtle-button tutor-header-btn tutor-new-chat-btn"
+          aria-label="New chat"
+          title="New chat"
+          onClick={handleNewChat}
+        >
           <Icon name="chat" />
           <span>New chat</span>
         </button>
+
+        <a
+          href="#settings"
+          className="subtle-button tutor-header-btn tutor-settings-link"
+          title="Open AI Tutor &amp; Gemini Settings in Account"
+        >
+          <Icon name="settings" />
+          <span>AI Settings</span>
+        </a>
+
+        <button
+          type="button"
+          className="subtle-button tutor-header-btn tutor-fullscreen-btn"
+          aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
+          title={isFullscreen ? "Exit full screen (Esc)" : "Full screen"}
+          onClick={() => void toggleFullscreen()}
+        >
+          <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} />
+          <span>{isFullscreen ? "Exit" : "Full screen"}</span>
+        </button>
       </div>
     </header>
-    <p className="account-hint">This conversation ends on sign-out, reload, or closing this browser tab. It does not sync or become account history.</p>
-    {!online && <p role="status">You are offline. Reconnect when ready; messages will not send automatically.</p>}
-    {error && <p role="alert">{error}</p>}
-    {notice && <p role="status">{notice}</p>}
-    {retryAt > clock && <p role="status">Retry available in {Math.ceil((retryAt - clock) / 1000)} seconds, at {new Date(retryAt).toLocaleTimeString()}.</p>}
+
+    {!online && <p className="tutor-status-banner" role="status">You are offline. Reconnect when ready; messages will not send automatically.</p>}
+    {error && <p className="tutor-status-banner tutor-status-banner--error" role="alert">{error}</p>}
+    {notice && <p className="tutor-status-banner tutor-status-banner--notice" role="status">{notice}</p>}
+    {retryAt > clock && <p className="tutor-status-banner tutor-status-banner--retry" role="status">Retry available in {Math.ceil((retryAt - clock) / 1000)} seconds, at {new Date(retryAt).toLocaleTimeString()}.</p>}
 
     {!options ? (
       <div className="tutor-unavailable-action">
@@ -244,112 +455,154 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
       </div>
     ) : (
       <>
-        <div className="tutor-chat-bar">
-          <div className="tutor-chat-bar__left">
+        {reviews.length > 0 && (
+          <div className="tutor-attachment-bar" role="region" aria-label="Attachment options">
             <label className="tutor-compact-label">
-              <span>Response language</span>
-              <select disabled={busy} value={locale} onChange={e => { setLocale(e.target.value); }}>
-                <option value="en" disabled={!provider?.languages.includes("en")}>English</option>
-                <option value="vi" disabled={!provider?.languages.includes("vi")}>Vietnamese</option>
+              <Icon name="review" />
+              <span>Attach reviewed question (optional)</span>
+              <select disabled={busy} value={reviewId} onChange={e => { setReviewId(e.target.value); }}>
+                <option value="">No question attached</option>
+                {reviews.map(review => (
+                  <option key={review.reviewId} value={review.reviewId}>
+                    {review.section} · Q{review.questionNumber} · {new Date(review.completedAt).toLocaleDateString()}
+                  </option>
+                ))}
               </select>
             </label>
-            {reviews.length > 0 && (
-              <label className="tutor-compact-label">
-                <span>Attach reviewed question (optional)</span>
-                <select disabled={busy} value={reviewId} onChange={e => { setReviewId(e.target.value); }}>
-                  <option value="">No question attached</option>
-                  {reviews.map(review => (
-                    <option key={review.reviewId} value={review.reviewId}>
-                      {review.section} · Q{review.questionNumber} · {new Date(review.completedAt).toLocaleDateString()}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
             {reviewId && (
               <label className="tutor-visuals-label">
-                <input type="checkbox" checked={includeVisuals} disabled={busy || !provider?.vision} onChange={e => { setIncludeVisuals(e.target.checked); }} />
+                <input
+                  type="checkbox"
+                  checked={includeVisuals}
+                  disabled={busy || !provider?.vision}
+                  onChange={e => { setIncludeVisuals(e.target.checked); }}
+                />
                 <span>Share selected question visuals with Gemini</span>
               </label>
             )}
           </div>
-          <div className="tutor-chat-bar__right">
-            <a href="#settings" className="tutor-settings-link" title="Open AI Tutor &amp; Gemini Settings in Account">
-              <Icon name="settings" />
-              <span>AI Settings</span>
-            </a>
-          </div>
-        </div>
+        )}
 
         <div className="tutor-thread-container">
-          <ol className="tutor-transcript" aria-label="Visit conversation" aria-live="polite" aria-relevant="additions">
+          <div className="tutor-thread-inner">
             {turns.length === 0 ? (
-              <li className="tutor-turn tutor-turn--intro">
-                <div className="tutor-intro-card">
-                  <h3>One-to-One SAT Tutor</h3>
-                  <p>Ask freeform questions about SAT math methods, grammar rules, reading passages, or test strategies. Responses are generated with Gemini in real time.</p>
+              <div className="tutor-gemini-hero">
+                <div className="tutor-hero-glow" aria-hidden="true" />
+                <h3 className="tutor-hero-title">
+                  Let’s jump in{learnerName ? `, ${learnerName.split(" ")[0]}` : ""}
+                </h3>
+                <p className="tutor-hero-subtitle">
+                  Ask freeform questions about SAT math methods, grammar rules, reading passages, or test strategies.
+                </p>
+                <div className="tutor-suggestion-grid">
+                  {PROMPT_SUGGESTIONS.map((s, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="tutor-suggestion-chip"
+                      onClick={() => {
+                        setDraft(s.text);
+                        textareaRef.current?.focus();
+                      }}
+                    >
+                      <span className="tutor-suggestion-icon" aria-hidden="true">{s.icon}</span>
+                      <span className="tutor-suggestion-content">
+                        <strong>{s.title}</strong>
+                        <small>{s.text}</small>
+                      </span>
+                    </button>
+                  ))}
                 </div>
-              </li>
+              </div>
             ) : (
-              turns.map((turn, index) => <li key={index} className={`tutor-turn tutor-turn--${turn.role}`}>
-                <div className="tutor-turn__author">
-                  <strong>{turn.role === "learner" ? "You" : `AI Tutor · ${turn.provider?.model ?? "Gemini"}`}</strong>
-                </div>
-                <div className="tutor-turn__bubble">
-                  <p>{turn.text}</p>
-                  {turn.role === "assistant" && <small>Not verified against the answer key</small>}
-                </div>
-              </li>)
+              <ol className="tutor-transcript" aria-label="Visit conversation" aria-live="polite" aria-relevant="additions">
+                {turns.map((turn, index) => (
+                  <li key={index} className={`tutor-turn tutor-turn--${turn.role}`}>
+                    {turn.role === "assistant" && (
+                      <div className="tutor-turn__author">
+                        <span className="tutor-author-avatar" aria-hidden="true">
+                          <Icon name="sparkle" />
+                        </span>
+                        <strong>AI Tutor · {turn.provider?.model ?? "Gemini"}</strong>
+                      </div>
+                    )}
+                    <div className="tutor-turn__bubble">
+                      {turn.role === "learner" ? (
+                        <p className="tutor-turn-text">{turn.text}</p>
+                      ) : (
+                        <div className="tutor-turn-formatted">
+                          {formatGeminiContent(turn.text)}
+                          <div className="tutor-turn-footer">
+                            <small>Not verified against the answer key</small>
+                            <CopyButton text={turn.text} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+                {busy && (
+                  <li className="tutor-turn tutor-turn--assistant">
+                    <div className="tutor-turn__author">
+                      <span className="tutor-author-avatar" aria-hidden="true">
+                        <Icon name="sparkle" />
+                      </span>
+                      <strong>AI Tutor · {provider?.model ?? "Gemini"}</strong>
+                    </div>
+                    <div className="tutor-turn__bubble tutor-turn__bubble--loading">
+                      <span className="tutor-thinking">
+                        <span className="tutor-thinking-dots" aria-hidden="true">
+                          <span className="tutor-thinking-dot"></span>
+                          <span className="tutor-thinking-dot"></span>
+                          <span className="tutor-thinking-dot"></span>
+                        </span>
+                        <span>Thinking…</span>
+                      </span>
+                    </div>
+                  </li>
+                )}
+                <div ref={threadEndRef} />
+              </ol>
             )}
-            {busy && (
-              <li className="tutor-turn tutor-turn--assistant">
-                <div className="tutor-turn__author">
-                  <strong>AI Tutor · {provider?.model ?? "Gemini"}</strong>
-                </div>
-                <div className="tutor-turn__bubble tutor-turn__bubble--loading">
-                  <span className="tutor-thinking">
-                    <span className="tutor-thinking-dots" aria-hidden="true">
-                      <span className="tutor-thinking-dot"></span>
-                      <span className="tutor-thinking-dot"></span>
-                      <span className="tutor-thinking-dot"></span>
-                    </span>
-                    <span>Thinking…</span>
-                  </span>
-                </div>
-              </li>
-            )}
-            <div ref={threadEndRef} />
-          </ol>
+          </div>
         </div>
 
-        <form className="tutor-composer" onSubmit={e => { e.preventDefault(); handleSend(); }}>
-          <label htmlFor="tutor-user-message">Your message</label>
-          <textarea
-            id="tutor-user-message"
-            aria-label="Your message"
-            rows={3}
-            maxLength={4000}
-            disabled={busy}
-            placeholder="Ask about a problem, concept, or test strategy… (Press Enter to send, Shift+Enter for new line)"
-            value={draft}
-            onChange={e => { setDraft(e.target.value); }}
-            onKeyDown={e => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-          />
-          <div className="tutor-composer__bottom">
-            <p className="account-hint">Text you paste may contain personal information; Whitebook cannot fully redact free-form text.</p>
+        <form className="tutor-gemini-composer" onSubmit={e => { e.preventDefault(); handleSend(); }}>
+          <div className="tutor-capsule">
+            <textarea
+              id="tutor-user-message"
+              ref={textareaRef}
+              aria-label="Your message"
+              rows={1}
+              maxLength={4000}
+              disabled={busy}
+              placeholder="Ask about a problem, concept, or test strategy… (Press Enter to send, Shift+Enter for new line)"
+              value={draft}
+              onChange={e => {
+                setDraft(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 180)}px`;
+              }}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
             <button
               type="submit"
-              className="primary tutor-send-btn"
+              className="tutor-capsule-send-btn"
               disabled={unavailable || !draft.trim() || !provider?.healthy || !provider.languages.includes(locale)}
+              title="Send (Enter)"
             >
-              Send
+              <Icon name="arrowUp" />
+              <span>Send</span>
             </button>
           </div>
+          <p className="tutor-composer-disclaimer">
+            Whitebook AI Tutor can make mistakes. Unverified learning help, not authoritative grades.
+          </p>
         </form>
       </>
     )}
