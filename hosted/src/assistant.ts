@@ -120,6 +120,17 @@ function estimateTokens(payload: string, visuals: Attachment["visuals"] = []): n
   return textTokens + imageTokens + MAX_OUTPUT;
 }
 
+function generationConfigOf(model: unknown, maxOutputTokens: number): Record<string, unknown> {
+  const config: Record<string, unknown> = { maxOutputTokens };
+  const m = typeof model === "string" ? model : "";
+  if (m.includes("3.")) {
+    config.thinkingConfig = { thinkingLevel: "low" };
+  } else if (m.includes("2.5") || m.includes("2.0-flash-thinking")) {
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
+  return config;
+}
+
 function payloadOf(body: Record<string, unknown>, attachment: Attachment | null): string | null {
   if (body.locale !== "en" && body.locale !== "vi" || typeof body.currentMessage !== "string" || !body.currentMessage.trim() || body.currentMessage.length > 4000 || !Array.isArray(body.priorMessages) || body.priorMessages.length > 40) return null;
   const turns: { role: string; parts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] }[] = [];
@@ -138,7 +149,7 @@ function payloadOf(body: Record<string, unknown>, attachment: Attachment | null)
     { inlineData: { mimeType: visual.mimeType, data: visual.data } },
   ]) ?? [];
   contents.push({ role: "user", parts: [{ text: body.currentMessage + attachmentText }, ...visualParts] });
-  const serialize = () => JSON.stringify({ systemInstruction: { parts: [{ text: `You are a study tutor. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Your responses are unverified learning help, not authoritative grades.` }] }, contents, generationConfig: { maxOutputTokens: MAX_OUTPUT } });
+  const serialize = () => JSON.stringify({ systemInstruction: { parts: [{ text: `You are a study tutor. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Your responses are unverified learning help, not authoritative grades.` }] }, contents, generationConfig: generationConfigOf(body.model, MAX_OUTPUT) });
   const maxPayload = attachment?.visuals.length ? MAX_MULTIMODAL_PAYLOAD : MAX_PAYLOAD;
   while (contents.length > 1 && new TextEncoder().encode(serialize()).length > maxPayload) contents.shift();
   const result = serialize();
@@ -239,7 +250,7 @@ async function reasoningPreview(body: Record<string, unknown>, env: AssistantEnv
   const responseText = context.revealed ? context.response ?? "unanswered" : "Withheld until the learner reveals the answer.";
   const visibleQuestionText = providerQuestionText(context.presentation, context.acceptedAnswers, context.revealed);
   const instruction = `You are Guided Reasoning for a reviewed Whitebook question. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Before reveal, provide only answer-neutral reasoning steps and never identify, quote, paraphrase, eliminate choices toward, or narrow to the accepted answer. After reveal, explain the answer but do not claim grading authority.${mathHelp}`;
-  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: "user", parts: [{ text: `${body.stage}: ${body.message}\nQuestion presentation text: ${JSON.stringify(visibleQuestionText)}\nLearner response: ${responseText}${answer}` }] }], generationConfig: { maxOutputTokens: MAX_OUTPUT } });
+  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: "user", parts: [{ text: `${body.stage}: ${body.message}\nQuestion presentation text: ${JSON.stringify(visibleQuestionText)}\nLearner response: ${responseText}${answer}` }] }], generationConfig: generationConfigOf(provider.model, MAX_OUTPUT) });
   if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return invalid();
   const key = await routeKey(env, session.account_id, provider);
   if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
@@ -306,7 +317,7 @@ async function flashcardPreview(body: Record<string, unknown>, env: AssistantEnv
   const userPrompt = body.mode === "deck_advice"
     ? { mode: body.mode, question: String(body.words).slice(0, 4000), selectedDeck: body.deck, deckSnapshot: selected, context: typeof body.context === "string" ? body.context.slice(0, 2000) : "" }
     : { mode: body.mode, sourceWords: selected, context: typeof body.context === "string" ? body.context.slice(0, 2000) : "", destinationDeck: body.deck };
-  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are Flashcard Assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Propose learner-editable Personal Card content only; never save cards. ${outputFormat}` }] }, contents: [{ role: "user", parts: [{ text: JSON.stringify(userPrompt) }] }], generationConfig: { maxOutputTokens: MAX_OUTPUT } });
+  const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are Flashcard Assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Propose learner-editable Personal Card content only; never save cards. ${outputFormat}` }] }, contents: [{ role: "user", parts: [{ text: JSON.stringify(userPrompt) }] }], generationConfig: generationConfigOf(provider.model, MAX_OUTPUT) });
   if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return invalid();
   const key = await routeKey(env, session.account_id, provider); if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");
   if (!await reserve(env, `preview:${session.account_id}`, 0, 60, 1, now)) return rateLimitedResponse("rate_limited", Math.ceil((HOUR - now % HOUR) / 1000), now);
@@ -475,7 +486,7 @@ async function planPreview(body: Record<string, unknown>, request: Request, env:
     .bind(session.account_id).first<{ id: string }>();
   if ((latest?.id ?? null) !== body.expectedVersionId) return failure(409, "plan_changed", "Reload the latest Study Plan before previewing suggestions.");
   const payload = JSON.stringify({ systemInstruction: { parts: [{ text: `You are a Study Plan assistant. Respond in ${body.locale === "vi" ? "Vietnamese" : "English"}. Return exactly one JSON array of 1 to 20 proposed tasks, with no markdown or extra prose. Each task must contain date, kind, title, minutes, action, and explanation. Use kind "cards" only when dueCardTotal is positive, with action {"area":"cards"}; or kind "practice" with action {"area":"practice","revisionId":"an activityCatalog revisionId","section":"its section"}. Select only real activityCatalog pairs. Do not propose review tasks because individual review links are not shared. The server's current study date is ${assembled.envelope.today}; schedule only on study days from that date (inclusive) through the day before ${assembled.envelope.primarySatTarget}. Stay within dailyMinutes. Never predict SAT point gains, invent packages or questions, or equate Whitebook Raw Accuracy with SAT points. Do not save the plan.` }] },
-    contents: [{ role: "user", parts: [{ text: JSON.stringify(assembled.envelope) }] }], generationConfig: { maxOutputTokens: PLAN_OUTPUT } });
+    contents: [{ role: "user", parts: [{ text: JSON.stringify(assembled.envelope) }] }], generationConfig: generationConfigOf(provider.model, PLAN_OUTPUT) });
   if (new TextEncoder().encode(payload).length > MAX_PAYLOAD) return failure(413, "too_large", "The selected evidence is too large to preview.");
   const key = await routeKey(env, session.account_id, provider);
   if (!key) return failure(409, "credential_required", "Save a Gemini credential or choose an available shared route.");

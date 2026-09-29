@@ -45,7 +45,7 @@ it.each([
 it("aborts a slow provider at the deadline and exposes only a timeout state", async () => {
   vi.useFakeTimers();
   vi.stubGlobal("fetch", vi.fn((_url, init: RequestInit) => new Promise((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(new Error("SECRET NETWORK ERROR"))))));
-  const result = expect(geminiAdapter(payload, "gemini-test", "synthetic-key")).rejects.toMatchObject({ code: "timeout", retrySeconds: 5 });
+  const result = expect(geminiAdapter(payload, "gemini-test", "synthetic-key", 20000)).rejects.toMatchObject({ code: "timeout", retrySeconds: 5 });
   await vi.advanceTimersByTimeAsync(20000); await result;
 });
 

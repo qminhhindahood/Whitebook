@@ -3,12 +3,12 @@ export class GeminiFailure extends Error {
     super(message || code);
   }
 }
-export type GeminiAdapter = (payload: string, model: string, key: string) => Promise<string>;
+export type GeminiAdapter = (payload: string, model: string, key: string, timeoutMs?: number) => Promise<string>;
 
 // The payload is already serialized in the learner's request. Never augment it here.
-export const geminiAdapter: GeminiAdapter = async (payload, model, key) => {
+export const geminiAdapter: GeminiAdapter = async (payload, model, key, timeoutMs = 50_000) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },

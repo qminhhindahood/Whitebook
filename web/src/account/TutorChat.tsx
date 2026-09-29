@@ -130,7 +130,7 @@ export default function TutorChat({ workspaceView, onAvailability, onSessionEnde
   async function request<T>(path: string, body: unknown): Promise<T> {
     if (!navigator.onLine) throw new ChatFailure("You are offline. Reconnect, then send again.");
     const controller = new AbortController(); pending.current.add(controller);
-    const timeout = setTimeout(() => controller.abort(), 35000);
+    const timeout = setTimeout(() => controller.abort(), 55000);
     try {
       const response = await accountFetch(`/api/assistant/${path}`, { method: "POST", signal: controller.signal,
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() }, body: JSON.stringify(body) });
