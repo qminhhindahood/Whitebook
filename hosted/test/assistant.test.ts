@@ -481,18 +481,19 @@ it("invalidates previews on sign-out and removes secrets and ephemeral artifacts
   expect(f.db.prepare("SELECT * FROM assistant_limits WHERE scope LIKE '%:a'").all()).toHaveLength(0);
 });
 
-it("denies active assessments at preview and send while Attempt saves ignore the AI breaker", async () => {
+it("allows Tutor during active assessments while Attempt saves ignore the AI breaker", async () => {
   const f = await fixture(); const p = await f.preview();
   f.db.prepare("INSERT INTO package_revisions VALUES ('rev', 'family', 'Fixture', 1, 1, 'hash', 1)").run();
   const id = crypto.randomUUID(); const token = "d".repeat(64);
   f.db.prepare("INSERT INTO learner_attempts (id,account_id,revision_id,kind,status,config_json,questions_json,state_json,created_at_ms,started_at_ms,editor_token_hash,editor_lease_expires_at_ms) VALUES (?, 'a','rev','section_exam','active',?,?,?,0,0,?,?)")
     .run(id, JSON.stringify({ section: "Math", modules: [1], timing: { mode: "elapsed" } }), JSON.stringify([{ questionId: "q", module: 1, responseType: "multiple_choice", choiceIds: ["A", "B"] }]), JSON.stringify({ phase: "module", activeModule: 1, currentQuestionId: "q", responses: {}, markedQuestionIds: [], eliminatedChoices: {}, questionElapsedMs: {} }), await digest(token), Date.now() + 600000);
-  expect((await f.call("options")).status).toBe(409);
-  expect((await f.call("preview", f.input).then(r => r.json())).error.code).toBe("active_section_exam");
-  expect((await f.call("send", { previewId: p.previewId, visitId: f.input.visitId, consent: true }).then(r => r.json())).error.code).toBe("active_section_exam");
+  expect((await f.call("options")).status).toBe(200);
+  expect((await f.call("preview", f.input)).status).toBe(200);
+  expect((await f.call("send", { previewId: p.previewId, visitId: f.input.visitId, consent: true })).status).toBe(200);
+  f.adapter.mockClear();
   f.db.prepare("UPDATE learner_attempts SET kind = 'practice'").run();
   expect((await f.call("options")).status).toBe(200);
-  f.db.prepare("INSERT INTO assistant_limits VALUES ('shared', ?, 100, 400000)").run(Math.floor(Date.now() / 3600000) * 3600000);
+  f.db.prepare("INSERT OR REPLACE INTO assistant_limits VALUES ('shared', ?, 100, 400000)").run(Math.floor(Date.now() / 3600000) * 3600000);
   const saved = await worker.fetch(new Request(origin + `/api/attempts/${id}/write`, { method: "POST", headers: { Cookie: `__Host-wb_session=${"a".repeat(64)}`, Origin: origin, "X-CSRF-Token": "c".repeat(64), "Content-Type": "application/json" }, body: JSON.stringify({ editorToken: token, expectedStateVersion: 0, change: { type: "response", questionId: "q", response: "B" } }) }), f.env as any);
   expect(saved.status).toBe(200);
   expect(await saved.json()).toMatchObject({ saveStatus: "saved", state: { responses: { q: "B" } } });
@@ -604,3 +605,25 @@ it("tests all models and returns diagnostic results via /api/assistant/test-mode
   expect(m37?.working).toBe(true);
   expect(data.recommendedModel).toBeTruthy();
 });
+
+
+it("deletes only the owned Attempt with CSRF and cascades reviews while preserving notes", async () => {
+  const f = await fixture();
+  f.db.exec("PRAGMA foreign_keys = ON");
+  f.db.exec("INSERT INTO package_revisions VALUES ('delete-rev','family','Fixture',1,1,'hash',1)");
+  f.db.exec("INSERT INTO publication_questions VALUES ('delete-rev','q','source',1,'Math',1,1,'multiple_choice','{}')");
+  const id = crypto.randomUUID();
+  f.db.prepare("INSERT INTO learner_attempts (id,account_id,revision_id,kind,status,config_json,questions_json,state_json,created_at_ms) VALUES (?,'a','delete-rev','practice','preparing','{}','[]','{}',0)").run(id);
+  f.db.prepare("INSERT INTO guided_reviews (id,account_id,attempt_id,revision_id,question_id,prior_answer_exposure,created_at_ms,updated_at_ms) VALUES ('review','a',?,'delete-rev','q','seen',0,0)").run(id);
+  f.db.exec("INSERT INTO study_notes VALUES ('note','a','delete-rev','q','Keep my note',0,0)");
+  const remove = (account = 'a', csrf = true) => worker.fetch(new Request(origin + `/api/attempts/${id}`, {
+    method: 'DELETE', headers: { Cookie: `__Host-wb_session=${account.repeat(64)}`, Origin: origin, ...(csrf ? { 'X-CSRF-Token': 'c'.repeat(64) } : {}) },
+  }), f.env as any);
+  expect((await remove('b')).status).toBe(404);
+  expect((await remove('a', false)).status).toBe(403);
+  expect((await remove()).status).toBe(200);
+  expect(f.db.prepare('SELECT id FROM learner_attempts WHERE id = ?').get(id)).toBeUndefined();
+  expect(f.db.prepare("SELECT id FROM guided_reviews WHERE id = 'review'").get()).toBeUndefined();
+  expect(f.db.prepare("SELECT id FROM study_notes WHERE id = 'note'").get()).toBeTruthy();
+});
+

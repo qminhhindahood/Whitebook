@@ -950,3 +950,321 @@
   margin-left: 8px;
   font-weight: 500;
 }
+
+/* Flashcard Assistant - Options Bar & Draft Review */
+.tutor-attachment-fieldset {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tutor-attachment-fieldset legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: #415239;
+  margin-right: 4px;
+}
+
+.tutor-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #343a30;
+  cursor: pointer;
+}
+
+.tutor-context-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.tutor-context-label textarea,
+.tutor-context-label input {
+  box-sizing: border-box;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 7px;
+  border: 1px solid #cbd0bf;
+  background: #fffefa;
+  color: #343a30;
+  font-family: inherit;
+  width: 100%;
+  resize: none;
+}
+
+.tutor-context-label textarea:focus,
+.tutor-context-label input:focus {
+  outline: 2px solid #526b45;
+  outline-offset: 2px;
+  border-color: #526b45;
+}
+
+.tutor-card-picker {
+  padding: 10px 24px;
+  background: #f4f5ee;
+  border-bottom: 1px solid #e6e5dc;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  margin: 0;
+}
+
+.tutor-card-picker legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: #415239;
+  margin-bottom: 6px;
+}
+
+.tutor-card-picker__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.tutor-card-picker__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #fffefa;
+  border: 1px solid #cbd0bf;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #343a30;
+}
+
+.tutor-card-picker__item:hover {
+  background: #eef1e6;
+  border-color: #9eb084;
+}
+
+/* Review Exact Send */
+.tutor-preview-bubble {
+  width: 100%;
+  max-width: 760px;
+  box-sizing: border-box;
+}
+
+.tutor-preview-bubble h4 {
+  font-family: Lora, serif;
+  font-size: 18px;
+  margin: 0 0 12px;
+  color: #343a30;
+  font-weight: 500;
+}
+
+.tutor-preview-dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px;
+  background: #f3f3eb;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.tutor-preview-dl dt {
+  font-weight: 600;
+  color: #646b59;
+}
+
+.tutor-preview-dl dd {
+  margin: 2px 0 0;
+  color: #343a30;
+  word-break: break-word;
+}
+
+.tutor-preview-bubble pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: #fffefa;
+  border: 1px solid #e6e5dc;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 11.5px;
+  margin: 0 0 14px;
+}
+
+.tutor-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Card Drafts Review */
+.cards-assistant__drafts-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tutor-drafts-header,
+.tutor-drafts-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tutor-drafts-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tutor-drafts-title h4 {
+  font-family: Lora, serif;
+  font-size: 18px;
+  margin: 0;
+  color: #343a30;
+  font-weight: 500;
+}
+
+.tutor-drafts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cards-assistant__draft {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px;
+  border: 1px solid #e6e5dc;
+  border-radius: 12px;
+  background: #fffefa;
+  box-shadow: 0 2px 8px rgba(52, 58, 48, 0.04);
+}
+
+.tutor-draft-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eef0ea;
+}
+
+.tutor-draft-badge {
+  font-family: Lora, serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4c6243;
+}
+
+.tutor-draft-remove-btn {
+  font-size: 11.5px !important;
+  padding: 4px 10px !important;
+  color: #a33e36 !important;
+  border-color: #eed6d4 !important;
+  background: #fffaf9 !important;
+}
+
+.tutor-draft-remove-btn:hover {
+  background: #fde8e6 !important;
+  border-color: #e8b0ac !important;
+  color: #8b2b24 !important;
+}
+
+.tutor-draft-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #415239;
+}
+
+.tutor-draft-field input,
+.tutor-draft-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 7px;
+  border: 1px solid #cbd0bf;
+  background: #faf9f5;
+  color: #343a30;
+  font-family: Merriweather, Arial, sans-serif;
+}
+
+.tutor-draft-field textarea {
+  min-height: 52px;
+  resize: vertical;
+}
+
+.tutor-draft-field input:focus,
+.tutor-draft-field textarea:focus {
+  background: #ffffff;
+  border-color: #4c6243;
+  outline: 2px solid #526b45;
+  outline-offset: 2px;
+}
+
+.tutor-draft-findings {
+  margin: 6px 0 0;
+  padding: 8px 14px;
+  border-radius: 7px;
+  background: #fce8e6;
+  border: 1px solid #fad2cf;
+  color: #c5221f;
+  font-size: 12px;
+  list-style-position: inside;
+}
+
+.tutor-raw-draft-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.tutor-raw-draft-container pre {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: #fffefa;
+  border: 1px solid #fad2cf;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 12px;
+  color: #343a30;
+}
+
+.cards-notice-row {
+  margin: 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cards-notice-retry {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: #4c6243;
+  color: #fffaf0;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cards-notice-retry:hover {
+  background: #374e30;
+}
+

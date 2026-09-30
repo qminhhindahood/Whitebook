@@ -85,7 +85,7 @@ function zoneLabel(source: StudyOverview["zoneSource"]): string {
   return source === "device" ? "from this device" : "default (UTC)";
 }
 
-export function FlashcardsArea({ onSessionEnded }: { onSessionEnded?: () => void }) {
+export function FlashcardsArea({ onSessionEnded, learnerName }: { onSessionEnded?: () => void; learnerName?: string }) {
   const [tab, setTab] = useState<"study" | "cards">("study");
   const [plan, setPlan] = useState<SessionPlan | null>(null);
   return <>
@@ -97,7 +97,7 @@ export function FlashcardsArea({ onSessionEnded }: { onSessionEnded?: () => void
         className={tab === "cards" ? "cards-tab cards-tab--active" : "cards-tab"}
         onClick={() => { setTab("cards"); setPlan(null); }}>My cards</button>
     </div>
-    {tab === "cards" ? <PersonalCards onSessionEnded={onSessionEnded} /> :
+    {tab === "cards" ? <PersonalCards onSessionEnded={onSessionEnded} learnerName={learnerName} /> :
       plan ? <StudySession key={`${plan.deck ?? "all"}:${plan.total}`} plan={plan} onExit={() => setPlan(null)} onSessionEnded={onSessionEnded} /> :
       <StudyHome onStart={setPlan} onSessionEnded={onSessionEnded} onAddCard={() => setTab("cards")} />}
   </>;
@@ -146,15 +146,18 @@ export function StudyHome({ onStart, onSessionEnded, onAddCard }: {
         <small>Study day {studyDateLabel(overview.studyDate)} · {overview.zone} ({zoneLabel(overview.zoneSource)})</small></div>
         {overview.totalDue > 0 && <button type="button" className="study-start" onClick={() => start(null, "All due cards", overview.totalDue)}>Start studying ({overview.totalDue})</button>}</div>
       <div className="wb-flash-search"><label htmlFor="flashcard-deck-search">Find a deck</label><input id="flashcard-deck-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your decks…" /></div>
-      <div className="wb-flash-home__section-head"><h3>Your decks</h3><span>{decks.length} shown</span></div>
+      {[true, false].map(shared => <section key={String(shared)} className="wb-flash-deck-group" aria-label={shared ? "Starter Decks" : "Personal Cards"}>
+      <div className="wb-flash-home__section-head"><h3>{shared ? "Starter Decks" : "Personal Cards"}</h3><span>{decks.filter(deck => deck.shared === shared).length} shown</span></div>
       <div className="wb-flash-decks">
-        {decks.map((deck, position) => <article key={deck.key} className={`wb-flash-deck wb-flash-deck--${position % 4}`}>
+        {decks.filter(deck => deck.shared === shared).map((deck, position) => <article key={deck.key} className={`wb-flash-deck wb-flash-deck--${position % 4}`}>
           <div><span className="wb-flash-deck__kind">{deck.shared ? "Starter deck" : "Personal deck"}</span><h4>{deck.title}</h4></div>
           <div className="wb-flash-deck__bottom"><span>{deck.total} cards</span><span>{deck.due} due of {deck.total} cards</span>
             {deck.due > 0 && <button type="button" aria-label={`Study deck ${deck.title}`} onClick={() => start(deck.key, deck.title, deck.due)}>Study deck <span aria-hidden="true">↗</span></button>}</div>
         </article>)}
       </div>
-      {decks.length === 0 && <p className="cards-empty">No decks match your search.</p>}
+      {!shared && overview.personal.length === 0 && <p className="cards-empty">You have no personal cards yet. Manage my cards to add your own; Starter Decks are ready above.</p>}
+      </section>)}
+      {decks.length === 0 && query.trim() && <p className="cards-empty">No decks match your search.</p>}
       <p className="study-decks-note">Starter decks are shared by Whitebook. Only your ratings and due dates are private.</p>
     </>}
   </section>;

@@ -1,0 +1,16 @@
+
+> whitebook-web@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.0 D:/Notion/worktrees/whitebook-hosted-redesign/web
+
+
+ Test Files  36 passed (36)
+      Tests  212 passed (212)
+   Start at  05:48:15
+   Duration  58.95s (environment 75%, import 17%, tests 6%, transform 2%)
+
+    Isolate  36 workers spawned · ~18.04s startup each (spawn + environment, per file)
+             at least ~25.25s faster with isolate: false — reuses workers across files instead of one per file
+

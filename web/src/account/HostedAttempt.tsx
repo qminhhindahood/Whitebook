@@ -7,6 +7,9 @@ import { DesmosCalculatorPanel, ScientificCalculator } from "../calculator";
 import { DesmosReadinessProbe, loadDesmos } from "../calculator";
 import { LineIcon } from "../icons";
 import { ReferenceSheet } from "../ReferenceSheet";
+import { requestExamFullscreen } from "./examFullscreen";
+import { HighlightContext, type Highlight } from "./AttemptHighlights";
+import { AttemptTutor } from "./AttemptTutor";
 import "../player.css";
 import "../player-math.css";
 import "./hosted-practice-player.css";
@@ -18,13 +21,15 @@ type AttemptState = {
   eliminatedChoices: Record<string, string[]>;
   currentQuestionId: string;
   calculatorState?: Record<string, unknown>;
+  highlights: Record<string, Highlight[]>;
 };
 type Change =
   | { type: "response"; questionId: string; response: string | null }
   | { type: "mark"; questionId: string; marked: boolean }
   | { type: "elimination"; questionId: string; choiceId: string; eliminated: boolean }
   | { type: "navigation"; questionId: string };
-type CalculatorChange = { type: "calculator_state"; state: Record<string, unknown> };
+type HighlightChange = { type: "highlights"; questionId: string; highlights: Highlight[] };
+type CalculatorChange = { type: "calculator_state"; state: Record<string, unknown> } | HighlightChange;
 type QueueItem = { kind: "change"; change: Change | CalculatorChange } | { kind: "heartbeat" };
 type HostedAttemptProps = {
   initial: AttemptSnapshot;
@@ -78,13 +83,15 @@ function emptyState(source: Record<string, unknown>): AttemptState {
   const calculatorState = source.calculatorState && typeof source.calculatorState === "object"
     ? structuredClone(source.calculatorState as Record<string, unknown>) : undefined;
   return { responses: { ...responses }, markedQuestionIds: [...markedQuestionIds],
+    highlights: structuredClone((source.highlights ?? {}) as Record<string, Highlight[]>),
     eliminatedChoices: Object.fromEntries(Object.entries(eliminatedChoices).map(([id, choices]) => [id, [...choices]])),
     currentQuestionId, ...(calculatorState ? { calculatorState } : {}) };
 }
 
 function applyChange(source: AttemptState, change: Change | CalculatorChange): AttemptState {
   const next = emptyState(source as unknown as Record<string, unknown>);
-  if (change.type === "calculator_state") next.calculatorState = change.state;
+  if (change.type === "highlights") next.highlights[change.questionId] = change.highlights;
+  else if (change.type === "calculator_state") next.calculatorState = change.state;
   else if (change.type === "response") {
     if (change.response === null) delete next.responses[change.questionId];
     else next.responses[change.questionId] = change.response;
@@ -157,6 +164,19 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState("");
   const [showReference, setShowReference] = useState(false);
+  const [highlighting, setHighlighting] = useState(false);
+  const [tutorOpen, setTutorOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(!!document.fullscreenElement);
+  const [fullscreenMessage, setFullscreenMessage] = useState("");
+  useEffect(() => {
+    const changed = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", changed);
+    return () => document.removeEventListener("fullscreenchange", changed);
+  }, []);
+  const enterFullscreen = async () => {
+    const entered = await requestExamFullscreen();
+    setFullscreenMessage(entered ? "" : "Fullscreen is unavailable. You can continue your exam in this window.");
+  };
   const [calculatorMode, setCalculatorMode] = useState<"desmos" | "scientific">(desmosScriptUrl ? "desmos" : "scientific");
   const [readyDesmosUrl, setReadyDesmosUrl] = useState<string | null>(desmosScriptUrl ?? null);
   const [resumeProbeUrl, setResumeProbeUrl] = useState("");
@@ -225,7 +245,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
 
   useEffect(() => {
     let live = true;
-    const anchorPerformance = performance.now();
+    const anchorPerformance = snapshot.clientReceivedAt ?? performance.now();
     const anchorServer = snapshot.serverNow ?? Date.now();
     const update = () => {
       if (!live) return;
@@ -239,7 +259,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     update();
     const timer = window.setInterval(update, 1000);
     return () => { live = false; window.clearInterval(timer); };
-  }, [snapshot.attemptId, snapshot.deadlineAt, snapshot.serverNow, snapshot.startedAt]);
+  }, [snapshot.attemptId, snapshot.deadlineAt, snapshot.serverNow, snapshot.startedAt, snapshot.clientReceivedAt]);
 
   function drainQueue(): Promise<void> {
     if (drainPromiseRef.current) return drainPromiseRef.current;
@@ -457,6 +477,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   }
 
   async function sectionAction(action: "pause" | "resume" | "finish-module" | "continue"): Promise<boolean> {
+    if (action === "resume" || action === "continue") void enterFullscreen();
     if (!sectionExam || lifecycleBusy || !editorToken) return false;
     setLifecycleBusy(true); setLifecycleError("");
     try {
@@ -562,6 +583,20 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     }
     await exitAttempt();
   }
+  async function openTutor() {
+    if (assistedPending || !await flushPendingResponseWrites()) return;
+    setAssistedPending(true);
+    try {
+      if (!snapshotRef.current.assisted && snapshotRef.current.status === "active") {
+        const updated = await request<AttemptSnapshot>(`/api/attempts/${snapshot.attemptId}/assisted`, mutation({}));
+        snapshotRef.current = updated; setSnapshot(updated);
+      }
+      setTutorOpen(true);
+    } catch (cause) {
+      setSyncError(cause instanceof Error ? cause.message : "AI Tutor could not be opened. Try again.");
+      if (cause instanceof AttemptRequestError && cause.status === 401) onSessionEnded();
+    } finally { setAssistedPending(false); }
+  }
   if (!sectionExam || phase === "module" || completed) {
     const stimulus = current?.presentation.stimulus ?? [];
     const studentResponse = current?.responseType === "student_produced_response";
@@ -596,10 +631,14 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       </div>
     </section> : <p role="status">The selected Question Presentation is unavailable.</p>;
 
-    return <main className="player-shell hosted-practice-player" aria-labelledby="hosted-attempt-heading">
+    const highlights = current ? draftState.highlights[current.questionId] ?? [] : [];
+    const highlightEnabled = highlighting && canEdit && !lifecycleBusy && !navigationPending && !submitting && !exitPending;
+    return <HighlightContext.Provider value={{ enabled: highlightEnabled, highlights, add: highlight => {
+      if (current && highlights.length < 100) enqueue({ type: "highlights", questionId: current.questionId, highlights: [...highlights, highlight] });
+    } }}><main className="player-shell hosted-practice-player" aria-labelledby="hosted-attempt-heading">
       <header className="player-header">
         <div className="player-header__section"><h2 id="hosted-attempt-heading">{snapshot.section} · {sectionExam ? `Module ${activeModule}` : "Practice"}</h2>
-          <span className="hosted-practice-player__context">{packageTitle}{snapshot.category ? ` · ${snapshot.category}` : ""}</span>
+          <span className="hosted-practice-player__context">{sectionExam ? "Section Exam · Timed, two Modules" : "Practice · Your questions, your pace"}{snapshot.assisted ? " · Assisted" : ""}<br />{packageTitle}{snapshot.category ? ` · ${snapshot.category}` : ""}</span>
           <button type="button" className="directions-toggle" aria-expanded={directionsOpen}
             onClick={() => setDirectionsOpen((open) => !open)}>Directions <LineIcon name="chevron"/></button>
           {directionsOpen && <div className="directions-panel" role="region" aria-label="Directions">
@@ -609,6 +648,14 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         <div className="player-header__timer">{!timerHidden && <time className="player-timer" aria-label={snapshot.deadlineAt === null ? "Elapsed time" : "Time remaining"}>{clockLabel}</time>}
           <button type="button" className="pill" onClick={() => setTimerHidden((hidden) => !hidden)}>{timerHidden ? "Show" : "Hide"}</button></div>
         <div className="player-header__tools">
+          {import.meta.env.VITE_AI_RELEASE_ENABLED === "true" && !completed && <button type="button" className="player-tool" disabled={assistedPending || exitPending || submitting}
+            title="Using AI Tutor marks this Attempt as assisted" onClick={() => void openTutor()}>AI Tutor</button>}
+          {snapshot.section === "Reading and Writing" && !completed && <>
+            <button type="button" className="player-tool" disabled={!canEdit} aria-pressed={highlighting} onClick={() => setHighlighting(value => !value)}>Highlight</button>
+            {highlighting && <button type="button" className="player-tool" disabled={!highlightEnabled || !highlights.length}
+              onClick={() => current && enqueue({ type: "highlights", questionId: current.questionId, highlights: highlights.slice(0, -1) })}>Undo highlight</button>}
+          </>}
+          {sectionExam && !fullscreen && !completed && <button type="button" className="player-tool" onClick={() => void enterFullscreen()}>Enter fullscreen</button>}
           {showMathTools && <>
             <button type="button" className="player-tool" aria-pressed={calculatorOpen}
               onClick={() => setCalculatorOpen((open) => !open)}><LineIcon name="calculator"/><span>Calculator</span></button>
@@ -621,6 +668,8 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       </header>
       <div className="accent-strip" aria-hidden="true" />
       <div className="hosted-practice-player__notices">
+        {highlighting && <p role="status">Select text or drag over an image to highlight. Keyboard: select text then Alt+H; focus an image and press Enter to highlight it. Turn Highlight off to choose an answer.{highlights.length >= 100 ? " This question has reached its 100-highlight limit. Undo a highlight to add another." : ""}</p>}
+        {fullscreenMessage && <p role="status">{fullscreenMessage}</p>}
         {warning && <p className="hosted-attempt__warning" role="status" aria-label="Low time warning">{sectionExam
           ? `5 minutes remaining in Module ${activeModule}.` : "5 minutes remaining in this Practice Attempt."}</p>}
         {snapshot.status === "active" && !canEdit && <div className="hosted-attempt__lease" role="status">
@@ -675,7 +724,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
                   <li>The Answer Preview never shows whether an answer is correct.</li>
                 </ul></div> : current.section === "Math" ? <div className="math-question-stem">
                   <HostedBlocks blocks={[...stimulus, ...current.presentation.stem]} revisionId={snapshot.revisionId} questionId={current.questionId} />
-                </div> : <HostedBlocks blocks={stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} />}
+                </div> : <HostedBlocks blockPrefix="stimulus" blocks={stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} />}
             </div>
           </section>}
           {splitLayout && <div className="player-divider" role="separator" tabIndex={0}
@@ -698,6 +747,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         </div>
       </div>
       {referenceSheet}
+      {tutorOpen && <AttemptTutor onClose={() => setTutorOpen(false)} onSessionEnded={onSessionEnded} />}
       <footer className="player-footer">
         <span className="player-footer__brand">Whitebook</span>
         <button type="button" className="position-pill" aria-expanded={navigatorOpen}
@@ -721,7 +771,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         <button type="button" className="practice-button practice-button--quiet" disabled={assistedPending} onClick={() => setAssistedConfirmOpen(false)}>Cancel</button>
       </section>}
       <div className="accent-strip" aria-hidden="true" />
-    </main>;
+    </main></HighlightContext.Provider>;
   }
 
   async function enterAssistedPractice() {
@@ -745,6 +795,8 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
           <p>{packageTitle} · {snapshot.section}{snapshot.category ? ` · ${snapshot.category}` : ""} · {snapshot.questions.length} questions</p></div>
       </div>
       <div className="hosted-attempt__header-side">
+        {import.meta.env.VITE_AI_RELEASE_ENABLED === "true" && !completed && <button type="button" className="practice-button practice-button--quiet"
+          disabled={assistedPending || submitting || exitPending || lifecycleBusy} onClick={() => void openTutor()}>AI Tutor</button>}
         <time className={`hosted-attempt__clock${timeExpired ? " hosted-attempt__clock--expired" : ""}`} aria-label="Attempt clock">{clockLabel}</time>
         <span className={`practice-chip ${completed ? "practice-chip--ready" : canEdit ? "practice-chip--ready" : "practice-chip--locked"}`}>
           {completed ? "Submitted" : canEdit ? "Editing here" : "Read only"}
@@ -794,6 +846,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       {mathTools}
     </details>}
     {referenceSheet}
+    {tutorOpen && <AttemptTutor onClose={() => setTutorOpen(false)} onSessionEnded={onSessionEnded} />}
     {failedChanges.length > 0 && <div className="hosted-attempt__unsaved" role="group" aria-label="Unsaved changes">
       <p>{failedChanges.length === 1 ? "One change was not saved." : `${failedChanges.length} changes were not saved.`} Your unsaved work remains visible here.</p>
       {canRetryFailedChanges && <button type="button" className="practice-button practice-button--quiet" onClick={reapplyFailedChanges}>Reapply unsaved changes</button>}
@@ -833,7 +886,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
               {marked ? "Remove review mark" : "Mark for review"}
             </button>
           </div>
-          <HostedBlocks blocks={current.presentation.stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} />
+          <HostedBlocks blockPrefix="stimulus" blocks={current.presentation.stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} />
           <HostedBlocks blocks={current.presentation.stem} revisionId={snapshot.revisionId} questionId={current.questionId} />
           {current.responseType === "multiple_choice" ? <HostedChoices presentation={current.presentation}
             revisionId={snapshot.revisionId} questionId={current.questionId}
@@ -866,3 +919,4 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     </div>}
   </section>;
 }
+

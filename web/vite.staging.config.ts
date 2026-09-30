@@ -12,7 +12,7 @@ export default defineConfig({
   publicDir: "staging-public",
   build: {
     outDir: "../hosted/dist",
-    emptyOutDir: true,
+    emptyOutDir: false,
     rollupOptions: { input: ["staging.html", "app.html"] },
   },
   plugins: [react()],

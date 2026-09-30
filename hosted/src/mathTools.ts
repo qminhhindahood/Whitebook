@@ -33,7 +33,7 @@ window.addEventListener('message',async(event)=>{
     if(state)calculator.setState(state);
     checks.stateReadable=!!calculator.getState();
     const rect=document.getElementById('calculator').getBoundingClientRect();
-    checks.usableSize=rect.width>=480&&rect.height>=280;
+    checks.usableSize=rect.width>=240&&rect.height>=200;
     calculator.observeEvent('change',()=>send('state',calculator.getState()));
     send('ready',checks);send('state',calculator.getState());
   }catch{send('ready',checks)}

@@ -4,6 +4,7 @@ import { accountFetch, csrfToken } from "./accountClient";
 import type { HostedBlock, HostedPresentationData } from "./HostedPresentation";
 import { HostedAttempt } from "./HostedAttempt";
 import { DesmosReadinessProbe, loadDesmos } from "../calculator";
+import { requestExamFullscreen } from "./examFullscreen";
 
 type Package = { revisionId: string; title: string; publishedRevision: number; questionCount: number };
 export type QuestionLink = {
@@ -20,6 +21,7 @@ export type AttemptSnapshot = {
   state: Record<string, unknown>; stateVersion: number; createdAt?: number; startedAt: number | null;
   deadlineAt: number | null; serverNow?: number; completedAt?: number | null; assisted?: boolean;
   editorToken?: string; lease?: { held: boolean; expiresAt: number | null };
+  clientReceivedAt?: number;
 };
 export type AttemptSummary = {
   attemptId: string; revisionId: string; status: AttemptSnapshot["status"];
@@ -42,7 +44,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await accountFetch(path, init);
   if (!response.ok) {
     const data = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new RequestError(data?.error?.message ?? "Whitebook could not complete this request. Try again.", response.status);
+    throw new RequestError(`${data?.error?.message ?? "Whitebook could not complete this request. Try again."} (HTTP ${response.status})`, response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -109,8 +111,9 @@ export async function loadSelectedContent(snapshot: AttemptSnapshot): Promise<Pr
           throw new RequestError("A required visual has an invalid content type.", 422);
         if (!(await response.arrayBuffer()).byteLength) throw new RequestError("A required visual is empty.", 503);
       });
-    } catch {
-      throw new Error("A required visual could not be loaded; the timer has not started. Retry loading.");
+    } catch (cause) {
+      if (cause instanceof RequestError) throw new RequestError(`${cause.message} (HTTP ${cause.status}).${snapshot.status === "preparing" ? " The timer has not started." : ""} Retry loading.`, cause.status);
+      throw new Error("A required visual could not be loaded. Retry loading.");
     }
   });
   return presentations;
@@ -118,7 +121,7 @@ export async function loadSelectedContent(snapshot: AttemptSnapshot): Promise<Pr
 
 async function prepareReferenceSheet(): Promise<void> {
   const sheet = await accountFetch("/api/math/reference-sheet.png", { method: "GET", credentials: "same-origin", cache: "no-store" });
-  if (!sheet.ok) throw new Error("The Math Reference Sheet could not be loaded. The timer has not started. Retry loading.");
+  if (!sheet.ok) throw new RequestError(`The Math Reference Sheet could not be loaded. Retry loading. (HTTP ${sheet.status})`, sheet.status);
   const sheetBlob = await sheet.blob();
   if (!sheetBlob.size || (sheetBlob.type && sheetBlob.type !== "image/png"))
     throw new Error("The Math Reference Sheet could not be decoded. The timer has not started. Retry loading.");
@@ -158,6 +161,7 @@ export function PracticeArea({ initialRevisionId, initialSection, initialExam = 
   const [loadMessage, setLoadMessage] = useState("");
   const [loadError, setLoadError] = useState("");
   const [generalError, setGeneralError] = useState("");
+  const [failedAttemptId, setFailedAttemptId] = useState("");
   const [preparingAttemptId, setPreparingAttemptId] = useState("");
   const [activeAttempt, setActiveAttempt] = useState<AttemptSnapshot | null>(null);
   const [activeQuestions, setActiveQuestions] = useState<PresentationQuestion[]>([]);
@@ -322,6 +326,7 @@ export function PracticeArea({ initialRevisionId, initialSection, initialExam = 
       : !pool.length || !Number.isInteger(Number(count)) || Number(count) < 1 || Number(count) > pool.length))
       return;
     setBuilding(true); setGeneralError(""); setLoadError("");
+    if (sectionExam) void requestExamFullscreen();
     try {
       const created = await request<AttemptSnapshot>("/api/attempts", mutation(sectionExam
         ? { revisionId, kind: "section_exam", section }
@@ -339,6 +344,7 @@ export function PracticeArea({ initialRevisionId, initialSection, initialExam = 
     setBuilding(true);
     try {
       const latest = await request<AttemptSnapshot>(`/api/attempts/${preparingAttemptId}`);
+      latest.clientReceivedAt = performance.now();
       await openLoadingGate(latest);
     } catch (cause: unknown) {
       const message = cause instanceof Error ? cause.message : "This Attempt could not be reloaded. Try again.";
@@ -349,9 +355,10 @@ export function PracticeArea({ initialRevisionId, initialSection, initialExam = 
 
   async function openAttempt(attemptId: string) {
     if (building) return;
-    setBuilding(true); setGeneralError("");
+    setBuilding(true); setGeneralError(""); setFailedAttemptId(""); setLoadError("");
     try {
       const snapshot = await request<AttemptSnapshot>(`/api/attempts/${attemptId}`);
+      snapshot.clientReceivedAt = performance.now();
       if (snapshot.status === "preparing") {
         await openLoadingGate(snapshot);
         return;
@@ -370,7 +377,22 @@ export function PracticeArea({ initialRevisionId, initialSection, initialExam = 
       setLoadMessage("");
     } catch (cause: unknown) {
       setLoadMessage("");
+      setFailedAttemptId(attemptId);
       setGeneralError(cause instanceof Error ? cause.message : "This Attempt could not be opened. Try again.");
+      if (cause instanceof RequestError && cause.status === 401) onSessionEnded();
+    } finally { setBuilding(false); }
+  }
+
+  async function deleteAttempt(attempt: AttemptSummary) {
+    if (building || !window.confirm(`Delete this ${attempt.kind === "section_exam" ? "Section Exam" : "Practice"} Attempt? Its answers, result, and guided reviews will be permanently removed from History and Progress. Your study notes will stay. This cannot be undone.`)) return;
+    setBuilding(true); setGeneralError("");
+    try {
+      await request(`/api/attempts/${attempt.attemptId}`, { method: "DELETE", headers: { "X-CSRF-Token": csrfToken() } });
+      setAttempts(current => current.filter(item => item.attemptId !== attempt.attemptId));
+      if (preparingAttemptId === attempt.attemptId) { setPreparingAttemptId(""); setLoadError(""); }
+      if (failedAttemptId === attempt.attemptId) setFailedAttemptId("");
+    } catch (cause) {
+      setGeneralError(cause instanceof Error ? cause.message : "The Attempt could not be deleted. Try again.");
       if (cause instanceof RequestError && cause.status === 401) onSessionEnded();
     } finally { setBuilding(false); }
   }
@@ -407,7 +429,10 @@ export function PracticeArea({ initialRevisionId, initialSection, initialExam = 
     </div>}
     <header className="practice-area__heading"><div><h2 id="practice-heading">Practice</h2>
       <p>Build one focused Attempt from a reviewed Test Package. Your work stays with your account.</p></div></header>
-    {generalError && <p className="practice-error" role="alert">{generalError}</p>}
+    {generalError && <div className="practice-error" role="alert"><p>{generalError}</p>
+      {failedAttemptId && <button type="button" className="practice-button" disabled={building}
+        onClick={() => void openAttempt(failedAttemptId)}>Retry loading</button>}
+    </div>}
     {loading ? <p role="status">Loading packages and Attempts…</p> : <>
       <div className="practice-builder">
         <form onSubmit={(event) => void prepareAttempt(event)}>
@@ -508,9 +533,12 @@ export function PracticeArea({ initialRevisionId, initialSection, initialExam = 
             <div><strong>{packages.find((item) => item.revisionId === attempt.revisionId)?.title ?? "Reviewed Test Package"}</strong>
               <span>{attempt.section} · {attempt.kind === "section_exam" ? "Section Exam" : "Practice"}{attempt.category ? ` · ${attempt.category}` : ""} · {attempt.questionCount} questions · {attempt.status}</span></div>
             {attempt.status !== "expired" && <button type="button" className="practice-button practice-button--quiet"
-              disabled={building} onClick={() => void openAttempt(attempt.attemptId)}>
+              disabled={building} onClick={() => { if (attempt.kind === "section_exam" && attempt.status !== "completed") void requestExamFullscreen(); void openAttempt(attempt.attemptId); }}>
               {attempt.status === "preparing" ? "Continue setup" : attempt.status === "completed" ? "Review results" : "Resume Attempt"}
             </button>}
+            <button type="button" className="practice-delete" disabled={building}
+              aria-label={`Delete ${attempt.kind === "section_exam" ? "Section Exam" : "Practice"} Attempt from ${packages.find(item => item.revisionId === attempt.revisionId)?.title ?? attempt.section}`}
+              onClick={() => void deleteAttempt(attempt)}>Delete</button>
           </li>)}</ul>}
       </section>
     </>}

@@ -1,0 +1,15 @@
+.question-image { display: block; position: relative; min-width: 0; max-width: 100%; }
+.question-image .question-content__image-asset { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; }
+.question-image__zoom { display: block; margin: 6px 0 12px; padding: 6px 10px; border: 1px solid #b7bfae; border-radius: 6px; background: #fffefa; color: #374e30; font: inherit; font-size: 12px; cursor: pointer; }
+.question-image-dialog { width: min(1100px, 96vw); max-width: 96vw; max-height: 94dvh; padding: 16px; border: 1px solid #cbd0bf; border-radius: 12px; background: #fffefa; color: #343a30; }
+.question-image-dialog::backdrop { background: #20251fcc; }
+.question-image-dialog__controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.question-image-dialog__controls button { padding: 8px 12px; border: 1px solid #b7bfae; border-radius: 6px; background: #eef0e7; color: #343a30; font: inherit; cursor: pointer; }
+.question-image-dialog__controls button:last-child { margin-left: auto; background: #4c6243; color: #fffaf0; }
+.question-image-dialog__controls button:disabled { opacity: .5; cursor: default; }
+.question-image-dialog__viewport { max-height: 72dvh; overflow: auto; }
+.question-image-dialog__viewport img { display: block; height: auto; }
+.attempt-highlight-text mark { background: #f2d978; color: inherit; }
+.attempt-highlight-image { position: relative; display: block; width: fit-content; max-width: 100%; }
+.attempt-highlight-image.is-highlighting { cursor: crosshair; touch-action: none; }
+.attempt-highlight-region { position: absolute; background: #f0cd3880; mix-blend-mode: multiply; pointer-events: none; }

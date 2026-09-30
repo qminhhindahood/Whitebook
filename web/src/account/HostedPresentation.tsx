@@ -1,7 +1,9 @@
-import { useLayoutEffect, useRef } from "react";
+import { useContext, useLayoutEffect, useRef } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import "../math-presentation.css";
+import { QuestionImage } from "./QuestionImage";
+import { HighlightContext, HighlightText } from "./AttemptHighlights";
 
 type TextRun = { text: string; emphasis?: boolean; blank?: boolean };
 export type HostedBlock =
@@ -32,27 +34,28 @@ function MathNotation({ source }: { source: string }) {
   return <span ref={target} className="question-content__math" />;
 }
 
-export function HostedBlocks({ blocks, revisionId, questionId, highlightQuote }: {
-  blocks: HostedBlock[]; revisionId: string; questionId: string; highlightQuote?: string | null;
+export function HostedBlocks({ blocks, revisionId, questionId, highlightQuote, blockPrefix = "stem" }: {
+  blocks: HostedBlock[]; revisionId: string; questionId: string; highlightQuote?: string | null; blockPrefix?: string;
 }) {
   return <span className="question-content">
     {blocks.map((block, index) => {
-      if (block.kind === "text") return <span key={index}>{block.text}</span>;
+      if (block.kind === "text") return <HighlightText key={index} block={`${blockPrefix}:${index}`} text={block.text} />;
       if (block.kind === "latex") return <MathNotation key={index} source={block.latex} />;
       if (block.kind === "reviewed_text") return <span key={index} className="question-content__text--reviewed">
         {block.runs.map((run, runIndex) => {
           const content = run.blank ? <span className="question-content__blank">{run.text}</span> : run.text;
           const matchAt = !run.blank && highlightQuote ? run.text.indexOf(highlightQuote) : -1;
           const matched = matchAt >= 0 ? <><span>{run.text.slice(0, matchAt)}</span><mark aria-label="Quoted evidence highlight">{highlightQuote}</mark><span>{run.text.slice(matchAt + highlightQuote!.length)}</span></> : content;
-          return run.emphasis ? <em key={runIndex}>{matched}</em> : <span key={runIndex}>{matched}</span>;
+          const highlighted = <HighlightText block={`${blockPrefix}:${index}:${runIndex}`} text={run.text}>{matched}</HighlightText>;
+          return run.emphasis ? <em key={runIndex}>{highlighted}</em> : <span key={runIndex}>{highlighted}</span>;
         })}
       </span>;
       const src = block.kind === "image_asset" ?
         `/content/${revisionId}/${questionId}/${block.assetId}.png` : block.src;
-      return <img key={index} className="question-content__image-asset" src={src} alt={block.alt}
+      return <QuestionImage key={index} block={`${blockPrefix}:${index}`} src={src} alt={block.alt}
         width={block.kind === "image_asset" ? block.width : undefined}
         height={block.kind === "image_asset" ? block.height : undefined}
-        loading="eager" decoding="async" />;
+        />;
     })}
   </span>;
 }
@@ -62,15 +65,16 @@ export function HostedChoices({ presentation, revisionId, questionId, selected, 
   revisionId: string; questionId: string; selected?: string; eliminated: string[];
   onSelect: (choice: string) => void; onEliminate: (choice: string) => void; disabled?: boolean; showElimination?: boolean;
 }) {
+  const highlighting = useContext(HighlightContext)?.enabled;
   return <fieldset className="content-choices">
     <legend className="visually-hidden">Select one answer</legend>
     {presentation.choices.map((choice) => {
       const excluded = eliminated.includes(choice.id);
       return <div className={`content-choice${excluded ? " content-choice--eliminated" : ""}`} key={choice.id}>
-        <label className="choice-card"><input type="radio" name={`answer-${questionId}`} value={choice.id}
-          checked={selected === choice.id} disabled={disabled} onChange={() => onSelect(choice.id)} />
+        <label className="choice-card" onClick={event => { if (highlighting || window.getSelection()?.isCollapsed === false) event.preventDefault(); }}><input type="radio" name={`answer-${questionId}`} value={choice.id}
+          checked={selected === choice.id} disabled={disabled || highlighting} onChange={() => { if (!highlighting) onSelect(choice.id); }} />
           <span className="choice-letter">{choice.id}</span>
-          <HostedBlocks blocks={choice.content} revisionId={revisionId} questionId={questionId} />
+          <HostedBlocks blockPrefix={`choice:${choice.id}`} blocks={choice.content} revisionId={revisionId} questionId={questionId} />
           {excluded && <span className="visually-hidden">Eliminated</span>}
         </label>
         {showElimination && <button type="button" className="choice-eliminate" aria-label={`${excluded ? "Restore" : "Eliminate"} ${choice.id}`}

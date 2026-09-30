@@ -468,6 +468,7 @@ type AttemptState = {
 };
 
 type AttemptChange =
+  | { type: "highlights"; questionId: string; highlights: Record<string, unknown>[] }
   | { type: "response"; questionId: string; response: string | null }
   | { type: "mark"; questionId: string; marked: boolean }
   | { type: "elimination"; questionId: string; choiceId: string; eliminated: boolean }
@@ -498,6 +499,18 @@ function parseChange(value: unknown, questions: QuestionLink[]): AttemptChange |
   const question = questions.find((item) => item.questionId === value.questionId);
   if (!question) return null;
   const questionId = question.questionId;
+  if (value.type === "highlights" && question.section === "Reading and Writing" && Array.isArray(value.highlights) && value.highlights.length <= 100) {
+    const valid = value.highlights.every((item: unknown) => {
+      if (!isObject(item) || typeof item.block !== "string" || !/^(?:stem|stimulus|choice:[A-D]):\d{1,4}(?::\d{1,4})?$/.test(item.block)) return false;
+      if (item.kind === "text") return Object.keys(item).length === 4 && Number.isSafeInteger(item.start) && Number.isSafeInteger(item.end) &&
+        Number(item.start) >= 0 && Number(item.end) > Number(item.start) && Number(item.end) <= 100_000;
+      if (item.kind !== "region" || Object.keys(item).length !== 6) return false;
+      if (![item.x, item.y, item.width, item.height].every(number => typeof number === "number" && Number.isFinite(number))) return false;
+      return Number(item.x) >= 0 && Number(item.y) >= 0 && Number(item.width) > 0 && Number(item.height) > 0 &&
+        Number(item.x) + Number(item.width) <= 1.000001 && Number(item.y) + Number(item.height) <= 1.000001;
+    });
+    if (valid) return { type: "highlights", questionId, highlights: value.highlights };
+  }
   if (value.type === "response" && (value.response === null ||
       (typeof value.response === "string" && value.response.length <= 4096 &&
        (question.responseType !== "multiple_choice" || question.choiceIds.includes(value.response)))))
@@ -522,7 +535,9 @@ function applyChange(source: Record<string, unknown>, change: AttemptChange): At
       .map(([questionId, choices]) => [questionId, [...choices]])),
     currentQuestionId: previous.currentQuestionId,
   };
-  if (change.type === "response") {
+  if (change.type === "highlights") {
+    state.highlights = { ...(isObject(source.highlights) ? source.highlights : {}), [change.questionId]: change.highlights };
+  } else if (change.type === "response") {
     if (change.response === null) delete state.responses[change.questionId];
     else state.responses[change.questionId] = change.response;
   } else if (change.type === "mark") {
@@ -846,9 +861,9 @@ async function getResults(env: AttemptEnv, accountId: string, attemptId: string,
 async function markAssisted(env: AttemptEnv, accountId: string, attemptId: string, now: number): Promise<Response> {
   const row = await attemptRow(env, accountId, attemptId);
   if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
-  if (row.kind !== "practice" || row.status !== "active")
-    return failure(409, "assisted_unavailable", "Only an active Practice Attempt can become Assisted Practice.");
-  const saved = await env.DB.prepare("UPDATE learner_attempts SET assisted_at_ms = ? WHERE id = ? AND account_id = ? AND kind = 'practice' AND status = 'active' AND assisted_at_ms IS NULL")
+  if (row.status !== "active")
+    return failure(409, "assisted_unavailable", "Only an active Attempt can become assisted.");
+  const saved = await env.DB.prepare("UPDATE learner_attempts SET assisted_at_ms = ? WHERE id = ? AND account_id = ? AND status = 'active' AND assisted_at_ms IS NULL")
     .bind(now, attemptId, accountId).run();
   if (!saved.success) return failure(503, "attempt_unavailable", "Whitebook could not enable Assisted Practice. Try again.");
   const updated = await attemptRow(env, accountId, attemptId);
@@ -877,6 +892,15 @@ export function attemptRoute(request: Request, env: AttemptEnv, now: () => numbe
     const match = new RegExp("^/api/attempts/([0-9a-f-]{36})(?:/(start|write|heartbeat|takeover|submit|results|assisted|finish-module|continue|pause|resume))?$", "i").exec(path);
     if (!match) return failure(404, "not_found", "This Attempt action is unavailable.");
     const attemptId = match[1];
+    if (request.method === "DELETE" && !match[2]) {
+      const row = await attemptRow(env, session.account_id, attemptId);
+      if (!row) return failure(404, "not_found", "This Attempt is unavailable.");
+      // guided_reviews uses ON DELETE CASCADE; question-scoped study_notes remain.
+      const deleted = await env.DB.prepare("DELETE FROM learner_attempts WHERE id = ? AND account_id = ?")
+        .bind(attemptId, session.account_id).run();
+      if (!deleted.success) return failure(503, "attempt_unavailable", "The Attempt could not be deleted. Try again.");
+      return json({ deleted: true, attemptId });
+    }
     if (request.method === "GET" && !match[2])
       return getAttempt(env, session.account_id, attemptId, serverNow);
     if (request.method === "POST" && match[2] === "start")

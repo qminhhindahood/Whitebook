@@ -584,3 +584,10 @@ it("waits for calculator readiness before resuming and falls back to the scienti
   expect(screen.getByRole("textbox", { name: "Expression" })).toBeTruthy();
   expect(screen.queryByTitle("Desmos graphing calculator")).toBeNull();
 });
+
+it("does not give back time spent loading protected content on resume", () => {
+  const { view } = fixture();
+  view(attempt({ clientReceivedAt: performance.now() - 30_000 }));
+  expect(screen.getByLabelText("Time remaining").textContent).toMatch(/^09:(29|30)$/);
+});
+

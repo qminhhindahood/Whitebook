@@ -404,3 +404,42 @@ it.each([
   expect(await screen.findByRole("heading", { name: "Build a Practice Attempt" })).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(false);
 });
+
+it("offers an explicit same-Attempt retry after the initial resume GET fails", async () => {
+  const { fetchMock, calls } = apiFixture();
+  const original = fetchMock.getMockImplementation()!;
+  let reads = 0;
+  fetchMock.mockImplementation(async (path, init) => {
+    if (path === "/api/attempts/attempt-1" && ++reads === 1) {
+      calls.push({ path, init });
+      return Response.json({ error: { code: "attempt_unavailable", message: "Temporary resume failure" } }, { status: 503 });
+    }
+    return original(path, init);
+  });
+  render(<PracticeArea initialAttemptId="attempt-1" onSessionEnded={() => {}} />);
+  expect((await screen.findByRole("alert")).textContent).toContain("503");
+  fireEvent.click(screen.getByRole("button", { name: "Retry loading" }));
+  await screen.findByRole("heading", { name: "Reading and Writing · Practice" });
+  expect(reads).toBe(2);
+  expect(calls.filter(call => call.path === "/api/attempts" && call.init?.method === "POST")).toHaveLength(0);
+});
+
+it("cancels deletion without a request and removes the Attempt only after server success", async () => {
+  const { fetchMock } = apiFixture();
+  const original = fetchMock.getMockImplementation()!;
+  let deletes = 0;
+  fetchMock.mockImplementation(async (path, init) => {
+    if (path === "/api/attempts" && !init?.method) return Response.json({ attempts: [{ attemptId: "attempt-1", revisionId: "reviewed-rw", section: "Reading and Writing", status: "active", questionCount: 2 }] });
+    if (path === "/api/attempts/attempt-1" && init?.method === "DELETE") { deletes++; return Response.json({ deleted: true }); }
+    return original(path, init);
+  });
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  render(<PracticeArea onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Delete.*Attempt/ }));
+  expect(deletes).toBe(0);
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getByRole("button", { name: /Delete.*Attempt/ }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Resume Attempt" })).toBeNull());
+  expect(deletes).toBe(1);
+  confirm.mockRestore();
+});

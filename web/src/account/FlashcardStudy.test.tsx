@@ -163,3 +163,17 @@ it("ends the session through the callback when the server reports a signed-out s
   render(<StudySession plan={plan} onExit={() => {}} onSessionEnded={onSessionEnded} />);
   await waitFor(() => expect(onSessionEnded).toHaveBeenCalled());
 });
+
+it("keeps both Starter Decks discoverable when Personal Cards are empty and searches each group", async () => {
+  stubFetch(path => path.startsWith("/api/cards/study?") ? Response.json({ ...overview, personal: [] }) : new Response(null, { status: 404 }));
+  render(<FlashcardsArea />);
+  expect(await screen.findByRole("heading", { name: "Starter Decks" })).toBeTruthy();
+  expect(screen.getByText("839 cards")).toBeTruthy();
+  expect(screen.getByText("1000 cards")).toBeTruthy();
+  expect(screen.getByText(/You have no personal cards yet/)).toBeTruthy();
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "B2-C1" } });
+  expect(screen.queryByText("Anki starter: SAT words")).toBeNull();
+  expect(screen.getByText("B2-C1 SAT vocabulary (1,000 words)")).toBeTruthy();
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "missing-deck" } });
+  expect(screen.getByText("No decks match your search.")).toBeTruthy();
+});

@@ -228,7 +228,7 @@ export function AccountApp() {
         {tutorEnabled && <Suspense fallback={null}><TutorChat key={me.account.id} workspaceView={view} learnerName={name} onAvailability={setTutorAvailable} onSessionEnded={handleSessionEnded} /></Suspense>}
         {view === "dashboard" ? <><Reminders accountId={me.account.id} refreshKey={refreshKey} onChooseDate={() => setDatesOpen(true)} onSessionEnded={handleSessionEnded} /><StudyDashboard data={workspace.data} name={name} timeZone={me.account.timeZone} onNavigate={navigate} onDates={() => setDatesOpen(true)} onPractice={startPractice} onResume={resumeAttempt} />{workspace.error && <p className="workspace-notice" role="status">{workspace.error} <button className="secondary" onClick={workspace.retry}>Retry</button></p>}</> :
           view === "tutor" && tutorEnabled ? null :
-          view === "cards" ? <FlashcardsArea onSessionEnded={handleSessionEnded} /> :
+          view === "cards" ? <FlashcardsArea learnerName={name} onSessionEnded={handleSessionEnded} /> :
           view === "library" ? <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={startPractice} /> :
           view === "practice" ? <PracticeArea key={`${practiceRevisionId}-${resumeId}-${practiceExam}`} initialRevisionId={practiceRevisionId} initialSection={practiceSection} initialExam={practiceExam} initialAttemptId={resumeId} onPlayerChange={setPlayerOpen} onSessionEnded={handleSessionEnded} /> :
           view === "history" ? <HistoryArea initialTarget={historyTarget} onResume={resumeAttempt} onSessionEnded={handleSessionEnded} /> :

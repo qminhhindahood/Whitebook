@@ -92,7 +92,7 @@ async function fixture() {
         async first<T>() {
           if (sql.includes("FROM learner_sessions")) {
             const row = sessions.get(String(args[0]));
-            return (row && row.expires_at > Number(args[1]) ? row : null) as T | null;
+            return (row && row.expires_at > Number(args[1]) ? { ...row } : null) as T | null;
           }
           if (sql.includes("FROM package_revisions p WHERE p.id")) {
             const revisionId = String(args[0]);
@@ -102,7 +102,7 @@ async function fixture() {
           }
           if (sql.includes("FROM learner_attempts")) {
             const row = attempts.get(String(args[0]));
-            return (row && row.account_id === String(args[1]) ? row : null) as T | null;
+            return (row && row.account_id === String(args[1]) ? { ...row } : null) as T | null;
           }
           return null;
         },
@@ -136,7 +136,7 @@ async function fixture() {
           if (sql.includes("SET assisted_at_ms = ?")) {
             const [at, id, accountId] = args;
             const row = attempts.get(String(id));
-            if (!row || row.account_id !== String(accountId) || row.kind !== "practice" || row.status !== "active" || row.assisted_at_ms !== null)
+            if (!row || row.account_id !== String(accountId) || row.status !== "active" || row.assisted_at_ms !== null)
               return { success: true, meta: { changes: 0, rows_read: 0, rows_written: 0 } };
             row.assisted_at_ms = Number(at);
             return { success: true, meta: { changes: 1, rows_read: 0, rows_written: 1 } };
@@ -1166,3 +1166,22 @@ it("completes a private two-device handoff with server-graded, unchanged Attempt
     vi.useRealTimers();
   }
 });
+
+it("persists bounded R&W highlights on the same Attempt and rejects invalid regions", async () => {
+  const { credentials, call } = await fixture();
+  const { attemptId, started } = await startPractice(call, credentials[0]);
+  const highlights = [{ block: "stem:0", kind: "text", start: 0, end: 5 },
+    { block: "choice:A:0", kind: "region", x: .1, y: .2, width: .5, height: .1 }];
+  const saved = await call(`/api/attempts/${attemptId}/write`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+      change: { type: "highlights", questionId: "q1", highlights } } });
+  expect(saved.status).toBe(200);
+  const next = await saved.json() as { stateVersion: number };
+  const resumed = await call(`/api/attempts/${attemptId}`, { who: credentials[0] });
+  expect(await resumed.json()).toMatchObject({ attemptId, deadlineAt: started.deadlineAt, state: { highlights: { q1: highlights } } });
+  const invalid = await call(`/api/attempts/${attemptId}/write`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: next.stateVersion,
+      change: { type: "highlights", questionId: "q1", highlights: [{ ...highlights[1], x: .9 }] } } });
+  expect(invalid.status).toBe(400);
+});
+

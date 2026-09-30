@@ -18,5 +18,6 @@ it("serves a nonce-protected calculator bridge with a frame-only Desmos CSP", as
   expect(policy).toContain("frame-ancestors 'self'");
   expect(html).toContain(`<script nonce="${nonce}">`);
   expect(html).toContain("Desmos.GraphingCalculator");
+  expect(html).toContain("rect.width>=240");
   expect(response.headers.get("cache-control")).toBe("private, no-store");
 });

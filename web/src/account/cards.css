@@ -26,13 +26,11 @@
 .cards-form button, .cards-add-button, .cards-item-actions button { border: 0; border-radius: 8px; background: #2056aa; color: white; padding: 10px 15px; font: inherit; font-weight: 650; cursor: pointer; }
 .cards-form-actions button:last-child, .cards-item-actions button { background: #33465e; }
 .cards-form button:disabled, .cards-add-button:disabled, .cards-item-actions button:disabled { opacity: .55; cursor: wait; }
-.cards-assistant { display: grid; gap: 12px; margin: 18px 0; padding: 18px; border: 1px solid #cbd6ee; border-radius: 10px; background: #f8f9fd; }
-.cards-assistant label { display: grid; gap: 7px; font-weight: 650; }
-.cards-assistant select, .cards-assistant textarea, .cards-assistant input { padding: 10px 12px; border: 1px solid #a9b9ce; border-radius: 8px; font: inherit; }
-.cards-assistant textarea { min-height: 80px; resize: vertical; }
-.cards-assistant__preview, .cards-assistant__advice, .cards-assistant__draft { padding: 12px; border: 1px solid #dce4ef; border-radius: 8px; background: #fff; }
-.cards-assistant__preview pre { max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; }
-.cards-assistant__draft { display: grid; gap: 8px; }
+.cards-assistant.tutor-chat { margin: 18px 0 24px; }
+.cards-assistant-trigger-row { margin: 16px 0 20px; }
+.cards-ai-button { display: inline-flex; align-items: center; gap: 7px; background: #4c6243 !important; color: #fffaf0 !important; border-radius: 8px; font-weight: 600; transition: all 0.15s ease; }
+.cards-ai-button:hover { background: #374e30 !important; }
+.cards-ai-button svg { width: 15px; height: 15px; fill: #9eb084 !important; stroke: #4c6243 !important; }
 .cards-form button:focus-visible, .cards-add-button:focus-visible, .cards-item-actions button:focus-visible,
 .cards-toolbar-actions select:focus-visible, .cards-form-field input:focus-visible, .cards-form-field textarea:focus-visible { outline: 3px solid #edab3a; outline-offset: 2px; }
 

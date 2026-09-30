@@ -1,0 +1,28 @@
+
+> test
+> vitest run && node --test test/mapLimited.node.mjs test/retryLoad.node.mjs test/stagePublicationVisuals.node.mjs test/privateBuildAssets.node.mjs
+
+
+ RUN  v5.0.0 D:/Notion/worktrees/whitebook-hosted-redesign/hosted
+
+
+ Test Files  20 passed (20)
+      Tests  200 passed | 1 skipped (201)
+   Start at  05:48:20
+   Duration  25.90s (tests 45%, import 43%, transform 11%, worker 1%)
+
+✔ rehearsal requests stay bounded and preserve question order (36.0303ms)
+✔ a failed request waits for in-flight requests before cleanup (14.3743ms)
+✔ R2 input restoration verifies the downloaded object hash (21.1886ms)
+✔ R2 input restoration rejects an object with the wrong hash (16.3166ms)
+✔ retries transient visual failures but not authorization failures (5.4127ms)
+✔ release staging copies and verifies every manifest visual (60.3501ms)
+✔ a release build cannot stage visuals without a private bundle (144.542ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 506.8483

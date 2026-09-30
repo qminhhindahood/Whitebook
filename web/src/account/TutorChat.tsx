@@ -12,7 +12,42 @@ type ReviewChoice = { reviewId: string; attemptId: string; revisionId: string; q
 class ChatFailure extends Error {
   constructor(message: string, public retryAt = 0) { super(message); }
 }
-const selectionId = (p: Provider) => `${p.route}/${p.model}`;
+const selectionId = (p: Provider) => `${p.route}:${p.model}`;
+const matchesSelection = (p: Provider, sel: string) => {
+  const norm = (sel || "").replace("/", ":");
+  return `${p.route}:${p.model}` === norm;
+};
+const formatModelName = (model: string) => {
+  const clean = model.replace(/^models\//, "");
+  switch (clean) {
+    case "gemini-3.8-flash":
+      return "Gemini 3.8 Flash (High)";
+    case "gemini-3.7-flash":
+      return "Gemini 3.7 Flash";
+    case "gemini-3-flash":
+      return "Gemini 3 Flash";
+    case "gemini-3.1-flash-lite":
+      return "Gemini 3.1 Flash Lite";
+    case "gemini-2.5-flash":
+      return "Gemini 2.5 Flash";
+    default:
+      return clean
+        .replace(/-/g, " ")
+        .replace(/\b\w/g, c => c.toUpperCase());
+  }
+};
+const modelLabel = (p: Provider) => {
+  const name = formatModelName(p.model);
+  const route = p.payer === "platform" || p.route === "shared_gemini" ? "Shared" : "Personal";
+  return `${name} (${route})`;
+};
+const DEFAULT_CANDIDATE_MODELS: Provider[] = [
+  { route: "shared_gemini", model: "gemini-3.8-flash", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
+  { route: "shared_gemini", model: "gemini-3.7-flash", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
+  { route: "shared_gemini", model: "gemini-3-flash", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
+  { route: "shared_gemini", model: "gemini-3.1-flash-lite", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
+  { route: "shared_gemini", model: "gemini-2.5-flash", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
+];
 
 export type TutorChatProps = {
   workspaceView: string;
@@ -25,7 +60,6 @@ const PROMPT_SUGGESTIONS = [
   { icon: "💡", title: "Math quadratics", text: "How do I recognize when to use the quadratic formula vs factoring on SAT Math?" },
   { icon: "📖", title: "Paired passages", text: "What is the best strategy for paired historical passages in Reading and Writing?" },
   { icon: "✍️", title: "Grammar rules", text: "Can you explain semicolon and comma splice rules with SAT examples?" },
-  { icon: "⏱️", title: "Pacing advice", text: "How should I budget my time across the 22 questions in Math Module 2?" },
 ];
 
 function CopyButton({ text }: { text: string }) {
@@ -193,7 +227,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
   const threadEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const active = workspaceView === "tutor";
-  const provider = options?.options.find(p => selectionId(p) === selection);
+  const provider = options?.options.find(p => matchesSelection(p, selection)) ?? options?.options[0] ?? DEFAULT_CANDIDATE_MODELS[0];
 
   async function toggleFullscreen() {
     if (!isFullscreen) {
@@ -300,8 +334,8 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
       }).catch(() => { /* Attachment picker remains empty when unavailable. */ });
       const savedRoute = localStorage.getItem("whitebook_tutor_route");
       setSelection(current => {
-        if (savedRoute && data.options.some(p => selectionId(p) === savedRoute)) return savedRoute;
-        return data.options.some(p => selectionId(p) === current) ? current : data.options[0] ? selectionId(data.options[0]) : "";
+        if (savedRoute && data.options.some(p => matchesSelection(p, savedRoute))) return savedRoute.replace("/", ":");
+        return data.options.some(p => matchesSelection(p, current)) ? current : data.options[0] ? selectionId(data.options[0]) : selectionId(DEFAULT_CANDIDATE_MODELS[0]);
       });
     }).catch(() => {
       if (live && !controller.signal.aborted) {
@@ -346,7 +380,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
   }
 
   function handleSend() {
-    if (!provider || unavailable || !draft.trim() || !provider.healthy || !provider.languages.includes(locale)) return;
+    if (!provider || unavailable || !draft.trim() || !provider.healthy) return;
     const textToSend = draft.trim();
     const priorTurns = turns;
     setDraft("");
@@ -430,15 +464,23 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
       </div>
       <div className="tutor-header__actions">
         <label className="tutor-compact-label">
-          <span className="sr-only">Response language</span>
+          <span className="sr-only">Model</span>
           <select
-            aria-label="Response language"
+            aria-label="Model"
             disabled={busy}
-            value={locale}
-            onChange={e => { setLocale(e.target.value); }}
+            value={selection || selectionId(DEFAULT_CANDIDATE_MODELS[0])}
+            onChange={e => {
+              const val = e.target.value;
+              setSelection(val);
+              localStorage.setItem("whitebook_tutor_route", val);
+              window.dispatchEvent(new Event("whitebook_tutor_settings_changed"));
+            }}
           >
-            <option value="en" disabled={!provider?.languages.includes("en")}>English</option>
-            <option value="vi" disabled={!provider?.languages.includes("vi")}>Vietnamese</option>
+            {(options?.options.length ? options.options : DEFAULT_CANDIDATE_MODELS).map(p => (
+              <option key={selectionId(p)} value={selectionId(p)} disabled={!p.healthy}>
+                {modelLabel(p)}{!p.healthy ? " (offline)" : ""}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -717,7 +759,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
             <button
               type="submit"
               className="tutor-capsule-send-btn"
-              disabled={unavailable || !draft.trim() || !provider?.healthy || !provider.languages.includes(locale)}
+              disabled={unavailable || !draft.trim() || !provider?.healthy}
               title="Send (Enter)"
             >
               <Icon name="arrowUp" />

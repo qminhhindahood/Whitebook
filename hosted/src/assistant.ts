@@ -39,7 +39,6 @@ const bodyHasExactly = (body: Record<string, unknown>, required: string[], optio
   required.every(key => Object.prototype.hasOwnProperty.call(body, key)) && Object.keys(body).every(key => required.includes(key) || optional.includes(key));
 const CARD_FIELDS = ["front", "definition", "vietnamese", "partOfSpeech", "pronunciation", "synonyms", "example"] as const;
 const sharedGeminiKey = (env: AssistantEnv) => env.GCP_GEMINI_SHARED_KEY || env.GEMINI_SHARED_KEY;
-
 // No default model, price, audience eligibility, or capability claims. Operators must
 // supply a dated, reviewed catalog; fixture metadata cannot enable the deployed app.
 function catalog(env: AssistantEnv, now: number): Option[] {
@@ -59,7 +58,18 @@ function catalog(env: AssistantEnv, now: number): Option[] {
       options.push({ route: row.route, model: row.model, payer: row.payer, price: row.price, terms: row.terms, termsUrl: row.termsUrl, termsVersion: row.termsVersion, languages: row.languages, vision: row.vision, quota: row.quota, healthy: row.healthy });
     }
     if (new Set(options.map(o => o.route + o.model)).size !== options.length) return [];
-    return options;
+    const result: Option[] = [];
+    for (const item of options) {
+      result.push(item);
+      if (GEMINI_CANDIDATE_MODELS.includes(item.model)) {
+        for (const candidate of GEMINI_CANDIDATE_MODELS) {
+          if (candidate !== item.model && !options.some(o => o.route === item.route && o.model === candidate) && !result.some(o => o.route === item.route && o.model === candidate)) {
+            result.push({ ...item, model: candidate });
+          }
+        }
+      }
+    }
+    return result;
   } catch { return []; }
 }
 
@@ -75,11 +85,6 @@ async function routeKey(env: AssistantEnv, account: string, option: Option): Pro
   }
   const row = await credential(env, account);
   return row ? { key: await unseal(row.ciphertext, env.ASSISTANT_KEY_KEK!, `credential:${account}`), version: row.version } : null;
-}
-async function assessmentBlock(env: AssistantEnv, account: string): Promise<Response | null> {
-  const exam = await env.DB.prepare("SELECT id FROM learner_attempts WHERE account_id = ? AND kind = 'section_exam' AND status = 'active' LIMIT 1").bind(account).first();
-  if (exam) return failure(409, "active_section_exam", "Finish the active Section Exam before opening Tutor Chat.");
-  return null;
 }
 function rateLimitedResponse(code: string, seconds: number, now: number): Response {
   return Response.json({ error: { code, message: `Tutor Chat is unavailable. Try again in ${seconds} seconds.`, retryAt: now + seconds * 1000 } }, { status: 429, headers: { ...noStore, "Retry-After": String(seconds) } });
@@ -700,7 +705,6 @@ export function assistantRoute(request: Request, env: AssistantEnv, adapter: Gem
     const session = await currentSession(request, env);
     if (!session) return failure(401, "signed_out", "Sign in to open Tutor Chat.");
     if (request.method !== "GET") { const denied = await requireMutation(request, env, session); if (denied) return denied; }
-    const blocked = await assessmentBlock(env, session.account_id); if (blocked) return blocked;
     const time = now();
     if (request.method === "POST" && path === "/api/assistant/plan-accept") {
       const body = await bodyOf(request); if (!body) return invalid();

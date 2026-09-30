@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AccountApp } from "./AccountApp";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); localStorage.clear(); sessionStorage.clear(); });
 const option = { route: "shared_gemini", model: "gemini-test", payer: "Shared AI Access", price: "USD 0 fixture", terms: "Fixture terms", termsUrl: "https://ai.google.dev/gemini-api/terms", termsVersion: "test", quota: "Fixture quota", languages: ["en", "vi"], vision: false, healthy: true };
 function setup(enabled = true, vision = false) {
   vi.stubEnv("VITE_AI_RELEASE_ENABLED", enabled ? "true" : "false");
@@ -43,11 +43,11 @@ it("sends message directly, preserves the visit across navigation, and clears on
   fireEvent.click(await screen.findByRole("button", { name: "AI Tutor" }));
   expect(await screen.findByText("Fixture tutor reply")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Your message"), { target: { value: "One more" } });
-  fireEvent.change(screen.getByLabelText("Response language"), { target: { value: "vi" } });
+  fireEvent.change(screen.getByLabelText("Model"), { target: { value: "shared_gemini/gemini-test" } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await screen.findByText("Fixture tutor reply");
   await waitFor(() => expect(f.calls.filter(c => c.path.endsWith("/send"))).toHaveLength(2));
-  expect(f.calls.filter(c => c.path.endsWith("/preview")).at(-1)!.body).toMatchObject({ locale: "vi", priorMessages: [{ role: "learner", text: "Explain slope" }, { role: "assistant", text: "Fixture tutor reply" }] });
+  expect(f.calls.filter(c => c.path.endsWith("/preview")).at(-1)!.body).toMatchObject({ locale: "en", priorMessages: [{ role: "learner", text: "Explain slope" }, { role: "assistant", text: "Fixture tutor reply" }] });
   fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
   fireEvent.click(screen.getByRole("button", { name: "Account & Settings" }));
   fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));

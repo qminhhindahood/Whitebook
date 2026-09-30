@@ -49,7 +49,7 @@ function CardFields({ card }: { card: CardRecord }) {
   </dl>;
 }
 
-export function PersonalCards({ onSessionEnded }: { onSessionEnded?: () => void }) {
+export function PersonalCards({ onSessionEnded, learnerName }: { onSessionEnded?: () => void; learnerName?: string }) {
   const [cards, setCards] = useState<CardRecord[] | null>(null);
   const [archivedCards, setArchivedCards] = useState<CardRecord[]>([]);
   const [decks, setDecks] = useState<string[]>([]);
@@ -263,7 +263,7 @@ export function PersonalCards({ onSessionEnded }: { onSessionEnded?: () => void 
         <button type="button" className="cards-add-button" onClick={startCreate}>Add card</button>
       </div>
     </div>
-    {aiEnabled && <Suspense fallback={null}><FlashcardAssistant cards={cards ?? []} decks={decks} onSessionEnded={onSessionEnded} onSaved={load} /></Suspense>}
+    {aiEnabled && <Suspense fallback={null}><FlashcardAssistant cards={cards ?? []} decks={decks} learnerName={learnerName} onSessionEnded={onSessionEnded} onSaved={load} /></Suspense>}
     {notice && <p className="cards-notice" role="status">{notice}</p>}
     {editing && <form className="cards-form" onSubmit={submit} noValidate>
       <h3>{editor?.mode === "create" ? "Add a card" : "Edit card"}</h3>
