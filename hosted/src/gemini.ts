@@ -63,7 +63,11 @@ export const geminiAdapter: GeminiAdapter = async (payload, model, key, timeoutM
       throw new GeminiFailure("provider_error");
     }
     const text = candidate.content?.parts?.filter(p => !p.thought).map(p => p.text ?? "").join("");
-    if (!text?.trim() || text.length > 8000 || text.includes(key)) throw new GeminiFailure("blocked_content");
+    if (!text?.trim()) {
+      console.error("gemini_provider_failure", { phase: "empty_text", finishReason: candidate.finishReason, model });
+      throw new GeminiFailure("provider_error", 5, "Model produced no visible output or ran out of tokens.");
+    }
+    if (text.length > 8000 || text.includes(key)) throw new GeminiFailure("blocked_content");
     return text;
   } catch (error) {
     if (controller.signal.aborted) throw new GeminiFailure("timeout", 5);

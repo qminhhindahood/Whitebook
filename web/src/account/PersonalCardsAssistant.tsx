@@ -33,8 +33,6 @@ const formatModelName = (model: string) => {
       return "Gemini 3.8 Flash (High)";
     case "gemini-3.7-flash":
       return "Gemini 3.7 Flash";
-    case "gemini-3-flash":
-      return "Gemini 3 Flash";
     case "gemini-3.1-flash-lite":
       return "Gemini 3.1 Flash Lite";
     case "gemini-2.5-flash":

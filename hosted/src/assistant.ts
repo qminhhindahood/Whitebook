@@ -138,7 +138,6 @@ function generationConfigOf(model: unknown, maxOutputTokens: number): Record<str
 export const GEMINI_CANDIDATE_MODELS = [
   "gemini-3.8-flash",
   "gemini-3.7-flash",
-  "gemini-3-flash",
   "gemini-3.1-flash-lite",
   "gemini-2.5-flash",
 ];
@@ -665,7 +664,7 @@ async function testModels(body: Record<string, unknown>, env: AssistantEnv, sess
     const start = Date.now();
     const testPayload = JSON.stringify({
       contents: [{ role: "user", parts: [{ text: "ping" }] }],
-      generationConfig: generationConfigOf(model, 2),
+      generationConfig: generationConfigOf(model, 128),
     });
     try {
       await adapter(testPayload, model, key.key, 8000);

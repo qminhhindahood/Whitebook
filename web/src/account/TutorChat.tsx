@@ -24,8 +24,6 @@ const formatModelName = (model: string) => {
       return "Gemini 3.8 Flash (High)";
     case "gemini-3.7-flash":
       return "Gemini 3.7 Flash";
-    case "gemini-3-flash":
-      return "Gemini 3 Flash";
     case "gemini-3.1-flash-lite":
       return "Gemini 3.1 Flash Lite";
     case "gemini-2.5-flash":
@@ -44,7 +42,6 @@ const modelLabel = (p: Provider) => {
 const DEFAULT_CANDIDATE_MODELS: Provider[] = [
   { route: "shared_gemini", model: "gemini-3.8-flash", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
   { route: "shared_gemini", model: "gemini-3.7-flash", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
-  { route: "shared_gemini", model: "gemini-3-flash", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
   { route: "shared_gemini", model: "gemini-3.1-flash-lite", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
   { route: "shared_gemini", model: "gemini-2.5-flash", payer: "platform", price: "", terms: "", termsUrl: "", termsVersion: "", languages: ["en", "vi"], vision: true, quota: "", healthy: true },
 ];
