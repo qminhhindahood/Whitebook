@@ -2,9 +2,13 @@ import { currentSession, failure, json as accountJson, noStore, requireMutation,
 import { hasPackageEntitlement } from "./library";
 import { seal, unseal } from "./assistantSecrets";
 import { geminiAdapter, GeminiFailure, type GeminiAdapter } from "./gemini";
+import { createGroqAdapter, createOpenRouterAdapter } from "./openaiCompat";
 import { isValidZone, localCalendarDate } from "./schedule";
 import { acceptProposals, completedReviewKeys, parseProposals, planEnvelope, validateProposals, type PlanEnvelope, type Proposal } from "./planAssistant";
 import type { PlanSettings } from "./plan";
+
+export const DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3.5-lightning:free";
+export const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 
 export type AssistantEnv = AccountEnv & {
   ASSETS: { fetch(request: Request): Promise<Response> };
@@ -15,6 +19,10 @@ export type AssistantEnv = AccountEnv & {
   GCP_GEMINI_SHARED_KEY?: string;
   /** @deprecated Use GCP_GEMINI_SHARED_KEY. */
   GEMINI_SHARED_KEY?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
+  GROQ_API_KEY?: string;
+  GROQ_MODEL?: string;
 };
 type Option = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: ("en" | "vi")[]; vision: boolean; quota: string; healthy: boolean };
 type Snapshot = { id: string; account: string; session: string; visit: string; expires: number; provider: Option; credentialVersion: string; payload: string; tokens: number; attachmentReviewId?: string; attachmentVisuals?: boolean; attachmentHash?: string; flow?: "tutor" | "reasoning" | "flashcards" | "plan"; reviewId?: string; stage?: string; revealed?: boolean; acceptedAnswers?: string[]; questionText?: string[]; correctChoiceText?: string[]; section?: string; fallbackHint?: string | null;
@@ -69,6 +77,22 @@ function catalog(env: AssistantEnv, now: number): Option[] {
         }
       }
     }
+    if (env.OPENROUTER_API_KEY) {
+      const orModel = env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
+      for (const item of options.filter(o => o.route === "shared_gemini")) {
+        if (!result.some(o => o.route === item.route && o.model === orModel)) {
+          result.push({ ...item, model: orModel, payer: "OpenRouter Free Fallback", vision: false });
+        }
+      }
+    }
+    if (env.GROQ_API_KEY) {
+      const grModel = env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
+      for (const item of options.filter(o => o.route === "shared_gemini")) {
+        if (!result.some(o => o.route === item.route && o.model === grModel)) {
+          result.push({ ...item, model: grModel, payer: "Groq Free Fallback", vision: false });
+        }
+      }
+    }
     return result;
   } catch { return []; }
 }
@@ -78,6 +102,14 @@ async function credential(env: AssistantEnv, account: string) {
 }
 async function routeKey(env: AssistantEnv, account: string, option: Option): Promise<{ key: string; version: string } | null> {
   if (option.route === "shared_gemini") {
+    if (option.model === (env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL) && env.OPENROUTER_API_KEY) {
+      const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(env.OPENROUTER_API_KEY));
+      return { key: env.OPENROUTER_API_KEY, version: Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2, "0")).join("") };
+    }
+    if (option.model === (env.GROQ_MODEL || DEFAULT_GROQ_MODEL) && env.GROQ_API_KEY) {
+      const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(env.GROQ_API_KEY));
+      return { key: env.GROQ_API_KEY, version: Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2, "0")).join("") };
+    }
     const key = sharedGeminiKey(env);
     if (!key) return null;
     const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
@@ -160,23 +192,90 @@ export async function executeWithModelFallback(
   adapter: GeminiAdapter,
   payload: string,
   primaryModel: string,
-  key: string
-): Promise<{ text: string; model: string; attempted: string[] }> {
+  key: string,
+  options?: {
+    env?: AssistantEnv;
+    hasVisuals?: boolean;
+  }
+): Promise<{ text: string; model: string; attempted: string[]; providerName?: string }> {
+  const env = options?.env;
+  const hasVisuals = options?.hasVisuals ?? false;
+  const openRouterModel = env?.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
+  const groqModel = env?.GROQ_MODEL || DEFAULT_GROQ_MODEL;
+
+  let lastError: unknown = null;
+  const attempted: string[] = [];
+
+  // If primary model is explicitly OpenRouter
+  if (primaryModel === openRouterModel && env?.OPENROUTER_API_KEY) {
+    attempted.push(`openrouter:${openRouterModel}`);
+    try {
+      const orAdapter = createOpenRouterAdapter(openRouterModel);
+      const text = await orAdapter(payload, openRouterModel, env.OPENROUTER_API_KEY);
+      return { text, model: openRouterModel, attempted, providerName: "openrouter" };
+    } catch (err) {
+      lastError = err;
+      console.warn("openrouter_primary_failed_fallback_to_groq", {
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      if (env.GROQ_API_KEY) {
+        attempted.push(`groq:${groqModel}`);
+        try {
+          const grAdapter = createGroqAdapter(groqModel);
+          const text = await grAdapter(payload, groqModel, env.GROQ_API_KEY);
+          return { text, model: groqModel, attempted, providerName: "groq" };
+        } catch (grErr) {
+          lastError = grErr;
+        }
+      }
+    }
+  }
+
+  // If primary model is explicitly Groq
+  if (primaryModel === groqModel && env?.GROQ_API_KEY) {
+    attempted.push(`groq:${groqModel}`);
+    try {
+      const grAdapter = createGroqAdapter(groqModel);
+      const text = await grAdapter(payload, groqModel, env.GROQ_API_KEY);
+      return { text, model: groqModel, attempted, providerName: "groq" };
+    } catch (err) {
+      lastError = err;
+      console.warn("groq_primary_failed_fallback_to_openrouter", {
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      if (env.OPENROUTER_API_KEY) {
+        attempted.push(`openrouter:${openRouterModel}`);
+        try {
+          const orAdapter = createOpenRouterAdapter(openRouterModel);
+          const text = await orAdapter(payload, openRouterModel, env.OPENROUTER_API_KEY);
+          return { text, model: openRouterModel, attempted, providerName: "openrouter" };
+        } catch (orErr) {
+          lastError = orErr;
+        }
+      }
+    }
+  }
+
+  // Default: Gemini primary candidate models
   const isCandidate = GEMINI_CANDIDATE_MODELS.includes(primaryModel) || primaryModel.startsWith("gemini-3") || primaryModel.startsWith("gemini-2");
   const models = isCandidate
     ? [primaryModel, ...GEMINI_CANDIDATE_MODELS.filter(m => m !== primaryModel)]
     : [primaryModel];
 
-  let lastError: unknown = null;
-  const attempted: string[] = [];
+  // Fast failover optimization:
+  // If alternative free providers (OpenRouter or Groq) are available and request has no visuals,
+  // cap Gemini attempts at 2 maximum (e.g. primary model + 1 candidate model), with zero jitter
+  // delay between attempts. This ensures failover from Gemini to OpenRouter happens really fast (< 300ms).
+  const hasFallbackProvider = Boolean(env && !hasVisuals && (env.OPENROUTER_API_KEY || env.GROQ_API_KEY));
+  const maxGeminiAttempts = hasFallbackProvider ? Math.min(2, models.length) : models.length;
 
-  for (let i = 0; i < models.length; i++) {
+  for (let i = 0; i < maxGeminiAttempts; i++) {
     const candidateModel = models[i];
     attempted.push(candidateModel);
     const candidatePayload = adaptPayloadForModel(payload, candidateModel);
     try {
       const text = await adapter(candidatePayload, candidateModel, key);
-      return { text, model: candidateModel, attempted };
+      return { text, model: candidateModel, attempted, providerName: "gemini" };
     } catch (err) {
       lastError = err;
       const failure = err instanceof GeminiFailure ? err : null;
@@ -185,21 +284,67 @@ export async function executeWithModelFallback(
       }
       console.warn("gemini_model_fallback_retry", {
         attempt: i + 1,
+        maxAttempts: maxGeminiAttempts,
         failedModel: candidateModel,
         reason: failure?.message || (err instanceof Error ? err.message : String(err)),
-        nextModel: i < models.length - 1 ? models[i + 1] : null,
+        nextModel: i < maxGeminiAttempts - 1 ? models[i + 1] : (hasFallbackProvider ? "openrouter" : null),
       });
-      if (i < models.length - 1) {
-        const jitter = Math.floor(Math.random() * 80) + 40;
-        await new Promise(resolve => setTimeout(resolve, jitter));
+      if (i < maxGeminiAttempts - 1) {
+        if (!hasFallbackProvider) {
+          const jitter = Math.floor(Math.random() * 80) + 40;
+          await new Promise(resolve => setTimeout(resolve, jitter));
+        }
+      }
+    }
+  }
+
+  // If all Gemini models failed:
+  // User decision 3: "Only use Gemini (skip free providers since they don't support images)"
+  // If request has visuals, do NOT fall through to text-only free providers.
+  if (env && !hasVisuals) {
+    // Fallback 1: OpenRouter (NVIDIA Nemotron 3.5 Lightning)
+    if (env.OPENROUTER_API_KEY) {
+      const orTag = `openrouter:${openRouterModel}`;
+      attempted.push(orTag);
+      console.warn("provider_fallback_attempt", { provider: "openrouter", model: openRouterModel });
+      try {
+        const orAdapter = createOpenRouterAdapter(openRouterModel);
+        const text = await orAdapter(payload, openRouterModel, env.OPENROUTER_API_KEY);
+        return { text, model: openRouterModel, attempted, providerName: "openrouter" };
+      } catch (err) {
+        lastError = err;
+        console.warn("openrouter_fallback_failed", {
+          failedModel: openRouterModel,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // Fallback 2: Groq
+    if (env.GROQ_API_KEY) {
+      const grTag = `groq:${groqModel}`;
+      attempted.push(grTag);
+      console.warn("provider_fallback_attempt", { provider: "groq", model: groqModel });
+      try {
+        const grAdapter = createGroqAdapter(groqModel);
+        const text = await grAdapter(payload, groqModel, env.GROQ_API_KEY);
+        return { text, model: groqModel, attempted, providerName: "groq" };
+      } catch (err) {
+        lastError = err;
+        console.warn("groq_fallback_failed", {
+          failedModel: groqModel,
+          reason: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }
 
   if (lastError instanceof GeminiFailure) {
-    const isTransient = ["provider_error", "quota_exhausted", "model_unavailable", "timeout"].includes(lastError.code);
+    const isTransient = ["provider_error", "quota_exhausted", "model_unavailable", "timeout", "location_unsupported"].includes(lastError.code);
     if (isTransient && attempted.length > 1) {
-      const summaryMsg = `All tested models (${attempted.join(", ")}) are currently experiencing high demand or rate limits. Spikes in demand are temporary. Please try again in a few moments.`;
+      const summaryMsg = lastError.code === "location_unsupported"
+        ? `All tested models (${attempted.join(", ")}) are blocked by a location restriction on the server edge. This is caused by the hosting provider's network routing and is often temporary. Please try again.`
+        : `All tested models (${attempted.join(", ")}) are currently experiencing high demand or rate limits. Spikes in demand are temporary. Please try again in a few moments.`;
       throw new GeminiFailure(lastError.code, Math.max(lastError.retrySeconds, 10), summaryMsg);
     }
   }
@@ -354,10 +499,17 @@ async function reasoningSend(body: Record<string, unknown>, env: AssistantEnv, s
   if (!await reserve(env, `send:${session.account_id}`, snapshot.tokens, 20, 80000, now)) return rateLimitedResponse("rate_limited", retry, now);
   if (provider.route === "shared_gemini" && !await reserve(env, "shared", snapshot.tokens, 100, 400000, now)) return rateLimitedResponse("quota_exhausted", retry, now);
   try {
-    const text = await adapter(snapshot.payload, provider.model, key.key);
+    const result = await executeWithModelFallback(adapter, snapshot.payload, provider.model, key.key, { env, hasVisuals: false });
+    const text = result.text;
     if (!text.trim() || text.length > 8000 || text.includes(key.key)) return failure(502, "provider_error", "Guided Reasoning could not produce a safe explanation.");
     if (!snapshot.revealed && unsafeReasoning(text, current, snapshot.stage)) return json({ withheld: true, answerWithheld: true, hint: snapshot.fallbackHint, message: snapshot.fallbackHint ? "A reviewed hint is available instead of generated text." : "This generated step was withheld because its answer safety could not be verified." });
-    return json({ text, verified: false, label: "Not verified against the answer key" });
+    return json({
+      text,
+      provider: { ...provider, model: result.model },
+      verified: false,
+      label: "Not verified against the answer key",
+      ...(result.model !== provider.model ? { fallback: { originalModel: provider.model, activeModel: result.model, provider: result.providerName } } : {})
+    });
   } catch { return failure(502, "provider_error", "Guided Reasoning could not complete this request. Your draft is preserved."); }
 }
 
@@ -416,14 +568,14 @@ async function flashcardSend(body: Record<string, unknown>, env: AssistantEnv, s
   if (!await reserve(env, `send:${session.account_id}`, snapshot.tokens, 20, 80000, now)) return rateLimitedResponse("rate_limited", retry, now);
   if (provider.route === "shared_gemini" && !await reserve(env, "shared", snapshot.tokens, 100, 400000, now)) return rateLimitedResponse("quota_exhausted", retry, now);
   try {
-    const result = await executeWithModelFallback(adapter, snapshot.payload, provider.model, key.key);
+    const result = await executeWithModelFallback(adapter, snapshot.payload, provider.model, key.key, { env, hasVisuals: false });
     const text = result.text;
     if (!text.trim() || text.length > 12000 || text.includes(key.key)) return failure(502, "provider_error", "Flashcard Assistant returned an unavailable draft.");
     return json({
       text,
       provider: { ...provider, model: result.model },
       verified: false,
-      ...(result.model !== provider.model ? { fallback: { originalModel: provider.model, activeModel: result.model } } : {})
+      ...(result.model !== provider.model ? { fallback: { originalModel: provider.model, activeModel: result.model, provider: result.providerName } } : {})
     });
   }
   catch { return failure(502, "provider_error", "Flashcard Assistant could not complete this request. Your draft is preserved."); }
@@ -536,9 +688,16 @@ async function send(body: Record<string, unknown>, env: AssistantEnv, session: S
   if (!await reserve(env, `send:${session.account_id}`, snapshot.tokens, 20, 80000, now)) return rateLimitedResponse("rate_limited", retry, now);
   if (provider.route === "shared_gemini" && !await reserve(env, "shared", snapshot.tokens, 100, 400000, now)) return rateLimitedResponse("quota_exhausted", retry, now);
   try {
-    const text = await adapter(snapshot.payload, provider.model, key.key);
+    const hasVisuals = Boolean(snapshot.attachmentVisuals);
+    const result = await executeWithModelFallback(adapter, snapshot.payload, provider.model, key.key, { env, hasVisuals });
+    const text = result.text;
     if (!text.trim() || text.length > 8000 || text.includes(key.key) || /(?:AIza[0-9A-Za-z_-]{30,}|AQ\.[0-9A-Za-z_-]{20,})/.test(text)) return failure(502, "blocked_content", "Gemini returned content that cannot be displayed.");
-    return json({ text, provider, verified: false });
+    return json({
+      text,
+      provider: { ...provider, model: result.model },
+      verified: false,
+      ...(result.model !== provider.model ? { fallback: { originalModel: provider.model, activeModel: result.model, provider: result.providerName } } : {})
+    });
   } catch (error) {
     const known = error instanceof GeminiFailure ? error : new GeminiFailure("provider_error", 10);
     if (known.code === "quota_exhausted" && provider.route === "shared_gemini") {
@@ -611,7 +770,14 @@ async function planSend(body: Record<string, unknown>, request: Request, env: As
   if (provider.route === "shared_gemini" && !await reserve(env, "shared", snapshot.tokens, 100, 400000, now))
     return rateLimitedResponse("quota_exhausted", retry, now);
   let text: string;
-  try { text = await adapter(snapshot.payload, provider.model, key.key); }
+  let activeModel = provider.model;
+  let fallbackProviderName: string | undefined;
+  try {
+    const result = await executeWithModelFallback(adapter, snapshot.payload, provider.model, key.key, { env, hasVisuals: false });
+    text = result.text;
+    activeModel = result.model;
+    fallbackProviderName = result.providerName;
+  }
   catch { return failure(502, "provider_error", "Study Plan suggestions are unavailable. Your saved plan remains available."); }
   if (text.includes(key.key)) return failure(502, "provider_error", "Study Plan suggestions are unavailable. Your saved plan remains available.");
   const proposals = parseProposals(text);
@@ -625,7 +791,13 @@ async function planSend(body: Record<string, unknown>, request: Request, env: As
   const proposalId = await seal(JSON.stringify(proposal), env.ASSISTANT_SNAPSHOT_KEY!, "plan-proposal");
   await env.DB.prepare("INSERT INTO assistant_previews (id, account_id, session_hash, visit_id, expires_at_ms) VALUES (?, ?, ?, ?, ?)")
     .bind(proposal.id, session.account_id, session.token_hash, body.visitId, proposal.expires).run();
-  return json({ proposalId, expiresAt: proposal.expires, tasks: validated, provider });
+  return json({
+    proposalId,
+    expiresAt: proposal.expires,
+    tasks: validated,
+    provider: { ...provider, model: activeModel },
+    ...(activeModel !== provider.model ? { fallback: { originalModel: provider.model, activeModel, provider: fallbackProviderName } } : {})
+  });
 }
 
 async function planAccept(body: Record<string, unknown>, request: Request, env: AssistantEnv, session: Session, now: number): Promise<Response> {
@@ -658,7 +830,7 @@ async function testModels(body: Record<string, unknown>, env: AssistantEnv, sess
     ...options.map(o => o.model).filter(m => !m.includes("test")),
   ]));
 
-  const results: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[] = [];
+  const results: { model: string; provider?: string; providerLabel?: string; working: boolean; status: number | string; latencyMs: number; error?: string }[] = [];
 
   for (const model of modelsToTest) {
     const start = Date.now();
@@ -669,24 +841,77 @@ async function testModels(body: Record<string, unknown>, env: AssistantEnv, sess
     try {
       await adapter(testPayload, model, key.key, 8000);
       const latencyMs = Date.now() - start;
-      results.push({ model, working: true, status: 200, latencyMs });
+      results.push({ model, provider: "gemini", providerLabel: "Gemini", working: true, status: 200, latencyMs });
     } catch (err) {
       const latencyMs = Date.now() - start;
       const failure = err instanceof GeminiFailure ? err : null;
       let errorDesc = failure?.message || (err instanceof Error ? err.message : "Unavailable");
       let status: number | string = 502;
-      if (failure?.code === "quota_exhausted") status = 429;
+      if (failure?.code === "location_unsupported") { status = 451; errorDesc = "Location blocked — server routed through restricted region"; }
+      else if (failure?.code === "quota_exhausted") status = 429;
       else if (failure?.code === "timeout") status = 504;
       else if (failure?.code === "model_unavailable") status = 404;
       else if (failure?.code === "credential_invalid") status = 401;
       else if (errorDesc.toLowerCase().includes("high demand")) status = 503;
 
-      results.push({ model, working: false, status, latencyMs, error: errorDesc });
+      results.push({ model, provider: "gemini", providerLabel: "Gemini", working: false, status, latencyMs, error: errorDesc });
+    }
+  }
+
+  // Also test OpenRouter if configured
+  if (env.OPENROUTER_API_KEY) {
+    const orModel = env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
+    const start = Date.now();
+    const testPayload = JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] });
+    try {
+      const orAdapter = createOpenRouterAdapter(orModel);
+      await orAdapter(testPayload, orModel, env.OPENROUTER_API_KEY, 8000);
+      const latencyMs = Date.now() - start;
+      results.push({ model: orModel, provider: "openrouter", providerLabel: "OpenRouter (Free)", working: true, status: 200, latencyMs });
+    } catch (err) {
+      const latencyMs = Date.now() - start;
+      const failure = err instanceof GeminiFailure ? err : null;
+      const errorDesc = failure?.message || (err instanceof Error ? err.message : "Unavailable");
+      let status: number | string = 502;
+      if (failure?.code === "quota_exhausted") status = 429;
+      else if (failure?.code === "timeout") status = 504;
+      else if (failure?.code === "model_unavailable") status = 404;
+      else if (failure?.code === "credential_invalid") status = 401;
+      results.push({ model: orModel, provider: "openrouter", providerLabel: "OpenRouter (Free)", working: false, status, latencyMs, error: errorDesc });
+    }
+  }
+
+  // Also test Groq if configured
+  if (env.GROQ_API_KEY) {
+    const groqModel = env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
+    const start = Date.now();
+    const testPayload = JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] });
+    try {
+      const groqAdapter = createGroqAdapter(groqModel);
+      await groqAdapter(testPayload, groqModel, env.GROQ_API_KEY, 8000);
+      const latencyMs = Date.now() - start;
+      results.push({ model: groqModel, provider: "groq", providerLabel: "Groq (Free)", working: true, status: 200, latencyMs });
+    } catch (err) {
+      const latencyMs = Date.now() - start;
+      const failure = err instanceof GeminiFailure ? err : null;
+      const errorDesc = failure?.message || (err instanceof Error ? err.message : "Unavailable");
+      let status: number | string = 502;
+      if (failure?.code === "quota_exhausted") status = 429;
+      else if (failure?.code === "timeout") status = 504;
+      else if (failure?.code === "model_unavailable") status = 404;
+      else if (failure?.code === "credential_invalid") status = 401;
+      results.push({ model: groqModel, provider: "groq", providerLabel: "Groq (Free)", working: false, status, latencyMs, error: errorDesc });
     }
   }
 
   const working = results.filter(r => r.working);
-  const recommendedModel = working.length > 0 ? working.sort((a, b) => a.latencyMs - b.latencyMs)[0].model : null;
+  const workingGemini = working.filter(r => !r.provider || r.provider === "gemini");
+  let recommendedModel: string | null = null;
+  if (workingGemini.length > 0) {
+    recommendedModel = workingGemini.sort((a, b) => a.latencyMs - b.latencyMs)[0].model;
+  } else if (working.length > 0) {
+    recommendedModel = working.sort((a, b) => a.latencyMs - b.latencyMs)[0].model;
+  }
 
   return json({
     route: targetOption.route,

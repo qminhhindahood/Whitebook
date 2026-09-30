@@ -44,9 +44,31 @@ it.each([
 
 it("aborts a slow provider at the deadline and exposes only a timeout state", async () => {
   vi.useFakeTimers();
-  vi.stubGlobal("fetch", vi.fn((_url, init: RequestInit) => new Promise((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(new Error("SECRET NETWORK ERROR"))))));
+  vi.stubGlobal("fetch", vi.fn((_url: unknown, init: RequestInit) => new Promise((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(new Error("SECRET NETWORK ERROR"))))));
   const result = expect(geminiAdapter(payload, "gemini-test", "synthetic-key", 20000)).rejects.toMatchObject({ code: "timeout", retrySeconds: 5 });
   await vi.advanceTimersByTimeAsync(20000); await result;
+});
+
+it("detects FAILED_PRECONDITION location errors and retries once before surfacing location_unsupported", async () => {
+  const locationBody = JSON.stringify({ error: { status: "FAILED_PRECONDITION", message: "User location is not supported for the API use.", details: [{ reason: "FAILED_PRECONDITION" }] } });
+  const fetch = vi.fn(async () => new Response(locationBody, { status: 400, headers: { "Content-Type": "application/json" } }));
+  vi.stubGlobal("fetch", fetch);
+  await expect(geminiAdapter(payload, "gemini-test", "synthetic-key")).rejects.toMatchObject({ code: "location_unsupported" });
+  // Should have retried once (2 total calls)
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it("recovers on retry when location error is transient (different CF edge)", async () => {
+  let callCount = 0;
+  const locationBody = JSON.stringify({ error: { status: "FAILED_PRECONDITION", message: "User location is not supported for the API use.", details: [{ reason: "FAILED_PRECONDITION" }] } });
+  const successBody = JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: "Recovered reply" }] } }] });
+  vi.stubGlobal("fetch", vi.fn(async () => {
+    callCount++;
+    if (callCount === 1) return new Response(locationBody, { status: 400 });
+    return new Response(successBody, { status: 200, headers: { "Content-Type": "application/json" } });
+  }));
+  const result = await geminiAdapter(payload, "gemini-test", "synthetic-key");
+  expect(result).toBe("Recovered reply");
 });
 
 // Explicit opt-in only. Intentionally invalid key, synthetic text, no learner data,

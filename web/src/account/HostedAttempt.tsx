@@ -638,7 +638,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     } }}><main className="player-shell hosted-practice-player" aria-labelledby="hosted-attempt-heading">
       <header className="player-header">
         <div className="player-header__section"><h2 id="hosted-attempt-heading">{snapshot.section} · {sectionExam ? `Module ${activeModule}` : "Practice"}</h2>
-          <span className="hosted-practice-player__context">{sectionExam ? "Section Exam · Timed, two Modules" : "Practice · Your questions, your pace"}{snapshot.assisted ? " · Assisted" : ""}<br />{packageTitle}{snapshot.category ? ` · ${snapshot.category}` : ""}</span>
+          <span className="hosted-practice-player__context">{sectionExam ? "Section Exam · Timed, two Modules" : "Practice · Your questions, your pace"}{snapshot.state.practiceAfterExposure ? " · Practice after seeing the answer" : ""}{snapshot.assisted ? " · Assisted" : ""}<br />{packageTitle}{snapshot.category ? ` · ${snapshot.category}` : ""}</span>
           <button type="button" className="directions-toggle" aria-expanded={directionsOpen}
             onClick={() => setDirectionsOpen((open) => !open)}>Directions <LineIcon name="chevron"/></button>
           {directionsOpen && <div className="directions-panel" role="region" aria-label="Directions">

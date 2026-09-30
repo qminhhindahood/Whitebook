@@ -207,6 +207,7 @@ function summary(row: AttemptRow) {
     deadlineAt: row.deadline_at_ms,
     completedAt: row.completed_at_ms,
     assisted: row.assisted_at_ms !== null,
+    practiceAfterExposure: JSON.parse(row.state_json).practiceAfterExposure === true,
   };
 }
 
@@ -250,6 +251,16 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
     return failure(400, "invalid_attempt", "Choose one valid Test Package revision.");
   const config = parseConfig(body);
   if (config instanceof Response) return config;
+  const retryRequested = body.retryFromAttemptId !== undefined || body.retryQuestionId !== undefined;
+  if (retryRequested) {
+    if (config.kind !== "practice" || config.count !== 1 || config.category || config.timing.mode !== "elapsed" ||
+        typeof body.retryFromAttemptId !== "string" || typeof body.retryQuestionId !== "string")
+      return failure(400, "invalid_attempt", "Choose one completed question to practice again.");
+    const source = await attemptRow(env, accountId, body.retryFromAttemptId);
+    if (!source || source.status !== "completed" || source.revision_id !== revisionId ||
+        !(JSON.parse(source.questions_json) as QuestionLink[]).some(q => q.questionId === body.retryQuestionId))
+      return failure(404, "not_found", "This completed question is unavailable.");
+  }
   if (!(await hasPackageEntitlement(env, accountId, revisionId)))
     return failure(404, "not_found", "This Test Package is unavailable.");
 
@@ -265,6 +276,7 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
         "WHERE revision_id = ? AND section = ? AND module IN (" + placeholders + ") ORDER BY ordinal")
       .bind(revisionId, config.section, ...config.modules));
   let filtered = candidates;
+  if (retryRequested) filtered = candidates.filter(q => q.question_id === body.retryQuestionId);
   if (config.category) {
     const metadata = await rows<{ question_id: string; category: string }>(env.DB.prepare(
       "SELECT question_id, category FROM publication_question_categories WHERE revision_id = ?",
@@ -320,7 +332,7 @@ async function createAttempt(request: Request, env: AttemptEnv, accountId: strin
         eliminatedChoices: {}, currentQuestionId: questionIds[0], remainingSeconds: null, pausedPhase: null,
         calculatorState: null, questionElapsedMs: {} }
     : { responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: questionIds[0],
-        questionElapsedMs: {} };
+        questionElapsedMs: {}, ...(retryRequested ? { practiceAfterExposure: true, sourceAttemptId: body.retryFromAttemptId, assistedQuestionIds: questionIds } : {}) };
   const result = await env.DB.prepare("INSERT INTO learner_attempts " +
       "(id, account_id, revision_id, kind, status, config_json, questions_json, state_json, state_version, created_at_ms) " +
       "VALUES (?, ?, ?, ?, 'preparing', ?, ?, ?, 0, ?)")

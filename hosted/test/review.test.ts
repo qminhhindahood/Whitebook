@@ -1,6 +1,18 @@
 import { expect, it } from "vitest";
 import { reviewRoute } from "../src/review";
 
+it("allows Guided Reasoning for a correct completed question without changing the result", async () => {
+  const { attempts, call } = await fixture();
+  const row = attempts.get(firstAttempt)!;
+  row.result_json = JSON.stringify({ correctCount: 1, questionCount: 1, questions: [{ questionId: "q1", response: "B", acceptedAnswers: ["B"], correct: true }] });
+  const original = row.result_json;
+  const response = await call(`/api/review/attempts/${firstAttempt}/questions/q1`, { method: "POST", body: {} });
+  expect(response.status).toBe(200);
+  const { reviewId } = await response.json() as { reviewId: string };
+  expect((await call(`/api/review/${reviewId}/reveal`, { method: "POST", body: {} })).status).toBe(200);
+  expect(row.result_json).toBe(original);
+});
+
 const origin = "https://whitebook.test";
 const firstAttempt = "10000000-0000-4000-8000-000000000001";
 const secondAttempt = "10000000-0000-4000-8000-000000000002";

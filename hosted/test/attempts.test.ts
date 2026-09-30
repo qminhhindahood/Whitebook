@@ -2,6 +2,26 @@ import { expect, it, vi } from "vitest";
 import worker from "../src/worker";
 
 const origin = "https://whitebook.test";
+
+it("retries the exact completed question in a separate exposure-labelled Attempt and rejects another owner", async () => {
+  const { credentials, attempts, call } = await fixture();
+  const config = { revisionId: "reviewed-rw", kind: "practice", section: "Reading and Writing", modules: [1, 2], count: 3, ordering: "source", timing: { mode: "elapsed" } };
+  const created = await call("/api/attempts", { method: "POST", who: credentials[0], body: config });
+  expect(created.status).toBe(201);
+  const source = await created.json() as { attemptId: string };
+  const original = attempts.get(source.attemptId)!;
+  original.status = "completed";
+  original.result_json = JSON.stringify({ correctCount: 1, questionCount: 3, questions: [{ questionId: "q2", response: "B", acceptedAnswers: ["B"], correct: true }] });
+  const result = original.result_json;
+  const retry = { ...config, count: 1, retryFromAttemptId: source.attemptId, retryQuestionId: "q2" };
+  const next = await call("/api/attempts", { method: "POST", who: credentials[0], body: retry });
+  expect(next.status).toBe(201);
+  expect(await next.json()).toMatchObject({ questionIds: ["q2"], state: { practiceAfterExposure: true, assistedQuestionIds: ["q2"], responses: {}, sourceAttemptId: source.attemptId } });
+  expect(original.result_json).toBe(result);
+  expect(attempts.size).toBe(2);
+  expect((await call("/api/attempts", { method: "POST", who: credentials[1], body: retry })).status).toBe(404);
+  expect((await call("/api/attempts", { method: "POST", who: credentials[0], body: { ...retry, retryQuestionId: "outside" } })).status).toBe(404);
+});
 type Credential = { accountId: string; token: string; csrf: string };
 type QuestionRow = {
   revision_id: string; question_id: string; ordinal: number; section: string;

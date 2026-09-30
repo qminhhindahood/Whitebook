@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import { Icon } from "./StudyWorkspace";
 import { getSavedAiModel, getSavedAiRoute, syncAiModel, AI_SETTINGS_CHANGED_EVENT } from "./aiModelSync";
@@ -48,6 +48,7 @@ const DEFAULT_CANDIDATE_MODELS: Provider[] = [
 ];
 
 export type TutorChatProps = {
+  questionReviewId?: string;
   workspaceView: string;
   learnerName?: string;
   onAvailability: (available: boolean) => void;
@@ -167,7 +168,8 @@ function formatGeminiContent(text: string) {
   return elements;
 }
 
-export default function TutorChat({ workspaceView, learnerName, onAvailability, onSessionEnded }: TutorChatProps) {
+export default function TutorChat({ workspaceView, learnerName, onAvailability, onSessionEnded, questionReviewId }: TutorChatProps) {
+  const headingId = useId();
   const [visitId, setVisitId] = useState(() => crypto.randomUUID());
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
@@ -184,8 +186,9 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
   const [assessmentBlocked, setAssessmentBlocked] = useState<"none" | "active_section_exam">("none");
   const [blockMessage, setBlockMessage] = useState("");
   const [reviews, setReviews] = useState<ReviewChoice[]>([]);
-  const [reviewId, setReviewId] = useState("");
-  const [includeVisuals, setIncludeVisuals] = useState(false);
+  const [reviewId, setReviewId] = useState(questionReviewId ?? "");
+  const [includeVisuals, setIncludeVisuals] = useState(!!questionReviewId);
+  const explanationStarted = useRef(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [testingModels, setTestingModels] = useState(false);
   const [modelDiagnostic, setModelDiagnostic] = useState<{
@@ -225,6 +228,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
   const threadEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const active = workspaceView === "tutor";
+  const unavailable = busy || !online || clock < retryAt;
   const provider = options?.options.find(p => matchesSelection(p, selection)) ?? options?.options[0] ?? DEFAULT_CANDIDATE_MODELS[0];
 
   async function toggleFullscreen() {
@@ -398,9 +402,9 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
     } finally { if (epoch === generation.current) setBusy(false); }
   }
 
-  function handleSend() {
-    if (!provider || unavailable || !draft.trim() || !provider.healthy) return;
-    const textToSend = draft.trim();
+  function handleSend(message = draft.trim(), retryNow = false) {
+    if (!provider || busy || !online || (!retryNow && clock < retryAt) || !message || (!questionReviewId && !provider.healthy)) return;
+    const textToSend = message;
     const priorTurns = turns;
     setDraft("");
     if (textareaRef.current) {
@@ -416,7 +420,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
         locale,
         currentMessage: textToSend,
         priorMessages: priorTurns.slice(-8).map(t => ({ role: t.role, text: t.text })),
-        ...(reviewId ? { reviewId, includeVisuals } : {}),
+        ...(reviewId ? { reviewId, includeVisuals: includeVisuals && provider.vision } : {}),
       });
       const reply = await request<{ text: string; provider: Provider; fallback?: FallbackInfo }>("send", {
         previewId: next.previewId,
@@ -431,6 +435,12 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
     }, textToSend);
   }
 
+  useEffect(() => {
+    if (!questionReviewId || !active || !options?.options.length || !selection || explanationStarted.current || unavailable) return;
+    explanationStarted.current = true;
+    handleSend("Explain this completed question and its accepted answer. Compare my original response, identify the key reasoning, and explain why the other choices are unsuitable.");
+  }, [questionReviewId, active, options, selection, unavailable]);
+
   function handleNewChat() {
     generation.current++;
     pending.current.forEach(c => c.abort());
@@ -440,19 +450,18 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-    setReviewId("");
-    setIncludeVisuals(false);
+    setReviewId(questionReviewId ?? "");
+    setIncludeVisuals(!!questionReviewId);
     setVisitId(crypto.randomUUID());
     setError("");
     setNotice("Started a new conversation.");
   }
-  const unavailable = busy || !online || clock < retryAt;
 
   if (assessmentBlocked === "active_section_exam") {
-    return <section hidden={!active} className="tutor-chat tutor-chat--locked" aria-labelledby="tutor-heading">
+    return <section hidden={!active} className="tutor-chat tutor-chat--locked" aria-labelledby={headingId}>
       <header className="tutor-header">
         <div>
-          <h2 id="tutor-heading">AI Tutor</h2>
+          <h2 id={headingId}>AI Tutor</h2>
           <p>Your private SAT study tutor.</p>
         </div>
       </header>
@@ -465,14 +474,14 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
     </section>;
   }
 
-  return <section hidden={!active} className={`tutor-chat ${isFullscreen ? "tutor-chat--fullscreen" : ""}`} aria-labelledby="tutor-heading">
+  return <section hidden={!active} className={`tutor-chat ${isFullscreen ? "tutor-chat--fullscreen" : ""}`} aria-labelledby={headingId}>
     <header className="tutor-header">
       <div className="tutor-header__brand">
         <div className="tutor-header__title-row">
           <span className="tutor-sparkle-icon" aria-hidden="true">
             <Icon name="sparkle" />
           </span>
-          <h2 id="tutor-heading">AI Tutor</h2>
+          <h2 id={headingId}>AI Tutor</h2>
           {provider && (
             <span className="tutor-model-badge" title={`Model: ${provider.model}`}>
               {provider.model}
@@ -547,7 +556,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
             onClick={() => {
               setRetryAt(0);
               setError("");
-              handleSend();
+              handleSend(draft.trim(), true);
             }}
           >
             Retry now
@@ -573,7 +582,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
             className="tutor-banner-action-btn"
             onClick={() => {
               setRetryAt(0);
-              handleSend();
+              handleSend(draft.trim(), true);
             }}
           >
             Retry now
@@ -614,13 +623,16 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
               type="button"
               className="tutor-banner-action-btn tutor-banner-action-btn--primary"
               onClick={() => {
-                setRetryAt(0);
-                setError("");
-                setModelDiagnostic(null);
-                handleSend();
+                const model = modelDiagnostic.recommendedModel!;
+                const selectedProvider = { ...provider, model, healthy: true };
+                setOptions(prior => prior ? { ...prior, options: prior.options.some(p => p.route === provider.route && p.model === model) ? prior.options : [...prior.options, selectedProvider] } : prior);
+                setSelection(selectionId(selectedProvider));
+                syncAiModel(model, selectionId(selectedProvider));
+                setRetryAt(0); setError(""); setModelDiagnostic(null);
+                setNotice(`Using ${model}. Your message is preserved; press Send to retry.`);
               }}
             >
-              Retry now (Auto-fallback)
+              Use available model &amp; sync
             </button>
           </div>
         )}
@@ -635,7 +647,9 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
       </div>
     ) : (
       <>
-        {reviews.length > 0 && (
+        {questionReviewId && <p className="tutor-status-banner">Question context attached · Question, original response and accepted answer{provider?.vision ? ", including protected visuals" : " · This model cannot read image-only content; choose a vision model for images"}.</p>}
+        {error && questionReviewId && <p role="status">If this model is unavailable, use Test models and sync an available model, then retry your preserved message.</p>}
+        {!questionReviewId && reviews.length > 0 && (
           <div className="tutor-attachment-bar" role="region" aria-label="Attachment options">
             <label className="tutor-compact-label">
               <Icon name="review" />
@@ -755,7 +769,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
         <form className="tutor-gemini-composer" onSubmit={e => { e.preventDefault(); handleSend(); }}>
           <div className="tutor-capsule">
             <textarea
-              id="tutor-user-message"
+              id={`${headingId}-message`}
               ref={textareaRef}
               aria-label="Your message"
               rows={1}
@@ -778,7 +792,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
             <button
               type="submit"
               className="tutor-capsule-send-btn"
-              disabled={unavailable || !draft.trim() || !provider?.healthy}
+              disabled={unavailable || !draft.trim() || (!questionReviewId && !provider?.healthy)}
               title="Send (Enter)"
             >
               <Icon name="arrowUp" />

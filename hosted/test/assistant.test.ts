@@ -606,6 +606,111 @@ it("tests all models and returns diagnostic results via /api/assistant/test-mode
   expect(data.recommendedModel).toBeTruthy();
 });
 
+it("falls back to OpenRouter when Gemini candidate models fail with location_unsupported", async () => {
+  const geminiAdapterMock = vi.fn().mockRejectedValue(new GeminiFailure("location_unsupported", 5));
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({ choices: [{ message: { content: "Response from OpenRouter Nemotron" } }] }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  const env: Partial<AssistantEnv> = {
+    OPENROUTER_API_KEY: "test-openrouter-key",
+  };
+
+  const result = await executeWithModelFallback(
+    geminiAdapterMock,
+    JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] }),
+    "gemini-3.8-flash",
+    "test-gemini-key",
+    { env: env as AssistantEnv, hasVisuals: false }
+  );
+
+  expect(result.text).toBe("Response from OpenRouter Nemotron");
+  expect(result.providerName).toBe("openrouter");
+  expect(result.model).toBe("nvidia/nemotron-3.5-lightning:free");
+  // Fails fast: stops trying Gemini after 2 failures and switches immediately to OpenRouter
+  expect(geminiAdapterMock).toHaveBeenCalledTimes(2);
+  expect(result.attempted).toEqual([
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "openrouter:nvidia/nemotron-3.5-lightning:free",
+  ]);
+  expect(fetchMock).toHaveBeenCalledWith(
+    "https://openrouter.ai/api/v1/chat/completions",
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: "Bearer test-openrouter-key",
+      }),
+    })
+  );
+  vi.unstubAllGlobals();
+});
+
+it("falls back to Groq when Gemini and OpenRouter both fail", async () => {
+  const geminiAdapterMock = vi.fn().mockRejectedValue(new GeminiFailure("location_unsupported", 5));
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    if (url.includes("openrouter.ai")) {
+      return new Response(JSON.stringify({ error: { message: "OpenRouter rate limited" } }), { status: 429 });
+    }
+    if (url.includes("groq.com")) {
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "Response from Groq Llama" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(null, { status: 404 });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const env: Partial<AssistantEnv> = {
+    OPENROUTER_API_KEY: "test-openrouter-key",
+    GROQ_API_KEY: "test-groq-key",
+  };
+
+  const result = await executeWithModelFallback(
+    geminiAdapterMock,
+    JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] }),
+    "gemini-3.8-flash",
+    "test-gemini-key",
+    { env: env as AssistantEnv, hasVisuals: false }
+  );
+
+  expect(result.text).toBe("Response from Groq Llama");
+  expect(result.providerName).toBe("groq");
+  expect(result.model).toBe("llama-3.3-70b-versatile");
+  expect(geminiAdapterMock).toHaveBeenCalledTimes(2);
+  vi.unstubAllGlobals();
+});
+
+it("strictly preserves Gemini-only execution and skips free providers when question has visuals", async () => {
+  const geminiAdapterMock = vi.fn().mockRejectedValue(new GeminiFailure("location_unsupported", 5));
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  const env: Partial<AssistantEnv> = {
+    OPENROUTER_API_KEY: "test-openrouter-key",
+    GROQ_API_KEY: "test-groq-key",
+  };
+
+  await expect(
+    executeWithModelFallback(
+      geminiAdapterMock,
+      JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] }),
+      "gemini-3.8-flash",
+      "test-gemini-key",
+      { env: env as AssistantEnv, hasVisuals: true } // Visual attached!
+    )
+  ).rejects.toThrowError(expect.objectContaining({ code: "location_unsupported" }));
+
+  // OpenRouter and Groq MUST NOT be called for questions with visuals, and all Gemini candidate models are attempted
+  expect(geminiAdapterMock).toHaveBeenCalledTimes(GEMINI_CANDIDATE_MODELS.length);
+  expect(fetchMock).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
+});
+
 
 it("deletes only the owned Attempt with CSRF and cascades reviews while preserving notes", async () => {
   const f = await fixture();

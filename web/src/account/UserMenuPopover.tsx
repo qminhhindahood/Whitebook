@@ -22,7 +22,7 @@ export function UserMenuPopover({
   const [testingModels, setTestingModels] = useState(false);
   const [syncNotice, setSyncNotice] = useState("");
   const [modelDiagnostic, setModelDiagnostic] = useState<{
-    models: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
+    models: { model: string; provider?: string; providerLabel?: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
     recommendedModel: string | null;
   } | null>(null);
 
@@ -59,7 +59,7 @@ export function UserMenuPopover({
       });
       if (res.ok) {
         const diag = await res.json() as {
-          models: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
+          models: { model: string; provider?: string; providerLabel?: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
           recommendedModel: string | null;
         };
         setModelDiagnostic(diag);
@@ -120,10 +120,13 @@ export function UserMenuPopover({
           <div className="user-menu-diag-results">
             <div className="user-menu-diag-list">
               {modelDiagnostic.models.map(m => (
-                <div key={m.model} className={`user-menu-diag-item ${m.working ? "is-working" : "is-failed"}`}>
-                  <span className="diag-model-name">{m.model}</span>
+                <div key={m.model} className={`user-menu-diag-item ${m.working ? "is-working" : m.status === 451 ? "is-location-blocked" : "is-failed"}`}>
+                  <span className="diag-model-name">
+                    {m.model}
+                    {m.providerLabel ? <small className="diag-provider-tag">{m.providerLabel}</small> : null}
+                  </span>
                   <span className="diag-model-status">
-                    {m.working ? `${m.latencyMs}ms ✓` : (m.error || "unavailable")}
+                    {m.working ? `${m.latencyMs}ms ✓` : m.status === 451 ? "🌐 Location blocked" : (m.error || "unavailable")}
                   </span>
                 </div>
               ))}

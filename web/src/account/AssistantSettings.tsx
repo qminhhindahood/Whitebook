@@ -43,7 +43,7 @@ export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => vo
   const [locale, setLocale] = useState(() => localStorage.getItem("whitebook_tutor_lang") || "en");
   const [testingModels, setTestingModels] = useState(false);
   const [modelDiagnostic, setModelDiagnostic] = useState<{
-    models: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
+    models: { model: string; provider?: string; providerLabel?: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
     recommendedModel: string | null;
   } | null>(null);
 
@@ -62,7 +62,7 @@ export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => vo
         throw new Error(err.error?.message ?? "Could not test models.");
       }
       const diag = await res.json() as {
-        models: { model: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
+        models: { model: string; provider?: string; providerLabel?: string; working: boolean; status: number | string; latencyMs: number; error?: string }[];
         recommendedModel: string | null;
       };
       setModelDiagnostic(diag);
@@ -283,9 +283,12 @@ export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => vo
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 600, color: "#343a30" }}>{m.model}</div>
-                  <div style={{ fontSize: 11, color: m.working ? "#2e5b27" : "#c5221f" }}>
-                    {m.working ? `Working · ${m.latencyMs}ms` : (m.status === 503 ? "High demand (503)" : (m.error || "Unavailable"))}
+                  <div style={{ fontWeight: 600, color: "#343a30", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>{m.model}</span>
+                    {m.providerLabel ? <span style={{ fontSize: 10, fontWeight: 500, padding: "1px 5px", borderRadius: 4, background: m.provider === "gemini" ? "#e8f0fe" : "#f1f3f4", color: m.provider === "gemini" ? "#1a73e8" : "#5f6368" }}>{m.providerLabel}</span> : null}
+                  </div>
+                  <div style={{ fontSize: 11, color: m.working ? "#2e5b27" : m.status === 451 ? "#b06000" : "#c5221f" }}>
+                    {m.working ? `Working · ${m.latencyMs}ms` : (m.status === 451 ? "Location blocked (451)" : (m.status === 503 ? "High demand (503)" : (m.error || "Unavailable")))}
                   </div>
                 </div>
                 {m.working && (

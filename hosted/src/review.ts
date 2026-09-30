@@ -84,7 +84,7 @@ async function start(env: Env, accountId: string, attemptId: string, questionId:
   const source = await attempt(env, accountId, attemptId);
   if (!source) return failure(404, "not_found", "This Attempt is unavailable.");
   const original = resultQuestion(source, questionId);
-  if (!original || original.correct) return failure(409, "review_unavailable", "Choose a wrong or unanswered question in a completed Attempt.");
+  if (!original) return failure(409, "review_unavailable", "Choose a question in a completed Attempt.");
   const previous = await env.DB.prepare("SELECT revealed_at_ms FROM guided_reviews WHERE account_id = ? AND " +
     "revision_id = ? AND question_id = ? AND revealed_at_ms IS NOT NULL LIMIT 1")
     .bind(accountId, source.revision_id, questionId).first<{ revealed_at_ms: number }>();

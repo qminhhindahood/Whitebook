@@ -24,6 +24,7 @@ export type AttemptSnapshot = {
   clientReceivedAt?: number;
 };
 export type AttemptSummary = {
+  practiceAfterExposure?: boolean;
   attemptId: string; revisionId: string; status: AttemptSnapshot["status"];
   kind?: "practice" | "section_exam"; section: string; questionCount: number; createdAt: number; startedAt: number | null;
   category?: string | null;
