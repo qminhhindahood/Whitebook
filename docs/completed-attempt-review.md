@@ -28,4 +28,12 @@ Standards: ownership/entitlement/CSRF remain server enforced, no trusted answer 
 
 Spec: all confirmed branches are implemented. Fixed correct-question eligibility, image-only blank panes, cooldown retry, and model-test sync. Preserve protected images for provider capability checks rather than silently dropping them for a non-vision model. Live AI provider quality is not claimed from fixture replies. No remaining blocking findings.
 
-Prepared locally and committed; this feature has not been deployed by this task.
+## Deployment
+
+Owner authorized deployment after implementation. Deployed source pinned to `c2702bd746fbf4ca90974f3de98f334711810ea0` to exclude a concurrent uncommitted provider edit. Installed Wrangler 4.141.0 dry run passed, followed by successful deployment to Worker `whitebook-hosted-staging`, custom domain `https://whitebook.docai.dpdns.org`.
+
+Version: **`9bd973f5-23db-4a06-af91-0851050afc8a`**. The isolated complete asset package was verified against release `reviewed-five-20260927`: **2,272 protected images / 260,980,875 bytes**. No database migration was needed.
+
+Live authenticated verification opened the existing completed August Math Section Exam. Dashboard score/date/active time and both module totals loaded; all ten visible image previews loaded. Opening its question preserved the recorded unanswered response and displayed accepted answer D, with full protected visual and the new Tutor/Guided Reasoning/Study Notes controls. At 320×640, player and footer client/scroll widths were both 320, and the protected image fit the 281px pane. Network events were complete and untruncated, with zero non-GET requests and no HTTP failures; no console errors were recorded. Results viewing follows the existing server answer-exposure bookkeeping, but no responses, scores, leases, deletion, retries or AI generation were written by verification.
+
+Live proof: `.scratch/practice-journey/completed-dashboard-live.png`. Deployment log: `.scratch/practice-journey/review-deploy.log`. Live destructive actions and provider generation were deliberately not exercised; their functional verification remains the isolated tests documented above.
