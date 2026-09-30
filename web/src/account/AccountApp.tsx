@@ -6,6 +6,7 @@ import { Reminders } from "./Reminders";
 import { deviceZone } from "./satCountdown";
 import { CuratedLibrary } from "./CuratedLibrary";
 import { PracticeArea } from "./PracticeArea";
+import { requestExamFullscreen } from "./examFullscreen";
 import { HistoryArea } from "./HistoryArea";
 import "./cards.css";
 import "./sign-in.css";
@@ -202,7 +203,10 @@ export function AccountApp() {
   const workspace = useWorkspaceData(handleSessionEnded, `${me?.account.id}-${view}-${refreshKey}`, !!me);
   const name = me?.account.nickname || me?.account.displayName || "Learner";
   function startPractice(id: string, exam = false) { setResumeId(undefined); setPracticeExam(exam); setPracticeRevisionId(id); setPracticeSection(undefined); setView("practice"); }
-  function resumeAttempt(id: string) { setResumeId(id); setView("practice"); }
+  function resumeAttempt(id: string) {
+    if (workspace.data.attempts?.find(item => item.attemptId === id)?.kind === "section_exam") void requestExamFullscreen();
+    setResumeId(id); setView("practice");
+  }
   function followAction(action: StudyAction) {
     if (action.area === "cards") setView("cards");
     if (action.area === "history" && action.attemptId && action.questionId) { setHistoryTarget({ attemptId: action.attemptId, questionId: action.questionId }); setView("history"); }

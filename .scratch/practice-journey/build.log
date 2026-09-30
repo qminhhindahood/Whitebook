@@ -1,0 +1,89 @@
+
+> whitebook-web@0.1.0 build:staging
+> tsc -b && vite build --config vite.staging.config.ts --outDir ../.scratch/practice-journey/dist
+
+vite v8.2.2 building client environment for production...
+transforming...
+✓ 71 modules transformed.
+rendering chunks...
+computing gzip size...
+../.scratch/practice-journey/dist/app.html                                                  0.58 kB │ gzip:   0.32 kB
+../.scratch/practice-journey/dist/staging.html                                              0.61 kB │ gzip:   0.33 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff                  4.42 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2                 4.92 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2                 5.20 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2                 5.46 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff                  5.98 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff                  6.18 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size1-Regular-C195tn64.woff                  6.49 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2           6.90 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2              6.91 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf                   7.58 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff            7.65 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff               7.71 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2                9.64 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2            10.34 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf                  10.36 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Script-Regular-D5yQViql.woff                10.58 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2              11.31 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2                 11.34 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf                  11.50 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2             12.02 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2               12.21 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf                  12.22 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff             12.31 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf            12.34 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf               12.36 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff               13.20 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff                  13.29 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2           13.56 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff              14.11 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff                14.40 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff            16.02 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2              16.40 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Math-Italic-t53AETM-.woff2                  16.44 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf                 16.64 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2              16.78 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2                  16.98 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff               18.66 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Math-Italic-DA0__PXp.woff                   18.74 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff               19.41 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf              19.43 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf                19.57 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf                   19.58 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Italic-BMLOBm91.woff                   19.67 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf               22.36 kB
+../.scratch/practice-journey/dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf                 24.50 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2                    25.32 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Regular-B22Nviop.woff2                 26.27 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf             27.55 kB
+../.scratch/practice-journey/dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2                  28.07 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff                     29.91 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff                  30.77 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf                31.19 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf                    31.30 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf                32.96 kB
+../.scratch/practice-journey/dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff                   33.51 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf                    33.58 kB
+../.scratch/practice-journey/dist/assets/study-illustration-9-2nX6ja.webp                  44.02 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf                      51.33 kB
+../.scratch/practice-journey/dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf                   53.58 kB
+../.scratch/practice-journey/dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf                    63.63 kB
+../.scratch/practice-journey/dist/assets/paper-iBt9XkZO.png                               126.38 kB
+../.scratch/practice-journey/dist/assets/Lora-VariableFont-Jr-ptgqq.ttf                   210.88 kB
+../.scratch/practice-journey/dist/assets/Lora-Italic-VariableFont-CYuWdkyX.ttf            219.12 kB
+../.scratch/practice-journey/dist/assets/Merriweather-Italic-VariableFont-B9CgKBnN.ttf  4,561.02 kB
+../.scratch/practice-journey/dist/assets/Merriweather-VariableFont-BCg9UPAm.ttf         4,598.55 kB
+../.scratch/practice-journey/dist/assets/math-presentation-FpcfeM0O.css                     2.09 kB │ gzip:   0.78 kB
+../.scratch/practice-journey/dist/assets/staging-c7UA8W-t.css                               2.12 kB │ gzip:   0.83 kB
+../.scratch/practice-journey/dist/assets/tutorChat-Ct9yKEON.css                            19.77 kB │ gzip:   4.16 kB
+../.scratch/practice-journey/dist/assets/app-BW87uJYF.css                                 154.41 kB │ gzip:  32.59 kB
+../.scratch/practice-journey/dist/assets/staging-D5-Genq-.js                                4.01 kB │ gzip:   1.57 kB
+../.scratch/practice-journey/dist/assets/PlanAssistant-1_UK2Bmg.js                          5.23 kB │ gzip:   1.85 kB
+../.scratch/practice-journey/dist/assets/GuidedReasoning-Dp1BA5ci.js                        9.64 kB │ gzip:   3.23 kB
+../.scratch/practice-journey/dist/assets/TutorChat-BApgSX_8.js                             19.60 kB │ gzip:   5.99 kB
+../.scratch/practice-journey/dist/assets/PersonalCardsAssistant-BgNTw-h2.js                22.99 kB │ gzip:   6.49 kB
+../.scratch/practice-journey/dist/assets/math-presentation-BIYitbNz.js                    190.79 kB │ gzip:  60.15 kB
+../.scratch/practice-journey/dist/assets/app--jSiWRAX.js                                  446.70 kB │ gzip: 125.72 kB
+
+✓ built in 576ms

@@ -206,25 +206,22 @@ export type PersonalCardsAssistantProps = {
 
 const PROMPT_SUGGESTIONS = [
   {
-    icon: "💡",
-    title: "Math quadratics",
-    text: "How do I recognize when to use the quadratic formula vs factoring on SAT Math?",
-    words: "quadratic formula, discriminant, vertex form, standard form, factoring patterns",
-    desc: "How do I recognize when to use the quadratic formula vs...",
+    icon: "📚",
+    title: "Vocabulary set",
+    words: "pragmatic, ambivalent, bolster, corroborate, ephemeral, ubiquitous",
+    desc: "What set of words do you want to learn today?",
   },
   {
-    icon: "📖",
-    title: "Paired passages",
-    text: "What is the best strategy for paired historical passages in Reading and Writing?",
-    words: "concession, counterargument, synthesis, juxtaposition, rebuttal",
-    desc: "What is the best strategy for paired historical passages in...",
+    icon: "🎯",
+    title: "Daily study goal",
+    words: "abate, capricious, equivocal, fastidious, garrulous, malleable",
+    desc: "Wanna plan to learn how many words now?",
   },
   {
-    icon: "✍️",
-    title: "Grammar rules",
-    text: "Can you explain semicolon and comma splice rules with SAT examples?",
-    words: "semicolon, comma splice, restrictive clause, antecedent, modifier",
-    desc: "Can you explain semicolon and comma splice rules with...",
+    icon: "⚡",
+    title: "SAT R&W keywords",
+    words: "anomaly, dichotomy, empirical, substantiate, contentious, disparage",
+    desc: "High-frequency rhetoric, contrast, and transition words",
   },
 ];
 
@@ -751,7 +748,7 @@ export function PersonalCardsAssistant({ cards, decks, learnerName, onSessionEnd
                 Let’s jump in{firstName ? `, ${firstName}` : ""}
               </h3>
               <p className="tutor-hero-subtitle">
-                Ask freeform questions about SAT math methods, grammar rules, reading passages, or test strategies.
+                Draft new flashcards from words or study notes, or plan your daily vocabulary goals.
               </p>
               <div className="tutor-suggestion-grid">
                 {PROMPT_SUGGESTIONS.map((s, i) => (

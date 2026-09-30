@@ -4480,7 +4480,11 @@ var geminiAdapter = async (payload, model, key2, timeoutMs = 5e4) => {
       throw new GeminiFailure("provider_error");
     }
     const text = candidate.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? "").join("");
-    if (!text?.trim() || text.length > 8e3 || text.includes(key2)) throw new GeminiFailure("blocked_content");
+    if (!text?.trim()) {
+      console.error("gemini_provider_failure", { phase: "empty_text", finishReason: candidate.finishReason, model });
+      throw new GeminiFailure("provider_error", 5, "Model produced no visible output or ran out of tokens.");
+    }
+    if (text.length > 8e3 || text.includes(key2)) throw new GeminiFailure("blocked_content");
     return text;
   } catch (error) {
     if (controller.signal.aborted) throw new GeminiFailure("timeout", 5);
@@ -4773,7 +4777,6 @@ function generationConfigOf(model, maxOutputTokens) {
 var GEMINI_CANDIDATE_MODELS = [
   "gemini-3.8-flash",
   "gemini-3.7-flash",
-  "gemini-3-flash",
   "gemini-3.1-flash-lite",
   "gemini-2.5-flash"
 ];
@@ -5308,7 +5311,7 @@ async function testModels(body2, env, session2, options, adapter, now) {
     const start3 = Date.now();
     const testPayload = JSON.stringify({
       contents: [{ role: "user", parts: [{ text: "ping" }] }],
-      generationConfig: generationConfigOf(model, 2)
+      generationConfig: generationConfigOf(model, 128)
     });
     try {
       await adapter(testPayload, model, key2.key, 8e3);

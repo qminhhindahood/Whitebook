@@ -1,0 +1,13 @@
+
+> whitebook-web@0.1.0 test
+> vitest run src/account/HostedAttempt.test.tsx src/account/PracticeArea.test.tsx src/account/AccountApp.test.tsx
+
+
+ RUN  v5.0.0 D:/Notion/worktrees/whitebook-hosted-redesign/web
+
+
+ Test Files  3 passed (3)
+      Tests  51 passed (51)
+   Start at  18:33:45
+   Duration  10.46s (tests 44%, environment 34%, import 14%, transform 8%)
+
