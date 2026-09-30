@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { accountFetch, csrfToken } from "./accountClient";
 import { HostedBlocks, HostedChoices } from "./HostedPresentation";
 import type { PresentationQuestion } from "./PracticeArea";
+import { matchSavedOption, syncAiModel, AI_SETTINGS_CHANGED_EVENT } from "./aiModelSync";
 
 export type GuidedReasoningProps = {
   review: { reviewId: string; revisionId: string; questionId: string; originalResponse?: string | null; revealed: boolean };
@@ -88,7 +89,9 @@ export function GuidedReasoning({ review, presentation, onReveal, onSessionEnded
     let live = true;
     void request<GuidedOptions>("/api/assistant/options").then((data) => {
       if (!live) return;
-      setOptions(data); setProvider(`${data.options[0]?.route ?? ""}/${data.options[0]?.model ?? ""}`);
+      setOptions(data);
+      const chosen = matchSavedOption(data.options);
+      setProvider(chosen ? `${chosen.route}/${chosen.model}` : `${data.options[0]?.route ?? ""}/${data.options[0]?.model ?? ""}`);
     }).catch((cause: unknown) => {
       if (!live) return;
       setError(cause instanceof Error ? cause.message : "Guided Reasoning is unavailable.");
@@ -96,6 +99,16 @@ export function GuidedReasoning({ review, presentation, onReveal, onSessionEnded
     });
     return () => { live = false; };
   }, [onSessionEnded]);
+
+  useEffect(() => {
+    const handleSync = () => {
+      if (!options?.options) return;
+      const chosen = matchSavedOption(options.options);
+      if (chosen) setProvider(`${chosen.route}/${chosen.model}`);
+    };
+    window.addEventListener(AI_SETTINGS_CHANGED_EVENT, handleSync);
+    return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, handleSync);
+  }, [options]);
 
   useEffect(() => {
     if (!review.revealed) { setSavedNotes([]); setSelectedNoteId(""); return; }
@@ -189,7 +202,13 @@ export function GuidedReasoning({ review, presentation, onReveal, onSessionEnded
       <p className="history-area__exposure">{review.revealed ? "The answer is revealed. Generated guidance remains separate from grading." : "Answer hidden. Generated guidance must remain answer-neutral until you choose Show answer."}</p>
       {error && <p className="practice-error" role="alert">{error}</p>}
       {options && <div className="guided-reasoning__controls"><label>Language<select value={locale} onChange={event => { setLocale(event.target.value as "en" | "vi"); setPreview(null); }}><option value="en">English</option><option value="vi">Vietnamese</option></select></label>
-        <label>Gemini model<select value={provider} onChange={event => { setProvider(event.target.value); setPreview(null); }}>{options.options.map(option => <option key={`${option.route}/${option.model}`} value={`${option.route}/${option.model}`}>{option.model}</option>)}</select></label>
+        <label>Gemini model<select value={provider} onChange={event => {
+          const val = event.target.value;
+          setProvider(val);
+          setPreview(null);
+          const [r, m] = val.split("/");
+          syncAiModel(m, `${r}:${m}`);
+        }}>{options.options.map(option => <option key={`${option.route}/${option.model}`} value={`${option.route}/${option.model}`}>{option.model}</option>)}</select></label>
         <label>Stage<select value={stage} onChange={event => { setStage(event.target.value as typeof stage); setPreview(null); }}><option value="reasoning_steps">Reasoning Steps</option><option value="reading_help">Reading Help</option><option value="follow_up">Follow-up</option></select></label>
       </div>}
       <label>Your guidance request<textarea value={message} onChange={event => { setMessage(event.target.value); setPreview(null); }} /></label>

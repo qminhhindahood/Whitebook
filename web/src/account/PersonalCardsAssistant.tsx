@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import type { CardRecord } from "./PersonalCards";
 import { Icon } from "./StudyWorkspace";
+import { matchSavedOption, syncAiModel, AI_SETTINGS_CHANGED_EVENT } from "./aiModelSync";
 import "./tutorChat.css";
 
 const BACK_FIELDS = ["definition", "vietnamese", "partOfSpeech", "pronunciation", "synonyms", "example"] as const;
@@ -323,7 +324,8 @@ export function PersonalCardsAssistant({ cards, decks, learnerName, onSessionEnd
       }
       const data = (await response.json()) as { options: AssistantOption[] };
       setAssistantOptions(data.options);
-      setAssistantProvider(data.options[0] ? `${data.options[0].route}/${data.options[0].model}` : "");
+      const chosen = matchSavedOption(data.options);
+      setAssistantProvider(chosen ? `${chosen.route}/${chosen.model}` : (data.options[0] ? `${data.options[0].route}/${data.options[0].model}` : ""));
       setAssistantOpen(true);
     } catch {
       setNotice("Flashcard Assistant could not connect. Check your connection and try again.");
@@ -331,6 +333,16 @@ export function PersonalCardsAssistant({ cards, decks, learnerName, onSessionEnd
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    const handleSync = () => {
+      if (assistantOptions.length === 0) return;
+      const chosen = matchSavedOption(assistantOptions);
+      if (chosen) setAssistantProvider(`${chosen.route}/${chosen.model}`);
+    };
+    window.addEventListener(AI_SETTINGS_CHANGED_EVENT, handleSync);
+    return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, handleSync);
+  }, [assistantOptions]);
 
   async function previewAssistant() {
     const [route, model] = assistantProvider.split("/");
@@ -547,8 +559,11 @@ export function PersonalCardsAssistant({ cards, decks, learnerName, onSessionEnd
               disabled={busy}
               value={assistantProvider}
               onChange={event => {
-                setAssistantProvider(event.target.value);
+                const val = event.target.value;
+                setAssistantProvider(val);
                 setAssistantPreview(null);
+                const m = val.includes("/") ? val.split("/")[1] : val.includes(":") ? val.split(":")[1] : val;
+                syncAiModel(m, val);
               }}
             >
               {assistantOptions.map(option => (

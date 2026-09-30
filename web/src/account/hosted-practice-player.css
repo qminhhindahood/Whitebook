@@ -341,6 +341,11 @@
 .hosted-practice-player .scientific-calculator input,
 .hosted-practice-player .scientific-calculator select { min-width: 0; width: 100%; }
 .hosted-practice-player .spr-entry input { min-width: 0; width: 100%; }
+@media (max-width: 480px) {
+  .hosted-practice-player .content-choice { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .hosted-practice-player .choice-eliminate { justify-self: end; }
+  .hosted-practice-player .choice-card { padding: 12px; gap: 10px; }
+}
 .practice-area .practice-attempts li { flex-wrap: wrap; gap: 10px; }
 .practice-area .practice-attempts li>div { flex: 1 1 220px; }
 .practice-delete { padding: 9px 12px; border: 1px solid #c99a99; border-radius: 6px; background: #fffefa; color: #843c3c; font: inherit; cursor: pointer; }

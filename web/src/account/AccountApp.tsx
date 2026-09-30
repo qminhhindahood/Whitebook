@@ -15,6 +15,8 @@ import studyIllustration from "./design-assets/study-illustration.webp";
 import { ProgressArea } from "./ProgressArea";
 import { PlanArea } from "./PlanArea";
 import { AssistantSettings } from "./AssistantSettings";
+import { UserMenuPopover } from "./UserMenuPopover";
+import { POPULAR_TIME_ZONES, getAllTimeZones } from "./timeZones";
 
 type Account = { id: string; email: string; displayName: string; nickname: string; timeZone: string; role: "learner" | "owner" };
 type Me = { account: Account; session: { expiresAt: number } };
@@ -42,6 +44,8 @@ export function AccountApp() {
   const [practiceExam, setPracticeExam] = useState(false);
   const [resumeId, setResumeId] = useState<string>();
   const [playerOpen, setPlayerOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const allZones = getAllTimeZones();
   function setView(area: Area) {
     if (window.location.hash !== `#${area}`) window.history.pushState(null, "", `#${area}`);
     updateView(area); setPlayerOpen(false);
@@ -226,7 +230,7 @@ export function AccountApp() {
         <div className="rail-note"><Icon name="leaf" /><p>Small steps.<br /><em>Big possibilities.</em></p><span>A little growth, every day.</span></div>
         <div className="rail-bottom"><button className={`nav-item${view === "settings" ? " active" : ""}`} aria-label="Account & Settings" title="Account & Settings" aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}><Icon name="settings" /><span>Account & Settings</span></button><div className="user"><span className="avatar">{name[0]}</span><div><strong>{name}</strong><small>Your personal study space</small></div></div></div>
       </aside>
-      <div className="app-shell"><header className="topbar"><div className="breadcrumb">My workspace <span>/</span><strong>{areas.find(item => item.id === view)?.label}</strong></div><div className="top-right"><span className="demo-label">Your private study space</span><button className="avatar mini" aria-label="Open account settings" onClick={() => navigate("settings")}>{name[0]}</button></div></header>
+      <div className="app-shell"><header className="topbar"><div className="breadcrumb">My workspace <span>/</span><strong>{areas.find(item => item.id === view)?.label}</strong></div><div className="top-right user-menu-wrap"><span className="demo-label">Your private study space</span><button className="avatar mini" aria-label="Open account quick menu" aria-expanded={userMenuOpen} onClick={() => setUserMenuOpen(open => !open)}>{name[0]}</button>{userMenuOpen && <UserMenuPopover name={name} email={me.account.email} onOpenSettings={() => { setUserMenuOpen(false); navigate("settings"); }} onSignOut={() => { setUserMenuOpen(false); void signOut(); }} onClose={() => setUserMenuOpen(false)} />}</div></header>
       <div className={`columns${view === "dashboard" ? "" : " columns--study"}`}><main className="study-main" id="study-main">
         {view !== "dashboard" && view !== "tutor" && <div className="greeting"><h1 id="page-heading" tabIndex={-1}>{areas.find(item => item.id === view)?.label ?? (tutorEnabled ? "Tutor Chat" : "")}</h1></div>}
         {tutorEnabled && <Suspense fallback={null}><TutorChat key={me.account.id} workspaceView={view} learnerName={name} onAvailability={setTutorAvailable} onSessionEnded={handleSessionEnded} /></Suspense>}
@@ -238,7 +242,8 @@ export function AccountApp() {
           view === "history" ? <HistoryArea initialTarget={historyTarget} onResume={resumeAttempt} onSessionEnded={handleSessionEnded} /> :
           view === "progress" ? <ProgressArea onSessionEnded={handleSessionEnded} /> :
           view === "plan" ? <PlanArea onSessionEnded={handleSessionEnded} onGoDates={() => setDatesOpen(true)} onAction={followAction} /> :
-            <><section className="dashboard-account" id="account-settings" aria-labelledby="account-heading">
+            <>{tutorEnabled && <AssistantSettings onSessionEnded={handleSessionEnded} />}
+            <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading" style={{ marginTop: 24 }}>
               <h2 id="account-heading">Account</h2>
               <p>Signed in as {me.account.email}</p>
               <form onSubmit={saveNickname}>
@@ -247,18 +252,44 @@ export function AccountApp() {
               </form>
               <form onSubmit={saveTimeZone}>
                 <label htmlFor="time-zone">Time zone</label>
-                <p className="account-hint">Study dates and due days use this IANA zone. Leave empty to follow this device ({deviceZone()}).</p>
-                <div className="account-row"><input id="time-zone" maxLength={64} value={timeZone} placeholder={deviceZone()} onChange={(event) => setTimeZone(event.target.value)} /><button disabled={busy}>Save time zone</button></div>
+                <details className="account-details" style={{ margin: "4px 0 10px" }}>
+                  <summary>Time zone details &amp; device matching</summary>
+                  <p className="account-hint">Study dates and due days use this IANA zone. Leave empty to follow this device ({deviceZone()}).</p>
+                </details>
+                <div className="account-row">
+                  <select id="time-zone" value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
+                    <option value="">Device default ({deviceZone()})</option>
+                    <optgroup label="Popular Time Zones">
+                      {POPULAR_TIME_ZONES.map(z => (
+                        <option key={z.value} value={z.value}>{z.label}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="All Supported Time Zones">
+                      {allZones.filter(z => !POPULAR_TIME_ZONES.some(p => p.value === z)).map(z => (
+                        <option key={z} value={z}>{z}</option>
+                      ))}
+                    </optgroup>
+                    {timeZone && !POPULAR_TIME_ZONES.some(p => p.value === timeZone) && !allZones.includes(timeZone) && (
+                      <option value={timeZone}>{timeZone}</option>
+                    )}
+                  </select>
+                  <button disabled={busy}>Save time zone</button>
+                </div>
               </form>
-              <div className="account-actions"><button type="button" disabled={busy} onClick={renew}>Renew session</button><button type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
-              <div className="account-actions"><button type="button" disabled={busy} onClick={exportData}>Download account data</button></div>
+              <div className="account-actions account-actions--inline">
+                <button type="button" disabled={busy} onClick={renew}>Renew session</button>
+                <button type="button" disabled={busy} onClick={exportData}>Download account data</button>
+                <button type="button" disabled={busy} onClick={signOut}>Sign out</button>
+              </div>
               <form className="account-danger" onSubmit={deleteAccount}>
                 <label htmlFor="delete-confirmation">Delete account</label>
-                <p className="account-hint">This permanently removes your study data and signs out every device. Download a copy first if you want to keep it. Type DELETE MY ACCOUNT to confirm.</p>
+                <details className="account-details account-details--danger" style={{ margin: "4px 0 10px" }}>
+                  <summary>Delete account warnings &amp; instructions</summary>
+                  <p className="account-hint">This permanently removes your study data and signs out every device. Download a copy first if you want to keep it. Type DELETE MY ACCOUNT to confirm.</p>
+                </details>
                 <div className="account-row"><input id="delete-confirmation" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /><button type="submit" disabled={busy || deleteConfirmation !== "DELETE MY ACCOUNT"}>Permanently delete account</button></div>
               </form>
             </section>
-            {tutorEnabled && <AssistantSettings onSessionEnded={handleSessionEnded} />}
           </>}
         <footer className="workspace-footer">Made for your pace. Built for your possibilities.<span>Whitebook</span></footer>
       </main>{view === "dashboard" && <CalendarRail data={workspace.data} timeZone={me.account.timeZone} onDates={() => setDatesOpen(true)} onPlan={() => navigate("plan")} onAction={followAction} />}</div></div>

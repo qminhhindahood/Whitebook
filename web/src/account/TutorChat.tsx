@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
 import { Icon } from "./StudyWorkspace";
+import { getSavedAiModel, getSavedAiRoute, syncAiModel, AI_SETTINGS_CHANGED_EVENT } from "./aiModelSync";
 import "./tutorChat.css";
 
 type Provider = { route: "shared_gemini" | "personal_gemini"; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: string[]; vision: boolean; quota: string; healthy: boolean };
@@ -329,9 +330,14 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
       void accountFetch("/api/assistant/attachments").then(async res => {
         if (res.ok) setReviews(((await res.json()) as { reviews: ReviewChoice[] }).reviews);
       }).catch(() => { /* Attachment picker remains empty when unavailable. */ });
-      const savedRoute = localStorage.getItem("whitebook_tutor_route");
+      const savedRoute = getSavedAiRoute();
+      const activeModel = getSavedAiModel();
       setSelection(current => {
         if (savedRoute && data.options.some(p => matchesSelection(p, savedRoute))) return savedRoute.replace("/", ":");
+        if (activeModel && data.options.some(p => p.model === activeModel)) {
+          const match = data.options.find(p => p.model === activeModel);
+          if (match) return selectionId(match);
+        }
         return data.options.some(p => matchesSelection(p, current)) ? current : data.options[0] ? selectionId(data.options[0]) : selectionId(DEFAULT_CANDIDATE_MODELS[0]);
       });
     }).catch(() => {
@@ -346,6 +352,22 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
     });
     return () => { live = false; controller.abort(); clearTimeout(timeout); pending.current.delete(controller); };
   }, [workspaceView, refresh, onAvailability, onSessionEnded]);
+
+  useEffect(() => {
+    const handleSync = () => {
+      const savedRoute = getSavedAiRoute();
+      const activeModel = getSavedAiModel();
+      if (!options?.options) return;
+      if (savedRoute && options.options.some(p => matchesSelection(p, savedRoute))) {
+        setSelection(savedRoute.replace("/", ":"));
+      } else if (activeModel && options.options.some(p => p.model === activeModel)) {
+        const match = options.options.find(p => p.model === activeModel);
+        if (match) setSelection(selectionId(match));
+      }
+    };
+    window.addEventListener(AI_SETTINGS_CHANGED_EVENT, handleSync);
+    return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, handleSync);
+  }, [options]);
 
   async function request<T>(path: string, body: unknown): Promise<T> {
     if (!navigator.onLine) throw new ChatFailure("You are offline. Reconnect, then send again.");
@@ -469,8 +491,8 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
             onChange={e => {
               const val = e.target.value;
               setSelection(val);
-              localStorage.setItem("whitebook_tutor_route", val);
-              window.dispatchEvent(new Event("whitebook_tutor_settings_changed"));
+              const m = val.includes(":") ? val.split(":")[1] : val;
+              syncAiModel(m, val);
             }}
           >
             {(options?.options.length ? options.options : DEFAULT_CANDIDATE_MODELS).map(p => (

@@ -17,7 +17,8 @@ const send=(type,payload)=>parent.postMessage({whitebookCalculator:true,type,pay
 window.addEventListener('message',async(event)=>{
   if(event.source!==parent||event.data?.type!=='initialize'||calculator)return;
   const {scriptUrl,options,state}=event.data;
-  if(typeof scriptUrl!=='string'||!/^https:\/\/www\\.desmos\\.com\/api\/v1\\.12\/calculator\\.js\\?apiKey=[A-Za-z0-9%_.~-]+$/.test(scriptUrl))return;
+  const scriptPrefix='https://www.desmos.com/api/v1.12/calculator.js?apiKey=';
+  if(typeof scriptUrl!=='string'||!scriptUrl.startsWith(scriptPrefix)||!/^[A-Za-z0-9%_.~-]+$/.test(scriptUrl.slice(scriptPrefix.length)))return;
   try{
     await new Promise((resolve,reject)=>{
       const script=document.createElement('script');
@@ -50,7 +51,7 @@ function calculatorFrame(): Response {
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,#calculator{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><div id="calculator"></div><script nonce="${nonce}">${BRIDGE}</script></body></html>`;
   const headers = privateHeaders({
     "Content-Type": "text/html; charset=utf-8",
-    "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}' https://www.desmos.com; style-src 'unsafe-inline' https://www.desmos.com; connect-src https://*.desmos.com wss://*.desmos.com; img-src 'self' data: blob: https://*.desmos.com; font-src 'self' data: https://*.desmos.com; frame-src https://*.desmos.com; worker-src blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
+    "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}' 'unsafe-eval' https://www.desmos.com; style-src 'unsafe-inline' https://www.desmos.com; connect-src https://*.desmos.com wss://*.desmos.com; img-src 'self' data: blob: https://*.desmos.com; font-src 'self' data: https://*.desmos.com; frame-src https://*.desmos.com; worker-src blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
   });
   return new Response(html, { status: 200, headers });
 }

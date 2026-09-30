@@ -1,5 +1,16 @@
 import { expect, it } from "vitest";
 import worker from "../src/worker";
+import { Script } from "node:vm";
+
+it("keeps Desmos evaluation permission out of the dashboard CSP", async () => {
+  const response = await worker.fetch(new Request("https://whitebook.test/dashboard"), {
+    ASSETS: { async fetch() { return new Response("<html></html>"); } },
+  } as never);
+  const policy = response.headers.get("content-security-policy") ?? "";
+  expect(policy).toContain("script-src 'self'");
+  expect(policy).not.toContain("unsafe-eval");
+  expect(policy).not.toContain("unsafe-inline");
+});
 
 it("serves a nonce-protected calculator bridge with a frame-only Desmos CSP", async () => {
   const response = await worker.fetch(new Request("https://whitebook.test/app/calculator-frame"), {
@@ -15,9 +26,41 @@ it("serves a nonce-protected calculator bridge with a frame-only Desmos CSP", as
   const nonce = /script-src 'nonce-([a-f0-9]+)'/.exec(policy)?.[1];
   expect(nonce).toBeTruthy();
   expect(policy).toContain("https://www.desmos.com");
+  expect(policy).toContain("'unsafe-eval'");
   expect(policy).toContain("frame-ancestors 'self'");
   expect(html).toContain(`<script nonce="${nonce}">`);
   expect(html).toContain("Desmos.GraphingCalculator");
   expect(html).toContain("rect.width>=240");
+  const bridge = /<script nonce="[a-f0-9]+">([\s\S]*?)<\/script>/.exec(html)?.[1];
+  expect(bridge).toBeTruthy();
+  expect(() => new Script(bridge!)).not.toThrow();
   expect(response.headers.get("cache-control")).toBe("private, no-store");
+});
+
+it.each([
+  ["https://www.desmos.com/api/v1.12/calculator.js?apiKey=registered-test-key", true],
+  ["https://www.desmos.com.evil.test/api/v1.12/calculator.js?apiKey=test", false],
+  ["https://www.desmos.com/api/v1.12/calculator.js?apiKey=test&other=1", false],
+])("initializes only the allowed Desmos script URL: %s", async (scriptUrl, allowed) => {
+  const response = await worker.fetch(new Request("https://whitebook.test/app/calculator-frame"), {} as never);
+  const bridge = /<script nonce="[a-f0-9]+">([\s\S]*?)<\/script>/.exec(await response.text())![1];
+  const messages: { type: string; payload: Record<string, unknown> }[] = [];
+  const parent = { postMessage(message: typeof messages[number]) { messages.push(message); } };
+  let initialize!: (event: { source: unknown; data: { type: string; scriptUrl: string; options: object } }) => Promise<void>;
+  new Script(bridge).runInNewContext({ parent, setTimeout, clearTimeout,
+    window: { addEventListener(_name: string, callback: typeof initialize) { initialize = callback; } },
+    document: {
+      createElement() { return {}; },
+      head: { append(script: { onload: () => void }) { script.onload(); } },
+      getElementById() { return { getBoundingClientRect() { return { width: 320, height: 300 }; } }; },
+    },
+    Desmos: { GraphingCalculator() { return { getState() { return { expressions: { list: [] } }; }, observeEvent() {} }; } },
+  });
+  await initialize({ source: parent, data: { type: "initialize", scriptUrl, options: {} } });
+  if (allowed) {
+    expect(messages.find(message => message.type === "ready")?.payload).toEqual({
+      scriptLoaded: true, constructorAvailable: true, instanceCreated: true, stateReadable: true, usableSize: true,
+    });
+    expect(messages.some(message => message.type === "state")).toBe(true);
+  } else expect(messages).toEqual([]);
 });

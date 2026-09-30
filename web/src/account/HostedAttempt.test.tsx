@@ -504,6 +504,8 @@ it("shows only Module 1 and uses finish-module before the untimed transition", a
   expect(await screen.findByText(/Module 1 is complete/i)).toBeTruthy();
   expect(screen.getByText(/4 questions/)).toBeTruthy();
   expect(screen.getByRole("button", { name: "Continue to Module 2" })).toBeTruthy();
+  expect(screen.getByLabelText("Attempt clock").textContent).toBe("Between Modules");
+  expect(screen.queryByText(/Another device has the editing lease/)).toBeNull();
   expect(screen.queryByText(/break/i)).toBeNull();
 });
 

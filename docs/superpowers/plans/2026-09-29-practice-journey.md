@@ -1,18 +1,18 @@
 # Practice, Exam, and Flashcards implementation ledger
 
-Goal: the user-approved Plan B plus durable R&W highlights, Math tools, responsive player, and gesture-triggered Section Exam fullscreen.
+Goal: user-approved Plan B plus R&W highlights, Math tools, responsive player, gesture-triggered Exam fullscreen, AI Tutor during both modes, and Attempt deletion.
 
-Execution: inline, no subagents; preserve the Assistant mount and props. No deployment is authorized in this implementation turn.
+- [x] Baseline and final automated checks.
+- [x] Same-Attempt resume retry, HTTP status retention and clock anchoring.
+- [x] Protected image fit/zoom, desktop footer and narrow-width repairs.
+- [x] Persisted R&W text/image highlights through lease/version validation.
+- [x] Section Exam fullscreen requests and recoverable fallback.
+- [x] AI Tutor access in active Practice/Exam; assisted classification.
+- [x] Authenticated owner-scoped deletion with confirmation.
+- [x] Design Kit Flashcards, separate Starter/personal groups, reveal/ratings unchanged.
+- [x] Ten isolated real-data API journeys across five packages, browser evidence and final self-review.
+- [x] Owner activates registered Desmos key; repeat live graphing readiness and sizing.
 
-- [x] Baseline tests: web 202 passed; hosted suite passed. Web typecheck/build failed on AccountApp lazy TutorChat typing. Another workspace actor has since changed that exact typing; preserve their change and recheck.
-- [x] Live audit attempted: Chrome extension timed out; in-app browser reaches signed-out website. No test learner is available yet. Do not modify existing learner Attempts.
-- [ ] Reproduce loading/retry defects in tests, preserve original request status, repair same-Attempt retry and server clock anchoring.
-- [ ] Fit protected images to actual pane; add zoom; desktop footer and small-screen layout.
-- [ ] Persist R&W text/image highlights through existing versioned Attempt write API, with input bounds and module/lease validation.
-- [ ] Request fullscreen on Section Exam user gestures, allow denial/exit without state loss.
-- [ ] Design Kit Flashcards and separately discoverable Starter/personal decks, existing ratings unchanged.
-- [ ] Targeted and full verification, browser evidence, final self-review and limitations.
+Evidence and limitations: `docs/practice-journey-verification.md`. Secure key setup: `docs/desmos-secure-setup.md`.
 
-Review focus: portal CSS, slow resource loads consuming server time, expired leases, image-only R&W content, tiny viewports with tools open.
-
-The source exposes Practice via navigation, package cards, Library preview, Study Plan actions, and saved Attempt resume. It does not establish five independent exam modes; package-level coverage requires the live library. Report this explicitly rather than inventing five modes.
+No subagents. Owner-authorized deployment completed with version `f5e665d3-4006-4877-9fbb-32625de1556a`. Live graphing and Reference Sheet passed; existing live Attempts were kept read-only. Preserve other actors' concurrent changes in this shared checkout.

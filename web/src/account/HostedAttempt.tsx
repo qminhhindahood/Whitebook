@@ -559,7 +559,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   }
 
   const completed = snapshot.status === "completed";
-  const clockLabel = completed ? "Submitted" : sectionExam && phase === "paused" ? "Paused" : formatClock(clockNow);
+  const clockLabel = completed ? "Submitted" : sectionExam && phase === "paused" ? "Paused" : sectionExam && phase === "transition" ? "Between Modules" : formatClock(clockNow);
   const showMathTools = snapshot.section === "Math" && snapshot.status === "active" && (!sectionExam || phase === "module");
   const mathTools = showMathTools && calculatorOpen && <section className="player-calculator" aria-label="Calculator">
     <header><h2>Calculator</h2><button type="button" className="dialog-close" aria-label="Close calculator"
@@ -672,7 +672,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         {fullscreenMessage && <p role="status">{fullscreenMessage}</p>}
         {warning && <p className="hosted-attempt__warning" role="status" aria-label="Low time warning">{sectionExam
           ? `5 minutes remaining in Module ${activeModule}.` : "5 minutes remaining in this Practice Attempt."}</p>}
-        {snapshot.status === "active" && !canEdit && <div className="hosted-attempt__lease" role="status">
+        {snapshot.status === "active" && !canControl && <div className="hosted-attempt__lease" role="status">
           <p>{timeExpired ? "The server deadline has passed. This Attempt is read-only." : paused
             ? "Editing is paused after a sync conflict or save failure. Refresh the latest Attempt state to continue."
             : snapshot.lease?.held ? "Another device has the editing lease. Your answers are read-only until you take over."
@@ -799,12 +799,12 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
           disabled={assistedPending || submitting || exitPending || lifecycleBusy} onClick={() => void openTutor()}>AI Tutor</button>}
         <time className={`hosted-attempt__clock${timeExpired ? " hosted-attempt__clock--expired" : ""}`} aria-label="Attempt clock">{clockLabel}</time>
         <span className={`practice-chip ${completed ? "practice-chip--ready" : canEdit ? "practice-chip--ready" : "practice-chip--locked"}`}>
-          {completed ? "Submitted" : canEdit ? "Editing here" : "Read only"}
+          {completed ? "Submitted" : sectionExam && phase === "paused" ? "Paused" : sectionExam && phase === "transition" ? "Between Modules" : canEdit ? "Editing here" : "Read only"}
         </span>
       </div>
     </header>
 
-    {snapshot.status === "active" && !canEdit && <div className="hosted-attempt__lease" role="status">
+    {snapshot.status === "active" && !canControl && <div className="hosted-attempt__lease" role="status">
           <p>{timeExpired ? "The server deadline has passed. This Attempt is read-only." : paused
         ? "Editing is paused after a sync conflict or save failure. Refresh the latest Attempt state to continue."
         : snapshot.lease?.held ? "Another device has the editing lease. Your answers are read-only until you take over."
@@ -846,7 +846,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       {mathTools}
     </details>}
     {referenceSheet}
-    {tutorOpen && <AttemptTutor onClose={() => setTutorOpen(false)} onSessionEnded={onSessionEnded} />}
+    {tutorOpen && <AttemptTutor timerPaused={sectionExam && phase !== "module"} onClose={() => setTutorOpen(false)} onSessionEnded={onSessionEnded} />}
     {failedChanges.length > 0 && <div className="hosted-attempt__unsaved" role="group" aria-label="Unsaved changes">
       <p>{failedChanges.length === 1 ? "One change was not saved." : `${failedChanges.length} changes were not saved.`} Your unsaved work remains visible here.</p>
       {canRetryFailedChanges && <button type="button" className="practice-button practice-button--quiet" onClick={reapplyFailedChanges}>Reapply unsaved changes</button>}
@@ -919,4 +919,3 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     </div>}
   </section>;
 }
-

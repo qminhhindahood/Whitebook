@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { accountFetch, csrfToken } from "./accountClient";
+import { matchSavedOption, syncAiModel, AI_SETTINGS_CHANGED_EVENT } from "./aiModelSync";
 
 type Settings = { primaryDate: string; studyDays: number[]; restDays: number[]; dailyMinutes: number; officialScoreGoal: number | null };
 type Provider = { route: string; model: string; payer: string; price: string; terms: string; termsUrl: string; termsVersion: string; languages: ("en" | "vi")[] };
@@ -41,10 +42,22 @@ export function PlanAssistant({ settings, expectedVersionId, onSessionEnded, onS
   function resetPreview() { setPreview(null); setDraft(null); }
   const provider = options.find(item => `${item.route}/${item.model}` === selected);
 
+  useEffect(() => {
+    const handleSync = () => {
+      if (options.length === 0) return;
+      const chosen = matchSavedOption(options);
+      if (chosen) setSelected(`${chosen.route}/${chosen.model}`);
+    };
+    window.addEventListener(AI_SETTINGS_CHANGED_EVENT, handleSync);
+    return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, handleSync);
+  }, [options]);
+
   return <section className="plan-assistant" aria-label="AI Study Plan suggestions">
     {!open ? <button type="button" onClick={() => void act(async () => {
       const data = await request<{ options: Provider[] }>("/api/assistant/options");
-      setOptions(data.options); setSelected(data.options[0] ? `${data.options[0].route}/${data.options[0].model}` : "");
+      setOptions(data.options);
+      const chosen = matchSavedOption(data.options);
+      setSelected(chosen ? `${chosen.route}/${chosen.model}` : (data.options[0] ? `${data.options[0].route}/${data.options[0].model}` : ""));
       setLocale(data.options[0]?.languages.includes("en") ? "en" : data.options[0]?.languages[0] ?? "en"); setOpen(true);
     })}>Suggest with AI</button> : <>
       <h3>Suggest with AI</h3><p>Choose the results you want to share. Suggestions stay drafts until you accept a validated new plan version.</p>
@@ -53,8 +66,16 @@ export function PlanAssistant({ settings, expectedVersionId, onSessionEnded, onS
         <label><input type="checkbox" checked={whitebook} onChange={event => { setWhitebook(event.target.checked); resetPreview(); }} />Latest Whitebook Section Exam</label>
       </fieldset>
       {!official && !whitebook && <p>Select at least one result source to request AI suggestions. Your Study Plan remains available.</p>}
-      <label>Gemini route and model<select value={selected} onChange={event => { const next = options.find(item => `${item.route}/${item.model}` === event.target.value);
-        setSelected(event.target.value); if (next && !next.languages.includes(locale)) setLocale(next.languages[0]); resetPreview(); }}>
+      <label>Gemini route and model<select value={selected} onChange={event => {
+        const val = event.target.value;
+        const next = options.find(item => `${item.route}/${item.model}` === val);
+        setSelected(val);
+        if (next) {
+          syncAiModel(next.model, `${next.route}:${next.model}`);
+          if (!next.languages.includes(locale)) setLocale(next.languages[0]);
+        }
+        resetPreview();
+      }}>
         {options.map(item => <option key={`${item.route}/${item.model}`} value={`${item.route}/${item.model}`}>{item.route} · {item.model}</option>)}</select></label>
       <label>Suggestion language<select value={locale} onChange={event => { setLocale(event.target.value as "en" | "vi"); resetPreview(); }}>
         {provider?.languages.includes("en") && <option value="en">English</option>}{provider?.languages.includes("vi") && <option value="vi">Vietnamese</option>}</select></label>
