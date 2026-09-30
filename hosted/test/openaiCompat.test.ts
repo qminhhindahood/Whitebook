@@ -6,6 +6,9 @@ import {
   geminiPayloadToOpenAI,
   parseOpenAIResponse,
   OPENROUTER_FALLBACK_MODELS,
+  isGeminiModel,
+  isGroqModel,
+  isOpenRouterModel,
 } from "../src/openaiCompat";
 import { GeminiFailure } from "../src/gemini";
 
@@ -160,18 +163,29 @@ describe("createOpenAICompatAdapter", () => {
           Authorization: "Bearer sk-openrouter-key",
           "HTTP-Referer": "https://whitebook.docai.dpdns.org",
         }),
-        body: expect.stringContaining('"models":["nvidia/nemotron-3.5-lightning:free","google/gemma-4-31b-it:free","qwen/qwen3.8-27b:free"]'),
+        body: expect.stringContaining('"models":["nvidia/nemotron-3.5-lightning:free","qwen/qwen3.8-27b:free","google/gemma-4-31b-it:free","openrouter/free"]'),
       })
     );
     vi.unstubAllGlobals();
   });
 
-  it("configures exact OpenRouter free model fallback chain without super model", () => {
-    expect(OPENROUTER_FALLBACK_MODELS).toEqual([
-      "nvidia/nemotron-3.5-lightning:free",
-      "google/gemma-4-31b-it:free",
-      "qwen/qwen3.8-27b:free",
-    ]);
+  it("configures exact OpenRouter free model list including Qwen 3.8 27B and OpenRouter free router", () => {
+    expect(OPENROUTER_FALLBACK_MODELS).toContain("qwen/qwen3.8-27b:free");
+    expect(OPENROUTER_FALLBACK_MODELS).toContain("nvidia/nemotron-3.5-lightning:free");
+    expect(OPENROUTER_FALLBACK_MODELS).toContain("google/gemma-4-31b-it:free");
+    expect(OPENROUTER_FALLBACK_MODELS).toContain("openrouter/free");
+  });
+
+  it("distinguishes Qwen 3.8 27B on OpenRouter vs Groq and identifies providers", () => {
+    expect(isOpenRouterModel("qwen/qwen3.8-27b:free")).toBe(true);
+    expect(isGroqModel("qwen/qwen3.8-27b:free")).toBe(false);
+
+    expect(isGroqModel("qwen/qwen3.8-27b")).toBe(true);
+    expect(isOpenRouterModel("qwen/qwen3.8-27b")).toBe(false);
+
+    expect(isGeminiModel("gemini-3.8-flash")).toBe(true);
+    expect(isOpenRouterModel("gemini-3.8-flash")).toBe(false);
+    expect(isGroqModel("gemini-3.8-flash")).toBe(false);
   });
 
   it("maps 429 to quota_exhausted", async () => {

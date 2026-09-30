@@ -32,6 +32,17 @@ export function selectionId(option: Option): string {
   return `${option.route}:${option.model}`;
 }
 
+export function getOptionLabel(option: Option): string {
+  if (option.model.endsWith(":free") || option.model.startsWith("openrouter/")) {
+    return `OpenRouter (Free) · ${option.model}`;
+  }
+  if (option.model.startsWith("llama") || option.model.startsWith("qwen") || option.model.startsWith("groq/")) {
+    return `Groq (Free) · ${option.model}`;
+  }
+  const prefix = option.route === "shared_gemini" ? "Shared Gemini" : "Personal Gemini";
+  return `${prefix} · ${option.model}`;
+}
+
 export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => void }) {
   const [data, setData] = useState<AssistantOptions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,7 +201,7 @@ export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => vo
 
     <div className="account-row" style={{ marginTop: 16, gap: 16 }}>
       <div style={{ flex: 1, minWidth: 220 }}>
-        <label htmlFor="ai-route-select">Default Gemini route &amp; model</label>
+        <label htmlFor="ai-route-select">Default AI provider &amp; model</label>
         <select
           id="ai-route-select"
           disabled={busy}
@@ -200,7 +211,7 @@ export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => vo
         >
           {data.options.map(p => (
             <option key={selectionId(p)} value={selectionId(p)}>
-              {p.route === "shared_gemini" ? "Shared Gemini" : "Personal Gemini"} · {p.model}
+              {getOptionLabel(p)}
             </option>
           ))}
         </select>
@@ -226,7 +237,12 @@ export function AssistantSettings({ onSessionEnded }: { onSessionEnded: () => vo
         <summary>Provider &amp; quota details ({provider.model})</summary>
         <div className="tutor-provider" style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #eef2f8" }}>
           <dl>
-            <div><dt>Provider / model</dt><dd>Gemini · {provider.model} · {provider.route === "shared_gemini" ? "Shared route" : "Personal route"}</dd></div>
+            <div>
+              <dt>Provider / model</dt>
+              <dd>
+                {provider.model.endsWith(":free") || provider.model.startsWith("openrouter/") ? "OpenRouter" : (provider.model.startsWith("llama") || provider.model.startsWith("qwen") || provider.model.startsWith("groq/")) ? "Groq" : "Gemini"} · {provider.model} · {provider.route === "shared_gemini" ? "Shared route" : "Personal route"}
+              </dd>
+            </div>
             <div><dt>Who pays</dt><dd>{provider.payer}</dd></div>
             <div><dt>Price</dt><dd>{provider.price}</dd></div>
             <div><dt>Quota</dt><dd>{provider.quota}</dd></div>

@@ -657,7 +657,7 @@ it("falls back to Groq when Gemini and OpenRouter both fail", async () => {
     }
     if (url.includes("groq.com")) {
       return new Response(
-        JSON.stringify({ choices: [{ message: { content: "Response from Groq Llama" } }] }),
+        JSON.stringify({ choices: [{ message: { content: "Response from Groq Qwen" } }] }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -678,10 +678,63 @@ it("falls back to Groq when Gemini and OpenRouter both fail", async () => {
     { env: env as AssistantEnv, hasVisuals: false }
   );
 
-  expect(result.text).toBe("Response from Groq Llama");
+  expect(result.text).toBe("Response from Groq Qwen");
   expect(result.providerName).toBe("groq");
-  expect(result.model).toBe("llama-3.3-70b-versatile");
+  expect(result.model).toBe("qwen/qwen3.8-27b");
   expect(geminiAdapterMock).toHaveBeenCalledTimes(2);
+  vi.unstubAllGlobals();
+});
+
+it("supports Qwen 3.8 27B directly as primary model on both OpenRouter and Groq", async () => {
+  const geminiAdapterMock = vi.fn();
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    if (url.includes("openrouter.ai")) {
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "Response from OpenRouter Qwen 3.8 27B" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (url.includes("groq.com")) {
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "Response from Groq Qwen 3.8 27B" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(null, { status: 404 });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const env: Partial<AssistantEnv> = {
+    OPENROUTER_API_KEY: "test-openrouter-key",
+    GROQ_API_KEY: "test-groq-key",
+  };
+
+  // 1. Direct OpenRouter Qwen 3.8 27B
+  const orResult = await executeWithModelFallback(
+    geminiAdapterMock,
+    JSON.stringify({ contents: [{ role: "user", parts: [{ text: "solve math" }] }] }),
+    "qwen/qwen3.8-27b:free",
+    "test-key",
+    { env: env as AssistantEnv, hasVisuals: false }
+  );
+  expect(orResult.text).toBe("Response from OpenRouter Qwen 3.8 27B");
+  expect(orResult.providerName).toBe("openrouter");
+  expect(orResult.model).toBe("qwen/qwen3.8-27b:free");
+  expect(geminiAdapterMock).not.toHaveBeenCalled();
+
+  // 2. Direct Groq Qwen 3.8 27B
+  const groqResult = await executeWithModelFallback(
+    geminiAdapterMock,
+    JSON.stringify({ contents: [{ role: "user", parts: [{ text: "solve math" }] }] }),
+    "qwen/qwen3.8-27b",
+    "test-key",
+    { env: env as AssistantEnv, hasVisuals: false }
+  );
+  expect(groqResult.text).toBe("Response from Groq Qwen 3.8 27B");
+  expect(groqResult.providerName).toBe("groq");
+  expect(groqResult.model).toBe("qwen/qwen3.8-27b");
+  expect(geminiAdapterMock).not.toHaveBeenCalled();
+
   vi.unstubAllGlobals();
 });
 

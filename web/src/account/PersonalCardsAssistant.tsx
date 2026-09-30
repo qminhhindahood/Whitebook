@@ -47,6 +47,12 @@ const formatModelName = (model: string) => {
 
 const modelLabel = (p: AssistantOption) => {
   const name = formatModelName(p.model);
+  if (p.model.endsWith(":free") || p.model.startsWith("openrouter/")) {
+    return `${name} (OpenRouter Free)`;
+  }
+  if (p.model.startsWith("llama") || p.model.startsWith("qwen") || p.model.startsWith("groq/")) {
+    return `${name} (Groq Free)`;
+  }
   const route = p.payer === "platform" || p.route === "shared_gemini" ? "Shared" : "Personal";
   return `${name} (${route})`;
 };

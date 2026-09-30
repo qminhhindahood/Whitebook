@@ -1,16 +1,42 @@
 import { GeminiFailure, type GeminiAdapter } from "./gemini";
 
-export const OPENROUTER_FALLBACK_MODELS = [
+export const OPENROUTER_FREE_MODELS = [
   "nvidia/nemotron-3.5-lightning:free",
-  "google/gemma-4-31b-it:free",
   "qwen/qwen3.8-27b:free",
+  "google/gemma-4-31b-it:free",
+  "openrouter/free",
 ];
 
-export const GROQ_FALLBACK_MODELS = [
+export const GROQ_FREE_MODELS = [
   "qwen/qwen3.8-27b",
-  "qwen-2.5-32b",
   "llama-3.3-70b-versatile",
+  "qwen-2.5-32b",
+  "qwen-qwq-32b",
 ];
+
+export const OPENROUTER_FALLBACK_MODELS = OPENROUTER_FREE_MODELS;
+export const GROQ_FALLBACK_MODELS = GROQ_FREE_MODELS;
+
+export function isOpenRouterModel(model: string): boolean {
+  if (!model) return false;
+  return model.endsWith(":free") || model.startsWith("openrouter/") || OPENROUTER_FREE_MODELS.includes(model);
+}
+
+export function isGroqModel(model: string): boolean {
+  if (!model) return false;
+  if (isOpenRouterModel(model)) return false;
+  return (
+    GROQ_FREE_MODELS.includes(model) ||
+    model.startsWith("llama") ||
+    model.startsWith("qwen") ||
+    model.startsWith("groq/")
+  );
+}
+
+export function isGeminiModel(model: string): boolean {
+  if (!model) return false;
+  return model.startsWith("gemini-");
+}
 
 export type OpenAICompatConfig = {
   baseUrl: string;

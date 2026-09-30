@@ -2,13 +2,21 @@ import { currentSession, failure, json as accountJson, noStore, requireMutation,
 import { hasPackageEntitlement } from "./library";
 import { seal, unseal } from "./assistantSecrets";
 import { geminiAdapter, GeminiFailure, type GeminiAdapter } from "./gemini";
-import { createGroqAdapter, createOpenRouterAdapter } from "./openaiCompat";
+import {
+  createGroqAdapter,
+  createOpenRouterAdapter,
+  GROQ_FREE_MODELS,
+  OPENROUTER_FREE_MODELS,
+  isGeminiModel,
+  isGroqModel,
+  isOpenRouterModel,
+} from "./openaiCompat";
 import { isValidZone, localCalendarDate } from "./schedule";
 import { acceptProposals, completedReviewKeys, parseProposals, planEnvelope, validateProposals, type PlanEnvelope, type Proposal } from "./planAssistant";
 import type { PlanSettings } from "./plan";
 
 export const DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3.5-lightning:free";
-export const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
+export const DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b";
 
 export type AssistantEnv = AccountEnv & {
   ASSETS: { fetch(request: Request): Promise<Response> };
@@ -78,18 +86,38 @@ function catalog(env: AssistantEnv, now: number): Option[] {
       }
     }
     if (env.OPENROUTER_API_KEY) {
-      const orModel = env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
-      for (const item of options.filter(o => o.route === "shared_gemini")) {
-        if (!result.some(o => o.route === item.route && o.model === orModel)) {
-          result.push({ ...item, model: orModel, payer: "OpenRouter Free Fallback", vision: false });
+      const baseItem = options.find(o => o.route === "shared_gemini") || options[0];
+      if (baseItem) {
+        for (const orModel of OPENROUTER_FREE_MODELS) {
+          if (!result.some(o => o.route === baseItem.route && o.model === orModel)) {
+            result.push({
+              ...baseItem,
+              model: orModel,
+              payer: "OpenRouter (Free)",
+              price: "USD 0",
+              terms: "OpenRouter Terms",
+              termsUrl: "https://openrouter.ai/terms",
+              vision: false,
+            });
+          }
         }
       }
     }
     if (env.GROQ_API_KEY) {
-      const grModel = env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
-      for (const item of options.filter(o => o.route === "shared_gemini")) {
-        if (!result.some(o => o.route === item.route && o.model === grModel)) {
-          result.push({ ...item, model: grModel, payer: "Groq Free Fallback", vision: false });
+      const baseItem = options.find(o => o.route === "shared_gemini") || options[0];
+      if (baseItem) {
+        for (const grModel of GROQ_FREE_MODELS) {
+          if (!result.some(o => o.route === baseItem.route && o.model === grModel)) {
+            result.push({
+              ...baseItem,
+              model: grModel,
+              payer: "Groq (Free)",
+              price: "USD 0",
+              terms: "Groq Terms",
+              termsUrl: "https://groq.com/terms",
+              vision: false,
+            });
+          }
         }
       }
     }
@@ -102,11 +130,11 @@ async function credential(env: AssistantEnv, account: string) {
 }
 async function routeKey(env: AssistantEnv, account: string, option: Option): Promise<{ key: string; version: string } | null> {
   if (option.route === "shared_gemini") {
-    if (option.model === (env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL) && env.OPENROUTER_API_KEY) {
+    if (isOpenRouterModel(option.model) && env.OPENROUTER_API_KEY) {
       const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(env.OPENROUTER_API_KEY));
       return { key: env.OPENROUTER_API_KEY, version: Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2, "0")).join("") };
     }
-    if (option.model === (env.GROQ_MODEL || DEFAULT_GROQ_MODEL) && env.GROQ_API_KEY) {
+    if (isGroqModel(option.model) && env.GROQ_API_KEY) {
       const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(env.GROQ_API_KEY));
       return { key: env.GROQ_API_KEY, version: Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2, "0")).join("") };
     }
@@ -206,53 +234,57 @@ export async function executeWithModelFallback(
   let lastError: unknown = null;
   const attempted: string[] = [];
 
-  // If primary model is explicitly OpenRouter
-  if (primaryModel === openRouterModel && env?.OPENROUTER_API_KEY) {
-    attempted.push(`openrouter:${openRouterModel}`);
+  // If primary model is an OpenRouter model
+  if (isOpenRouterModel(primaryModel) && env?.OPENROUTER_API_KEY) {
+    attempted.push(`openrouter:${primaryModel}`);
     try {
-      const orAdapter = createOpenRouterAdapter(openRouterModel);
-      const text = await orAdapter(payload, openRouterModel, env.OPENROUTER_API_KEY);
-      return { text, model: openRouterModel, attempted, providerName: "openrouter" };
+      const orAdapter = createOpenRouterAdapter(primaryModel);
+      const text = await orAdapter(payload, primaryModel, env.OPENROUTER_API_KEY);
+      return { text, model: primaryModel, attempted, providerName: "openrouter" };
     } catch (err) {
       lastError = err;
       console.warn("openrouter_primary_failed_fallback_to_groq", {
         reason: err instanceof Error ? err.message : String(err),
       });
       if (env.GROQ_API_KEY) {
-        attempted.push(`groq:${groqModel}`);
+        const fallbackGroq = isGroqModel(groqModel) ? groqModel : DEFAULT_GROQ_MODEL;
+        attempted.push(`groq:${fallbackGroq}`);
         try {
-          const grAdapter = createGroqAdapter(groqModel);
-          const text = await grAdapter(payload, groqModel, env.GROQ_API_KEY);
-          return { text, model: groqModel, attempted, providerName: "groq" };
+          const grAdapter = createGroqAdapter(fallbackGroq);
+          const text = await grAdapter(payload, fallbackGroq, env.GROQ_API_KEY);
+          return { text, model: fallbackGroq, attempted, providerName: "groq" };
         } catch (grErr) {
           lastError = grErr;
         }
       }
+      throw lastError;
     }
   }
 
-  // If primary model is explicitly Groq
-  if (primaryModel === groqModel && env?.GROQ_API_KEY) {
-    attempted.push(`groq:${groqModel}`);
+  // If primary model is a Groq model
+  if (isGroqModel(primaryModel) && env?.GROQ_API_KEY) {
+    attempted.push(`groq:${primaryModel}`);
     try {
-      const grAdapter = createGroqAdapter(groqModel);
-      const text = await grAdapter(payload, groqModel, env.GROQ_API_KEY);
-      return { text, model: groqModel, attempted, providerName: "groq" };
+      const grAdapter = createGroqAdapter(primaryModel);
+      const text = await grAdapter(payload, primaryModel, env.GROQ_API_KEY);
+      return { text, model: primaryModel, attempted, providerName: "groq" };
     } catch (err) {
       lastError = err;
       console.warn("groq_primary_failed_fallback_to_openrouter", {
         reason: err instanceof Error ? err.message : String(err),
       });
       if (env.OPENROUTER_API_KEY) {
-        attempted.push(`openrouter:${openRouterModel}`);
+        const fallbackOr = isOpenRouterModel(openRouterModel) ? openRouterModel : DEFAULT_OPENROUTER_MODEL;
+        attempted.push(`openrouter:${fallbackOr}`);
         try {
-          const orAdapter = createOpenRouterAdapter(openRouterModel);
-          const text = await orAdapter(payload, openRouterModel, env.OPENROUTER_API_KEY);
-          return { text, model: openRouterModel, attempted, providerName: "openrouter" };
+          const orAdapter = createOpenRouterAdapter(fallbackOr);
+          const text = await orAdapter(payload, fallbackOr, env.OPENROUTER_API_KEY);
+          return { text, model: fallbackOr, attempted, providerName: "openrouter" };
         } catch (orErr) {
           lastError = orErr;
         }
       }
+      throw lastError;
     }
   }
 
@@ -827,7 +859,7 @@ async function testModels(body: Record<string, unknown>, env: AssistantEnv, sess
 
   const modelsToTest = Array.from(new Set([
     ...GEMINI_CANDIDATE_MODELS,
-    ...options.map(o => o.model).filter(m => !m.includes("test")),
+    ...options.map(o => o.model).filter(m => !m.includes("test") && isGeminiModel(m)),
   ]));
 
   const results: { model: string; provider?: string; providerLabel?: string; working: boolean; status: number | string; latencyMs: number; error?: string }[] = [];
@@ -858,50 +890,58 @@ async function testModels(body: Record<string, unknown>, env: AssistantEnv, sess
     }
   }
 
-  // Also test OpenRouter if configured
+  // Also test all OpenRouter free models in parallel if configured
   if (env.OPENROUTER_API_KEY) {
-    const orModel = env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
-    const start = Date.now();
-    const testPayload = JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] });
-    try {
-      const orAdapter = createOpenRouterAdapter(orModel);
-      await orAdapter(testPayload, orModel, env.OPENROUTER_API_KEY, 8000);
-      const latencyMs = Date.now() - start;
-      results.push({ model: orModel, provider: "openrouter", providerLabel: "OpenRouter (Free)", working: true, status: 200, latencyMs });
-    } catch (err) {
-      const latencyMs = Date.now() - start;
-      const failure = err instanceof GeminiFailure ? err : null;
-      const errorDesc = failure?.message || (err instanceof Error ? err.message : "Unavailable");
-      let status: number | string = 502;
-      if (failure?.code === "quota_exhausted") status = 429;
-      else if (failure?.code === "timeout") status = 504;
-      else if (failure?.code === "model_unavailable") status = 404;
-      else if (failure?.code === "credential_invalid") status = 401;
-      results.push({ model: orModel, provider: "openrouter", providerLabel: "OpenRouter (Free)", working: false, status, latencyMs, error: errorDesc });
-    }
+    const orKey = env.OPENROUTER_API_KEY;
+    const orPromises = OPENROUTER_FREE_MODELS.map(async (orModel) => {
+      const start = Date.now();
+      const testPayload = JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] });
+      try {
+        const orAdapter = createOpenRouterAdapter(orModel);
+        await orAdapter(testPayload, orModel, orKey, 8000);
+        const latencyMs = Date.now() - start;
+        return { model: orModel, provider: "openrouter", providerLabel: "OpenRouter (Free)", working: true, status: 200, latencyMs };
+      } catch (err) {
+        const latencyMs = Date.now() - start;
+        const failure = err instanceof GeminiFailure ? err : null;
+        const errorDesc = failure?.message || (err instanceof Error ? err.message : "Unavailable");
+        let status: number | string = 502;
+        if (failure?.code === "quota_exhausted") status = 429;
+        else if (failure?.code === "timeout") status = 504;
+        else if (failure?.code === "model_unavailable") status = 404;
+        else if (failure?.code === "credential_invalid") status = 401;
+        return { model: orModel, provider: "openrouter", providerLabel: "OpenRouter (Free)", working: false, status, latencyMs, error: errorDesc };
+      }
+    });
+    const orResults = await Promise.all(orPromises);
+    results.push(...orResults);
   }
 
-  // Also test Groq if configured
+  // Also test all Groq free models in parallel if configured
   if (env.GROQ_API_KEY) {
-    const groqModel = env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
-    const start = Date.now();
-    const testPayload = JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] });
-    try {
-      const groqAdapter = createGroqAdapter(groqModel);
-      await groqAdapter(testPayload, groqModel, env.GROQ_API_KEY, 8000);
-      const latencyMs = Date.now() - start;
-      results.push({ model: groqModel, provider: "groq", providerLabel: "Groq (Free)", working: true, status: 200, latencyMs });
-    } catch (err) {
-      const latencyMs = Date.now() - start;
-      const failure = err instanceof GeminiFailure ? err : null;
-      const errorDesc = failure?.message || (err instanceof Error ? err.message : "Unavailable");
-      let status: number | string = 502;
-      if (failure?.code === "quota_exhausted") status = 429;
-      else if (failure?.code === "timeout") status = 504;
-      else if (failure?.code === "model_unavailable") status = 404;
-      else if (failure?.code === "credential_invalid") status = 401;
-      results.push({ model: groqModel, provider: "groq", providerLabel: "Groq (Free)", working: false, status, latencyMs, error: errorDesc });
-    }
+    const grKey = env.GROQ_API_KEY;
+    const grPromises = GROQ_FREE_MODELS.map(async (groqModel) => {
+      const start = Date.now();
+      const testPayload = JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }] });
+      try {
+        const groqAdapter = createGroqAdapter(groqModel);
+        await groqAdapter(testPayload, groqModel, grKey, 8000);
+        const latencyMs = Date.now() - start;
+        return { model: groqModel, provider: "groq", providerLabel: "Groq (Free)", working: true, status: 200, latencyMs };
+      } catch (err) {
+        const latencyMs = Date.now() - start;
+        const failure = err instanceof GeminiFailure ? err : null;
+        const errorDesc = failure?.message || (err instanceof Error ? err.message : "Unavailable");
+        let status: number | string = 502;
+        if (failure?.code === "quota_exhausted") status = 429;
+        else if (failure?.code === "timeout") status = 504;
+        else if (failure?.code === "model_unavailable") status = 404;
+        else if (failure?.code === "credential_invalid") status = 401;
+        return { model: groqModel, provider: "groq", providerLabel: "Groq (Free)", working: false, status, latencyMs, error: errorDesc };
+      }
+    });
+    const grResults = await Promise.all(grPromises);
+    results.push(...grResults);
   }
 
   const working = results.filter(r => r.working);
