@@ -420,7 +420,7 @@ export default function TutorChat({ workspaceView, learnerName, onAvailability, 
         locale,
         currentMessage: textToSend,
         priorMessages: priorTurns.slice(-8).map(t => ({ role: t.role, text: t.text })),
-        ...(reviewId ? { reviewId, includeVisuals: includeVisuals && provider.vision } : {}),
+        ...(reviewId ? { reviewId, includeVisuals } : {}),
       });
       const reply = await request<{ text: string; provider: Provider; fallback?: FallbackInfo }>("send", {
         previewId: next.previewId,

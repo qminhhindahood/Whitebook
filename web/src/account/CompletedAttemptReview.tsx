@@ -4,6 +4,7 @@ import { HostedBlocks, type HostedBlock } from "./HostedPresentation";
 import type { AttemptResult, AttemptSnapshot, AttemptSummary, PresentationQuestion } from "./PracticeArea";
 import { historyRequest as request, HistoryRequestError } from "./historyClient";
 import "./completed-review.css";
+import { ReviewNotes } from "./ReviewNotes";
 
 const TutorChat = lazy(() => import("./TutorChat"));
 const GuidedReasoning = lazy(() => import("./GuidedReasoning").then(m => ({ default: m.GuidedReasoning })));
@@ -48,6 +49,7 @@ export function CompletedAttemptReview({ attempt, title, initialQuestionId, onBa
   const [tutors, setTutors] = useState<Record<string, Review>>({});
   const [tutorOpen, setTutorOpen] = useState(false);
   const [guided, setGuided] = useState<Review | null>(null);
+  const [notesReview, setNotesReview] = useState<Review | null>(null);
   const reviews = useRef(new Map<string, Review>());
   const actionLock = useRef(false);
   const requestEpoch = useRef(0);
@@ -108,11 +110,12 @@ export function CompletedAttemptReview({ attempt, title, initialQuestionId, onBa
     reviews.current.set(id, revealed);
     return revealed;
   }
-  function openAi(kind: "tutor" | "guided") {
+  function openAi(kind: "tutor" | "guided" | "notes") {
     void run(async () => {
       const review = await revealedReview();
       if (kind === "tutor") { setTutors(prior => ({ ...prior, [selected]: review })); setTutorOpen(true); }
-      else setGuided(review);
+      else if (kind === "guided") setGuided(review);
+      else setNotesReview(review);
     });
   }
   function practiceAgain() {
@@ -135,10 +138,11 @@ export function CompletedAttemptReview({ attempt, title, initialQuestionId, onBa
           <HostedBlocks blocks={presentation.presentation.stem} revisionId={attempt.revisionId} questionId={selected} />
           {presentation.presentation.choices.map(choice => <article key={choice.id} className={`review-choice${answer?.acceptedAnswers.includes(choice.id) ? " review-choice-correct" : ""}${answer?.response === choice.id ? " review-choice-selected" : ""}`}><strong>{choice.id}</strong><HostedBlocks blocks={choice.content} revisionId={attempt.revisionId} questionId={selected} /><div>{answer?.response === choice.id && <span>Your answer</span>}{answer?.acceptedAnswers.includes(choice.id) && <span>Correct answer</span>}</div></article>)}
           <div className="review-answer-summary"><p>Your answer: <strong>{answer?.response || "Unanswered"}</strong></p><p>Correct answer: <strong>{answer?.acceptedAnswers.join(" or ")}</strong></p></div>
-        </section></div><div className="completed-question-tools">{aiEnabled && <button type="button" className="practice-button practice-button--quiet" disabled={busy} onClick={() => openAi("guided")}>Guided Reasoning</button>}{onResume && <button type="button" className="practice-button practice-button--quiet" disabled={busy} onClick={practiceAgain}>Practice this question again</button>}<p>Review is read-only. Practicing again creates a separate Attempt after answer exposure.</p></div></>}
+        </section></div><div className="completed-question-tools">{aiEnabled && <button type="button" className="practice-button practice-button--quiet" disabled={busy} onClick={() => openAi("guided")}>Guided Reasoning</button>}{onResume && <button type="button" className="practice-button practice-button--quiet" disabled={busy} onClick={practiceAgain}>Practice this question again</button>}<button type="button" className="practice-button practice-button--quiet" disabled={busy} onClick={() => openAi("notes")}>Study Notes</button><p>Review is read-only. Practicing again creates a separate Attempt after answer exposure.</p></div></>}
       </main></div><footer><button type="button" className="practice-button" disabled={busy || questions.findIndex(q => q.questionId === selected) <= 0} onClick={() => { setSelected(questions[questions.findIndex(q => q.questionId === selected) - 1].questionId); setTutorOpen(false); setGuided(null); }}>Previous question</button><button type="button" className="practice-button" disabled={busy || questions.findIndex(q => q.questionId === selected) >= questions.length - 1} onClick={() => { setSelected(questions[questions.findIndex(q => q.questionId === selected) + 1].questionId); setTutorOpen(false); setGuided(null); }}>Next question</button></footer>
     {tutorOpen && <ReviewDialog title="AI Tutor" onClose={() => setTutorOpen(false)}><p>Opening AI Tutor sends this question to your configured provider and generates an explanation.</p><div id="review-tutor-slot" /></ReviewDialog>}
     {guided && presentation && <ReviewDialog title="Guided Reasoning" onClose={() => setGuided(null)}><Suspense fallback={<p role="status">Loading Guided Reasoning…</p>}><GuidedReasoning review={guided} presentation={presentation} onReveal={() => {}} onSessionEnded={onSessionEnded} /></Suspense></ReviewDialog>}
+    {notesReview && <ReviewDialog title="Study Notes" onClose={() => setNotesReview(null)}><ReviewNotes reviewId={notesReview.reviewId} onSessionEnded={onSessionEnded} /></ReviewDialog>}
   </section>, document.body)}
     <TutorSessions tutors={tutors} selected={selected} open={tutorOpen} onSessionEnded={onSessionEnded} />
   </>;
