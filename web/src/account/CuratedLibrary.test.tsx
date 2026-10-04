@@ -4,88 +4,77 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { CuratedLibrary } from "./CuratedLibrary";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-
-it("opens Reading, Math, and Image Fallback presentations without answer data", async () => {
-  const packages = [
-    { revisionId: "rw", title: "August R&W", publishedRevision: 5, questionCount: 1 },
-    { revisionId: "math", title: "August Math", publishedRevision: 5, questionCount: 1 },
-    { revisionId: "fallback", title: "September R&W", publishedRevision: 5, questionCount: 1 },
-  ];
+const links = [1, 2].map(n => ({ revisionId: "rw", questionId: `q${n}`, title: "Reviewed Reading", publishedRevision: 2,
+  ordinal: n, section: "Reading and Writing", module: 1, questionNumber: n, category: "Grammar", responseType: "multiple_choice", hasVisual: false, snippet: `River passage ${n}` }));
+function fixture(answer?: Promise<Response>) {
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (path: string) => {
     calls.push(path);
-    if (path === "/api/library") return Response.json({ packages });
-    const revision = path.split("/")[3];
-    if (path.endsWith("/questions")) return Response.json({ questions: [{ questionId: "q1", ordinal: 1,
-      section: revision === "math" ? "Math" : "Reading and Writing", module: 1, questionNumber: 1 }] });
-    const presentation = { version: 3,
-      stimulus: revision === "rw" ? [{ kind: "reviewed_text", runs: [{ text: "A reviewed passage." }] }] : [],
-      stem: revision === "fallback" ? [{ kind: "image_asset", assetId: "a".repeat(64), width: 600, height: 400, alt: "Whole question image" }] :
-        [{ kind: "text", text: revision === "math" ? "Solve for x." : "What does the passage suggest?" }],
-      choices: "ABCD".split("").map((id) => ({ id, content: [{ kind: revision === "math" ? "latex" : "text",
-        ...(revision === "math" ? { latex: `${id === "A" ? 1 : 2}x` } : { text: `Option ${id}` }) }] })),
-    };
-    return Response.json({ revisionId: revision, questionId: "q1", ordinal: 1,
-      section: revision === "math" ? "Math" : "Reading and Writing",
-      module: 1, questionNumber: 1, responseType: "multiple_choice", presentation });
+    if (path === "/api/library") return Response.json({ packages: [{ revisionId: "rw", title: "Reviewed Reading", publishedRevision: 2, questionCount: 2 }] });
+    if (path.startsWith("/api/library/search")) return Response.json({ questions: links, total: 2, offset: 0, limit: 40 });
+    if (path.endsWith("/answer")) return answer ?? Response.json({ responseType: "multiple_choice", choices: [{ id: "B", content: [{ kind: "text", text: "Reviewed correct choice" }] }] });
+    const id = path.split("/").at(-1);
+    return Response.json({ ...links.find(q => q.questionId === id), presentation: { version: 3, stimulus: [{ kind: "reviewed_text", runs: [{ text: `Passage for ${id}` }] }],
+      stem: [{ kind: "text", text: `Prompt for ${id}` }], choices: ["A", "B"].map(id => ({ id, content: [{ kind: "text", text: `Option ${id}` }] })) } });
   }));
-  render(<CuratedLibrary onSessionEnded={() => { throw new Error("Unexpected sign-out"); }} />);
-  fireEvent.click(await screen.findByRole("button", { name: /August R&W/ }));
-  expect(await screen.findByText("A reviewed passage.")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Back to packages" }));
-  fireEvent.click(screen.getByRole("button", { name: /Preview August Math/ }));
-  expect(await screen.findByText("Solve for x.")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Back to packages" }));
-  fireEvent.click(screen.getByRole("button", { name: /Preview September R&W/ }));
-  const fallback = await screen.findByAltText("Whole question image") as HTMLImageElement;
-  expect(fallback.src).toContain(`/content/fallback/q1/${"a".repeat(64)}.png`);
-  expect(calls).not.toContain("/source.pdf");
-  expect(calls).not.toContain("/api/answers");
-});
-
-it("keeps the latest package visible when an earlier request finishes later", async () => {
-  let finishSlow!: (response: Response) => void;
-  const slow = new Promise<Response>((resolve) => { finishSlow = resolve; });
-  vi.stubGlobal("fetch", vi.fn((path: string) => {
-    if (path === "/api/library") return Promise.resolve(Response.json({ packages: [
-      { revisionId: "slow", title: "Slow R&W", publishedRevision: 7, questionCount: 1 },
-      { revisionId: "fast", title: "Fast Math", publishedRevision: 7, questionCount: 1 },
-    ] }));
-    if (path === "/api/library/slow/questions") return slow;
-    if (path === "/api/library/fast/questions") return Promise.resolve(Response.json({ questions: [
-      { questionId: "q1", ordinal: 1, section: "Math", module: 1, questionNumber: 1 },
-    ] }));
-    return Promise.resolve(Response.json({ revisionId: "fast", questionId: "q1", section: "Math",
-      module: 1, questionNumber: 1, responseType: "multiple_choice",
-      presentation: { version: 3, stimulus: [], stem: [{ kind: "text", text: "Fast question" }],
-        choices: "ABCD".split("").map((id) => ({ id, content: [{ kind: "text", text: id }] })) } }));
-  }));
+  return calls;
+}
+it("searches with filters, opens temporary question controls, reveals/hides answers and restores results", async () => {
+  const calls = fixture();
   render(<CuratedLibrary onSessionEnded={() => {}} />);
-  fireEvent.click(await screen.findByRole("button", { name: /Slow R&W/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Back to packages" }));
-  fireEvent.click(screen.getByRole("button", { name: /Preview Fast Math/ }));
-  expect(await screen.findByText("Fast question")).toBeTruthy();
-  await act(async () => { finishSlow(Response.json({ questions: [] })); await slow; });
-  expect(screen.getByText("Fast question")).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Fast Math" })).toBeTruthy();
+  await screen.findByRole("button", { name: /Open.*Question 1/ });
+  fireEvent.change(screen.getByLabelText("Passage search"), { target: { value: "river flows" } });
+  fireEvent.change(screen.getByLabelText("Bank"), { target: { value: "rw" } });
+  fireEvent.change(screen.getByLabelText("Visuals"), { target: { value: "no" } });
+  fireEvent.click(screen.getByRole("button", { name: "Search questions" }));
+  await act(async () => {});
+  expect(calls.at(-1)).toContain("q=river+flows");
+  expect(calls.at(-1)).toContain("visual=no");
+  fireEvent.click(screen.getByRole("button", { name: /Open.*Question 1/ }));
+  expect(await screen.findByText("Prompt for q1")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /Calculator|Reference/ })).toBeNull();
+  expect(calls.some(path => path.endsWith("/answer"))).toBe(false);
+  fireEvent.click(screen.getByLabelText("Option A", { exact: false }));
+  fireEvent.click(screen.getByRole("button", { name: "Eliminate B" }));
+  fireEvent.click(screen.getByRole("button", { name: "Show Answer" }));
+  expect(await screen.findByText("Reviewed correct choice")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Hide Answer" }));
+  expect(screen.queryByText("Reviewed correct choice")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Back to results" }));
+  expect((screen.getByLabelText("Passage search") as HTMLInputElement).value).toBe("river flows");
+  expect((screen.getByLabelText("Visuals") as HTMLSelectElement).value).toBe("no");
+  fireEvent.click(screen.getByRole("button", { name: /Open.*Question 2/ }));
+  await screen.findByText("Prompt for q2");
+  expect(screen.getByRole("button", { name: "Show Answer" })).toBeTruthy();
+  expect(screen.queryByText("Reviewed correct choice")).toBeNull();
+  expect(calls.every(path => path.startsWith("/api/library"))).toBe(true);
+});
+it("discards an answer reveal that finishes after changing questions", async () => {
+  let finish!: (response: Response) => void;
+  const slow = new Promise<Response>(resolve => { finish = resolve; });
+  fixture(slow);
+  render(<CuratedLibrary onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Open.*Question 1/ }));
+  await screen.findByText("Prompt for q1");
+  fireEvent.click(screen.getByRole("button", { name: "Show Answer" }));
+  fireEvent.click(screen.getByRole("button", { name: "Next question" }));
+  await screen.findByText("Prompt for q2");
+  await act(async () => { finish(Response.json({ choices: [{ id: "B", content: [{ kind: "text", text: "Stale answer" }] }] })); await slow; });
+  expect(screen.queryByText("Stale answer")).toBeNull();
+  expect(screen.getByRole("button", { name: "Show Answer" })).toBeTruthy();
 });
 
-it("opens Practice from the selected immutable package revision", async () => {
-  const build = vi.fn();
-  vi.stubGlobal("fetch", vi.fn(async (path: string) => {
-    if (path === "/api/library") return Response.json({ packages: [
-      { revisionId: "revision-4", title: "Reviewed Reading", publishedRevision: 4, questionCount: 2 },
-    ] });
-    if (path === "/api/library/revision-4/questions") return Response.json({ questions: [
-      { questionId: "q1", ordinal: 1, section: "Reading and Writing", module: 1, questionNumber: 1 },
-    ] });
-    if (path === "/api/library/revision-4/questions/q1") return Response.json({ revisionId: "revision-4",
-      questionId: "q1", ordinal: 1, section: "Reading and Writing", module: 1, questionNumber: 1,
-      responseType: "multiple_choice", presentation: { version: 3, stimulus: [], stem: [{ kind: "text", text: "Question" }], choices: [] } });
-    return Response.json({});
-  }));
-  render(<CuratedLibrary onSessionEnded={() => {}} onBuildPractice={build} />);
-  fireEvent.click(await screen.findByRole("button", { name: /Reviewed Reading/ }));
-  fireEvent.click(await screen.findByRole("button", { name: "Build Practice Attempt" }));
-  expect(build).toHaveBeenCalledWith("revision-4");
+it("shows unavailable reviewed answers and lets a failed search retry", async () => {
+  fixture(Promise.resolve(Response.json({ error: { code: "answer_unavailable", message: "A reviewed answer is not available for this question." } }, { status: 404 })));
+  render(<CuratedLibrary onSessionEnded={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Open.*Question 1/ }));
+  await screen.findByText("Prompt for q1");
+  fireEvent.click(screen.getByRole("button", { name: "Show Answer" }));
+  expect(await screen.findByRole("alert")).toHaveProperty("textContent", "A reviewed answer is not available for this question.");
+  fireEvent.click(screen.getByRole("button", { name: "Back to results" }));
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: { message: "Search is temporarily unavailable." } }, { status: 503 }));
+  fireEvent.click(screen.getByRole("button", { name: "Search questions" }));
+  await screen.findByText("Search is temporarily unavailable.");
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(await screen.findByRole("button", { name: /Open.*Question 1/ })).toBeTruthy();
 });

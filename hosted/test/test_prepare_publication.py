@@ -73,6 +73,27 @@ class PublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Invalid reviewed text marks"):
             publication.validate_blocks(blocks, "r", "q", {})
 
+    def test_publishes_reviewed_fallback_passage_separately_from_presentation_and_keys(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            packages = fixture(bundle)
+            packages[4]["questions"][0]["passageSearchText"] = "A reviewed fallback passage."
+            presentation_bytes = encoded({"packages": packages})
+            (bundle / "presentations.json").write_bytes(presentation_bytes)
+            manifest = json.loads((bundle / "manifest.json").read_text())
+            manifest["presentationsSha256"] = hash_bytes(presentation_bytes)
+            (bundle / "manifest.json").write_bytes(encoded(manifest))
+            publication.prepare(bundle, root / "prepared")
+            db = sqlite3.connect(":memory:")
+            for name in ("0002_learner_accounts.sql", "0004_curated_library.sql", "0011_passage_search.sql"):
+                db.executescript((ROOT / "migrations" / name).read_text())
+            db.executescript((root / "prepared/publication.sql").read_text())
+            self.assertEqual(db.execute("SELECT passage_text FROM publication_passage_search").fetchall(),
+                             [("A reviewed fallback passage.",)])
+            self.assertNotIn("passageSearchText", db.execute("SELECT presentation_json FROM publication_questions WHERE revision_id='revision-4'").fetchone()[0])
+            self.assertEqual(db.execute("SELECT release_id FROM active_publication").fetchone()[0], "reviewed-five-v1")
+
     def test_publishes_reviewed_question_categories_without_guessing_missing_ones(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

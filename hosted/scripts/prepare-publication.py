@@ -208,7 +208,7 @@ def prepare(bundle, output, check_only=False):
         source_question_ids = set()
         for ordinal, item in enumerate(questions, 1):
             required = {"questionId", "sourceQuestionId", "section", "module", "questionNumber", "responseType", "reviewStatus", "presentation"}
-            check(isinstance(item, dict) and required <= set(item) <= required | {"reviewedHelp", "category"},
+            check(isinstance(item, dict) and required <= set(item) <= required | {"reviewedHelp", "category", "passageSearchText"},
                   "Invalid question fields")
             question = item["questionId"]
             key = (revision, question)
@@ -261,6 +261,14 @@ def prepare(bundle, output, check_only=False):
                 check(len(accepted) == 1 and accepted[0] in "ABCD", "Invalid multiple-choice answer")
             serialized = json.dumps(presentation, separators=(",", ":"), ensure_ascii=False)
             lines.append(f"INSERT OR IGNORE INTO publication_questions VALUES ({sql(revision)}, {sql(question)}, {sql(item['sourceQuestionId'])}, {ordinal}, {sql(item['section'])}, {item['module']}, {item['questionNumber']}, {sql(item['responseType'])}, {sql(serialized)});")
+            if "passageSearchText" in item:
+                passage_text = item["passageSearchText"]
+                check(isinstance(passage_text, str) and len(passage_text) <= 60000 and
+                      not LOCAL_PATH.search(passage_text) and
+                      (item["section"] == "Reading and Writing" or not passage_text.strip()),
+                      "Invalid reviewed passage search text")
+                lines.append(f"INSERT OR IGNORE INTO publication_passage_search VALUES ({sql(revision)}, {sql(question)}, {sql(passage_text)});")
+                revision_guards.append(f"(SELECT passage_text FROM publication_passage_search WHERE revision_id = {sql(revision)} AND question_id = {sql(question)}) = {sql(passage_text)}")
             if "category" in item:
                 lines.append(f"INSERT OR IGNORE INTO publication_question_categories VALUES ({sql(revision)}, {sql(question)}, {sql(item['category'])});")
                 revision_guards.append(f"(SELECT category FROM publication_question_categories WHERE revision_id = {sql(revision)} AND question_id = {sql(question)}) = {sql(item['category'])}")

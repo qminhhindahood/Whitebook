@@ -1,9 +1,11 @@
 import { currentSession, failure, json, noStore, type AccountEnv } from "./accounts";
+import { currentLibraryRevisions, searchQuestionBank, revealBankAnswer } from "./questionBank";
 
 type Statement = ReturnType<AccountEnv["DB"]["prepare"]>;
 type LibraryEnv = AccountEnv & { ASSETS: { fetch(request: Request): Promise<Response> } };
 const ID = "[A-Za-z0-9_-]+";
 const QUESTION = new RegExp(`^/api/library/(${ID})/questions/(${ID})$`);
+const ANSWER = new RegExp(`^/api/library/(${ID})/questions/(${ID})/answer$`);
 const VISUAL = new RegExp(`^/content/(${ID})/(${ID})/([A-Za-z0-9_-]+\\.(?:png|webp|jpe?g))$`);
 
 async function rows<T>(statement: Statement): Promise<T[]> {
@@ -24,13 +26,8 @@ async function listing(env: LibraryEnv, accountId: string): Promise<Response> {
   const packages = await rows<{
     id: string; family_id: string; title: string; source_revision: number;
     published_revision: number; question_count: number;
-  }>(env.DB.prepare(`SELECT p.id, p.family_id, p.title, p.source_revision,
-      p.published_revision, p.question_count FROM package_revisions p WHERE
-      EXISTS (SELECT 1 FROM active_publication a JOIN publication_release_revisions r
-        ON r.release_id = a.release_id WHERE r.revision_id = p.id)
-      OR EXISTS (SELECT 1 FROM private_revision_entitlements e
-        WHERE e.revision_id = p.id AND e.account_id = ?)
-      ORDER BY p.title, p.published_revision`).bind(accountId));
+  }>(env.DB.prepare(`${currentLibraryRevisions} SELECT p.id, p.family_id, p.title, p.source_revision,
+      p.published_revision, p.question_count FROM current_revisions p ORDER BY p.title, p.id`).bind(accountId));
   return json({ packages: packages.map((item) => ({
     revisionId: item.id, familyId: item.family_id, title: item.title,
     sourceRevision: item.source_revision, publishedRevision: item.published_revision,
@@ -93,13 +90,16 @@ export function libraryRoute(request: Request, env: LibraryEnv): Promise<Respons
     const session = await currentSession(request, env);
     if (!session) return failure(401, "signed_out", "Sign in to open the library.");
     if (path === "/api/library") return listing(env, session.account_id);
+    if (path === "/api/library/search") return searchQuestionBank(new URL(request.url), env, session.account_id);
+    const answerMatch = ANSWER.exec(path);
     const questionMatch = QUESTION.exec(path);
     const listMatch = new RegExp(`^/api/library/(${ID})/questions$`).exec(path);
     const visualMatch = VISUAL.exec(path);
-    const revisionId = questionMatch?.[1] ?? listMatch?.[1] ?? visualMatch?.[1];
+    const revisionId = answerMatch?.[1] ?? questionMatch?.[1] ?? listMatch?.[1] ?? visualMatch?.[1];
     if (!revisionId || !(await hasPackageEntitlement(env, session.account_id, revisionId)))
       return failure(404, "not_found", "This content is unavailable.");
     if (questionMatch) return question(env, revisionId, questionMatch[2]);
+    if (answerMatch) return revealBankAnswer(env, revisionId, answerMatch[2]);
     if (listMatch) return questions(env, revisionId);
     if (visualMatch) return visual(request, env, revisionId, visualMatch[2]);
     return failure(404, "not_found", "This content is unavailable.");
