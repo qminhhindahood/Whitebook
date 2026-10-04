@@ -5,7 +5,7 @@ import "../math-presentation.css";
 import { QuestionImage } from "./QuestionImage";
 import { HighlightContext, HighlightText } from "./AttemptHighlights";
 
-type TextRun = { text: string; emphasis?: boolean; blank?: boolean };
+type TextRun = { text: string; emphasis?: boolean; blank?: boolean; underline?: boolean };
 export type HostedBlock =
   | { kind: "text"; text: string }
   | { kind: "reviewed_text"; runs: TextRun[] }
@@ -42,13 +42,18 @@ export function HostedBlocks({ blocks, revisionId, questionId, highlightQuote, b
       if (block.kind === "text") return <HighlightText key={index} block={`${blockPrefix}:${index}`} text={block.text} />;
       if (block.kind === "latex") return <MathNotation key={index} source={block.latex} />;
       if (block.kind === "reviewed_text") return <span key={index} className="question-content__text--reviewed">
+        <HighlightText block={`${blockPrefix}:${index}`} text={block.runs.map(run => run.text).join("")}>
         {block.runs.map((run, runIndex) => {
-          const content = run.blank ? <span className="question-content__blank">{run.text}</span> : run.text;
+          const content = run.text;
           const matchAt = !run.blank && highlightQuote ? run.text.indexOf(highlightQuote) : -1;
           const matched = matchAt >= 0 ? <><span>{run.text.slice(0, matchAt)}</span><mark aria-label="Quoted evidence highlight">{highlightQuote}</mark><span>{run.text.slice(matchAt + highlightQuote!.length)}</span></> : content;
-          const highlighted = <HighlightText block={`${blockPrefix}:${index}:${runIndex}`} text={run.text}>{matched}</HighlightText>;
+          // Legacy run anchors still display; all new selections use the complete formatted block.
+          let highlighted = <HighlightText selectable={false} block={`${blockPrefix}:${index}:${runIndex}`} text={run.text}>{matched}</HighlightText>;
+          if (run.blank) highlighted = <span className="question-content__blank">{highlighted}</span>;
+          if (run.underline) highlighted = <span className="question-content__underline">{highlighted}</span>;
           return run.emphasis ? <em key={runIndex}>{highlighted}</em> : <span key={runIndex}>{highlighted}</span>;
         })}
+        </HighlightText>
       </span>;
       const src = block.kind === "image_asset" ?
         `/content/${revisionId}/${questionId}/${block.assetId}.png` : block.src;

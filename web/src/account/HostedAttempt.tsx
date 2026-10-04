@@ -8,7 +8,9 @@ import { DesmosReadinessProbe, loadDesmos } from "../calculator";
 import { LineIcon } from "../icons";
 import { ReferenceSheet } from "../ReferenceSheet";
 import { requestExamFullscreen } from "./examFullscreen";
-import { HighlightContext, type Highlight } from "./AttemptHighlights";
+import { type Highlight } from "./AttemptHighlights";
+import { AttemptAnnotations, AnnotationSidebar } from "./AttemptAnnotations";
+import { AttemptDialog } from "./AttemptDialog";
 import { AttemptTutor } from "./AttemptTutor";
 import "../player.css";
 import "../player-math.css";
@@ -165,6 +167,12 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const [lifecycleError, setLifecycleError] = useState("");
   const [showReference, setShowReference] = useState(false);
   const [highlighting, setHighlighting] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [finishConfirm, setFinishConfirm] = useState(false);
+  const [exitConfirm, setExitConfirm] = useState(false);
+  const [contentZoom, setContentZoom] = useState(100);
+  const [calculatorWidth, setCalculatorWidth] = useState(420);
   const [tutorOpen, setTutorOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(!!document.fullscreenElement);
   const [fullscreenMessage, setFullscreenMessage] = useState("");
@@ -187,7 +195,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const pausedRef = useRef(paused);
   const queueRef = useRef<QueueItem[]>([]);
   const drainPromiseRef = useRef<Promise<void> | null>(null);
-  const pendingResponsesRef = useRef(new Map<string, Change>());
+  const pendingResponsesRef = useRef(new Map<string, Change | HighlightChange>());
   const responseSaveTimerRef = useRef<number | undefined>(undefined);
   const failedChangesRef = useRef<(Change | CalculatorChange)[]>([]);
   const navigationRef = useRef(false);
@@ -199,6 +207,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const resultById = useMemo(() => new Map((result?.questions ?? []).map((question) => [question.questionId, question])), [result]);
   const sectionExam = snapshot.kind === "section_exam";
   const phase = String(snapshot.state.phase ?? (snapshot.status === "preparing" ? "loading" : "module"));
+  useEffect(() => { setReviewOpen(false); setFinishConfirm(false); setExitConfirm(false); setNavigatorOpen(false); }, [phase]);
   const activeModule = Number(snapshot.state.activeModule ?? 1);
   const questionLinks = sectionExam && phase === "module" && snapshot.status !== "completed"
     ? snapshot.questions.filter((question) => question.module === activeModule)
@@ -393,9 +402,9 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   function enqueue(change: Change | CalculatorChange) {
     if (!canEdit || lifecycleBusy || exitRef.current || submittingRef.current ||
       (navigationRef.current && change.type !== "navigation")) return;
-    if (change.type === "response" && questionById.get(change.questionId)?.responseType === "student_produced_response") {
+    if (change.type === "highlights" || (change.type === "response" && questionById.get(change.questionId)?.responseType === "student_produced_response")) {
       setDraftState((currentState) => applyChange(currentState, change));
-      pendingResponsesRef.current.set(change.questionId, change);
+      pendingResponsesRef.current.set(`${change.type}:${change.questionId}`, change);
       setSaveStatus("pending");
       if (responseSaveTimerRef.current !== undefined) window.clearTimeout(responseSaveTimerRef.current);
       responseSaveTimerRef.current = window.setTimeout(() => {
@@ -561,15 +570,22 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
   const completed = snapshot.status === "completed";
   const clockLabel = completed ? "Submitted" : sectionExam && phase === "paused" ? "Paused" : sectionExam && phase === "transition" ? "Between Modules" : formatClock(clockNow);
   const showMathTools = snapshot.section === "Math" && snapshot.status === "active" && (!sectionExam || phase === "module");
-  const mathTools = showMathTools && calculatorOpen && <section className="player-calculator" aria-label="Calculator">
+  const mathTools = showMathTools && calculatorOpen && <section className="player-calculator" aria-label="Calculator" style={{ width: `min(${calculatorWidth}px, calc(100% - 24px))` }}>
     <header><h2>Calculator</h2><button type="button" className="dialog-close" aria-label="Close calculator"
       onClick={() => setCalculatorOpen(false)}><LineIcon name="close"/></button></header>
+    <div className="calculator-modes" role="group" aria-label="Calculator mode">
+      <button type="button" aria-pressed={calculatorMode === "desmos"} disabled={!readyDesmosUrl} onClick={() => setCalculatorMode("desmos")}>Graphing</button>
+      <button type="button" aria-pressed={calculatorMode === "scientific"} onClick={() => setCalculatorMode("scientific")}>Scientific</button>
+      <label>Width <input type="range" min={300} max={Math.max(300, Math.min(800, window.innerWidth - 48))} step={20}
+        value={calculatorWidth} onChange={event => setCalculatorWidth(Number(event.target.value))} aria-label="Calculator width" /></label>
+    </div>
+    {!readyDesmosUrl && <p className="calculator-fallback" role="status">Graphing is unavailable. The scientific calculator is ready.</p>}
     <div className="player-calculator__content">{calculatorMode === "desmos" && readyDesmosUrl ? <DesmosCalculatorPanel options={{ images: false,
       folders: false, notes: false, links: false, pasteGraphLink: false, authorFeatures: false }}
-      savedState={(snapshot.state.calculatorState as Record<string, unknown> | undefined) ?? null}
+      savedState={draftState.calculatorState ?? null}
       onReady={(checks) => {
         const ready = Object.values(checks).length > 0 && Object.values(checks).every(Boolean);
-        setReadyDesmosUrl(ready ? desmosScriptUrl ?? null : null);
+        setReadyDesmosUrl(ready ? readyDesmosUrl : null);
         setCalculatorMode(ready ? "desmos" : "scientific");
       }}
       onSave={(state) => enqueue({ type: "calculator_state", state })} /> : <ScientificCalculator/>}
@@ -597,10 +613,10 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
       if (cause instanceof AttemptRequestError && cause.status === 401) onSessionEnded();
     } finally { setAssistedPending(false); }
   }
-  if (!sectionExam || phase === "module" || completed) {
+  {
     const stimulus = current?.presentation.stimulus ?? [];
     const studentResponse = current?.responseType === "student_produced_response";
-    const splitLayout = current?.section === "Math" || stimulus.length > 0 || studentResponse;
+    const splitLayout = current?.section === "Reading and Writing" && stimulus.length > 0;
     const questionPanel = current ? <section className="response-panel" aria-label="Question and answers">
       <div className="question-banner">
         <span className="question-banner__number" aria-hidden="true">{currentIndex + 1}</span>
@@ -611,7 +627,8 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         <span className="question-banner__meta">{current.category ?? "All Questions"}</span>
       </div>
       <div className="hosted-practice-player__question-content">
-        {(current.section !== "Math" || studentResponse) && <HostedBlocks blocks={current.presentation.stem} revisionId={snapshot.revisionId} questionId={current.questionId} />}
+        {current.section === "Math" && stimulus.length > 0 && <HostedBlocks blockPrefix="stimulus" blocks={stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} />}
+        <HostedBlocks blocks={current.presentation.stem} revisionId={snapshot.revisionId} questionId={current.questionId} />
         {current.responseType === "multiple_choice" ? <HostedChoices presentation={current.presentation}
           revisionId={snapshot.revisionId} questionId={current.questionId}
           selected={draftState.responses[current.questionId]} eliminated={eliminated}
@@ -622,7 +639,8 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
             <input aria-label="Your response" value={draftState.responses[current.questionId] ?? ""} maxLength={4096} disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending}
               onChange={(event) => enqueue({ type: "response", questionId: current.questionId, response: event.target.value })} />
           </label>}
-        {studentResponse && <AnswerPreview value={draftState.responses[current.questionId] ?? ""} />}
+        {studentResponse && <><AnswerPreview value={draftState.responses[current.questionId] ?? ""} />
+          <details className="spr-guidance"><summary>How to enter your response</summary><ul>{STUDENT_RESPONSE_DIRECTIONS.map(line => <li key={line}>{line}</li>)}</ul></details></>}
         {completed && currentResult && <div className={`hosted-attempt__answer hosted-attempt__answer--${currentResult.correct ? "correct" : "incorrect"}`}>
           <strong>{currentResult.correct ? "Correct" : "Review this answer"}</strong>
           <span>Your response: {currentResult.response ?? "No response"}</span>
@@ -633,28 +651,42 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
 
     const highlights = current ? draftState.highlights[current.questionId] ?? [] : [];
     const highlightEnabled = highlighting && canEdit && !lifecycleBusy && !navigationPending && !submitting && !exitPending;
-    return <HighlightContext.Provider value={{ enabled: highlightEnabled, highlights, add: highlight => {
-      if (current && highlights.length < 100) enqueue({ type: "highlights", questionId: current.questionId, highlights: [...highlights, highlight] });
-    } }}><main className="player-shell hosted-practice-player" aria-labelledby="hosted-attempt-heading">
+    const quoteFor = (mark: Highlight) => {
+      const parts = mark.block.split(":");
+      const block = parts[0] === "choice" ? current?.presentation.choices.find(choice => choice.id === parts[1])?.content[Number(parts[2])]
+        : (parts[0] === "stem" ? current?.presentation.stem : current?.presentation.stimulus)?.[Number(parts[1])];
+      const runIndex = parts[0] === "choice" ? parts[3] : parts[2];
+      const text = block?.kind === "text" ? block.text : block?.kind === "reviewed_text" ? (runIndex === undefined ? block.runs.map(run => run.text).join("") : block.runs[Number(runIndex)]?.text) : "";
+      return mark.kind === "text" ? text?.slice(mark.start, mark.end) ?? "" : block && "alt" in block ? block.alt : "Image region";
+    };
+    const closeReview = () => { if (!submitting && !lifecycleBusy) { setReviewOpen(false); setFinishConfirm(false); } };
+    const hasQuestions = !sectionExam || phase === "module" || completed;
+    return <AttemptAnnotations key={`${snapshot.attemptId}:${current?.questionId}`} enabled={canEdit && snapshot.section === "Reading and Writing" && !lifecycleBusy && !navigationPending && !submitting && !exitPending}
+      selecting={highlightEnabled} revisionId={snapshot.revisionId}
+      highlights={completed ? [] : highlights} quoteFor={quoteFor} onChange={marks => {
+        if (current) enqueue({ type: "highlights", questionId: current.questionId, highlights: marks });
+      }}><main className="player-shell hosted-practice-player" aria-labelledby="hosted-attempt-heading"
+        style={{ "--content-zoom": contentZoom / 100, "--calculator-width": `${calculatorWidth}px` } as CSSProperties}>
       <header className="player-header">
         <div className="player-header__section"><h2 id="hosted-attempt-heading">{snapshot.section} · {sectionExam ? `Module ${activeModule}` : "Practice"}</h2>
           <span className="hosted-practice-player__context">{sectionExam ? "Section Exam · Timed, two Modules" : "Practice · Your questions, your pace"}{snapshot.state.practiceAfterExposure ? " · Practice after seeing the answer" : ""}{snapshot.assisted ? " · Assisted" : ""}<br />{packageTitle}{snapshot.category ? ` · ${snapshot.category}` : ""}</span>
           <button type="button" className="directions-toggle" aria-expanded={directionsOpen}
             onClick={() => setDirectionsOpen((open) => !open)}>Directions <LineIcon name="chevron"/></button>
-          {directionsOpen && <div className="directions-panel" role="region" aria-label="Directions">
-            <p>{DIRECTIONS[snapshot.section] ?? DIRECTIONS["Reading and Writing"]}</p>
-          </div>}
         </div>
-        <div className="player-header__timer">{!timerHidden && <time className="player-timer" aria-label={snapshot.deadlineAt === null ? "Elapsed time" : "Time remaining"}>{clockLabel}</time>}
+        <div className="player-header__timer">{!timerHidden && <time className="player-timer" aria-label={!hasQuestions ? "Attempt clock" : snapshot.deadlineAt === null ? "Elapsed time" : "Time remaining"}>{clockLabel}</time>}
           <button type="button" className="pill" onClick={() => setTimerHidden((hidden) => !hidden)}>{timerHidden ? "Show" : "Hide"}</button></div>
         <div className="player-header__tools">
           {import.meta.env.VITE_AI_RELEASE_ENABLED === "true" && !completed && <button type="button" className="player-tool" disabled={assistedPending || exitPending || submitting}
             title="Using AI Tutor marks this Attempt as assisted" onClick={() => void openTutor()}>AI Tutor</button>}
-          {snapshot.section === "Reading and Writing" && !completed && <>
+          {snapshot.section === "Reading and Writing" && !completed && hasQuestions && <>
             <button type="button" className="player-tool" disabled={!canEdit} aria-pressed={highlighting} onClick={() => setHighlighting(value => !value)}>Highlight</button>
+            <button type="button" className="player-tool" aria-expanded={notesOpen} onClick={() => setNotesOpen(value => !value)}>Highlights & Notes</button>
             {highlighting && <button type="button" className="player-tool" disabled={!highlightEnabled || !highlights.length}
               onClick={() => current && enqueue({ type: "highlights", questionId: current.questionId, highlights: highlights.slice(0, -1) })}>Undo highlight</button>}
           </>}
+          <label className="content-zoom">Content zoom<select aria-label="Content zoom" value={contentZoom} onChange={event => setContentZoom(Number(event.target.value))}>
+            {[75, 100, 125, 150, 175, 200].map(value => <option key={value} value={value}>{value}%</option>)}
+          </select></label>
           {sectionExam && !fullscreen && !completed && <button type="button" className="player-tool" onClick={() => void enterFullscreen()}>Enter fullscreen</button>}
           {showMathTools && <>
             <button type="button" className="player-tool" aria-pressed={calculatorOpen}
@@ -663,7 +695,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
               onClick={() => setShowReference(true)}><LineIcon name="reference"/><span>Reference</span></button>
           </>}
           <button type="button" className="player-tool" disabled={exitPending || submitting || navigationPending}
-            onClick={() => void saveAndExit()}><LineIcon name="exit"/><span>{exitPending ? "Saving…" : "Save & Exit"}</span></button>
+            onClick={() => completed ? void saveAndExit() : setExitConfirm(true)}><LineIcon name="exit"/><span>{exitPending ? "Saving…" : "Save & Exit"}</span></button>
         </div>
       </header>
       <div className="accent-strip" aria-hidden="true" />
@@ -689,11 +721,9 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         <p className={`hosted-attempt__save hosted-attempt__save--${saveStatus}`} role="status" aria-label="Save status">
           {saveStatus === "pending" ? "Pending · Saving changes…" : saveStatus === "failed" ? "Failed · Changes not saved" : "Saved"}</p>
       </div>
-      {navigatorOpen && <div className="modal-backdrop" role="presentation" onClick={() => setNavigatorOpen(false)}>
-        <section className="navigator" role="dialog" aria-modal="true" aria-label="Question navigator"
-          onClick={(event) => event.stopPropagation()}>
-          <header><h2>Practice Questions</h2><button type="button" className="dialog-close" aria-label="Close navigator"
-            onClick={() => setNavigatorOpen(false)}>Close</button></header>
+      {directionsOpen && <AttemptDialog title="Directions" onClose={() => setDirectionsOpen(false)}><p>{DIRECTIONS[snapshot.section] ?? DIRECTIONS["Reading and Writing"]}</p></AttemptDialog>}
+      {navigatorOpen && <AttemptDialog title="Question navigator" onClose={() => setNavigatorOpen(false)}>
+          <p>Jump to a question in {sectionExam ? `Module ${activeModule}` : "this Practice Attempt"}. Filled: answered · Dashed: unanswered · Flag: marked for review.</p>
           <div className="navigator__grid">{questionLinks.map((link, index) => {
             const answered = Object.prototype.hasOwnProperty.call(draftState.responses, link.questionId);
             const markedQuestion = draftState.markedQuestionIds.includes(link.questionId);
@@ -702,17 +732,63 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
               aria-label={`Question ${index + 1}, ${answered ? "answered" : "unanswered"}${markedQuestion ? ", marked for review" : ""}`}
               disabled={navigationPending || submitting || exitPending} onClick={() => void goTo(index)}>{index + 1}</button>;
           })}</div>
-        </section>
-      </div>}
+      </AttemptDialog>}
+      {reviewOpen && <AttemptDialog title={finishConfirm ? "Confirm finish" : sectionExam ? `Review Module ${activeModule}` : "Review Practice"} onClose={closeReview}>
+        <p>{questionLinks.filter(link => !draftState.responses[link.questionId]?.trim()).length} unanswered · {questionLinks.filter(link => draftState.markedQuestionIds.includes(link.questionId)).length} marked for review</p>
+        {finishConfirm ? <>
+          <p>{sectionExam ? `Finishing permanently locks Module ${activeModule}. You cannot return to its questions.${activeModule === 1 ? " Module 2 starts only when you continue." : " Your Section Exam will be graded."}`
+            : "Submitting locks this Practice Attempt and grades all questions, including unanswered questions."}</p>
+          <button type="button" className="pill pill--primary" disabled={!canEdit || submitting || lifecycleBusy || navigationPending || exitPending}
+            onClick={async () => {
+              if (sectionExam) { if (await sectionAction("finish-module")) closeReview(); }
+              else { await submit(); if (snapshotRef.current.status === "completed") closeReview(); }
+            }}>{submitting || lifecycleBusy ? "Saving and finishing…" : sectionExam ? "Confirm finish" : "Confirm submit"}</button>
+          <button type="button" className="pill pill--outline" disabled={submitting || lifecycleBusy} onClick={() => setFinishConfirm(false)}>Return to review</button>
+          {(syncError || lifecycleError) && <p role="alert">{syncError || lifecycleError}</p>}
+        </> : <>
+          <div className="navigator__grid">{questionLinks.map((link, index) => <button type="button" key={link.questionId}
+            className={`${draftState.responses[link.questionId]?.trim() ? "answered" : ""} ${draftState.markedQuestionIds.includes(link.questionId) ? "marked" : ""}`}
+            aria-label={`Review question ${index + 1}, ${draftState.responses[link.questionId]?.trim() ? "answered" : "unanswered"}${draftState.markedQuestionIds.includes(link.questionId) ? ", marked for review" : ""}`}
+            onClick={() => { closeReview(); void goTo(index); }}>{index + 1}</button>)}</div>
+          <p>The timer keeps running while you review.</p>
+          <button type="button" className="pill pill--primary" disabled={!canEdit} onClick={() => setFinishConfirm(true)}>Continue to confirmation</button>
+          <button type="button" className="pill pill--outline" onClick={closeReview}>Return to questions</button>
+        </>}
+      </AttemptDialog>}
+      {exitConfirm && <AttemptDialog title="Save and exit" onClose={() => { if (!exitPending && !lifecycleBusy) setExitConfirm(false); }}>
+        <p>{sectionExam ? "Whitebook saves your answers, annotations, and remaining time before pausing this Section Exam. Resume it from Your Attempts."
+          : "Whitebook saves your answers and annotations before returning to Your Attempts. Practice timing continues while you are away."}</p>
+        <p role="status">{saveStatus === "saved" ? "All changes saved." : saveStatus === "pending" ? "Saving changes…" : "Changes are not saved. Recover your unsaved work before leaving."}</p>
+        <button type="button" className="pill pill--primary" disabled={saveStatus === "failed" || exitPending || lifecycleBusy || navigationPending || submitting}
+          onClick={() => void saveAndExit()}>{exitPending || lifecycleBusy ? "Saving…" : sectionExam ? "Save, pause & exit" : "Save & return"}</button>
+        <button type="button" className="pill pill--outline" onClick={() => setExitConfirm(false)}>Keep working</button>
+        {(syncError || lifecycleError) && <p role="alert">{syncError || lifecycleError}</p>}
+      </AttemptDialog>}
       <div className="player-workspace" style={{ "--calculator-split": `${split}%` } as CSSProperties}>
         {mathTools}
+        {sectionExam && phase === "transition" && !completed && <section className="attempt-stage" aria-label="Module transition">
+          <h2>Module 1 is complete</h2><p>Your answers and annotations are saved. Module 1 is locked.</p>
+          <p>{snapshot.questions.length} questions in this Section Exam. Continue when you are ready for Module 2. Its timer starts when you continue.</p>
+          <button type="button" className="pill pill--primary" disabled={!canControl || lifecycleBusy} onClick={() => void sectionAction("continue")}>{lifecycleBusy ? "Preparing Module 2…" : "Continue to Module 2"}</button>
+          <button type="button" className="pill pill--outline" disabled={!canControl || lifecycleBusy} onClick={() => void sectionAction("pause")}>Pause Section Exam</button>
+        </section>}
+        {sectionExam && phase === "paused" && !completed && <section className="attempt-stage" aria-label="Paused Section Exam">
+          <h2>Section Exam paused</h2><p>Your answers and annotations are saved. The remaining time is held by the server.</p>
+          <p>{snapshot.section === "Math" ? "Reload the Math tools before resuming." : "Resume when you are ready to continue."}</p>
+          {resumeProbeUrl && <><p role="status">Checking the graphing calculator. The scientific calculator will be used if Desmos is unavailable.</p>
+            <DesmosReadinessProbe options={{ expressions: true, settingsMenu: false }} onResult={checks => {
+              const resolve = resumeProbeResolver.current;
+              if (resolve) { resumeProbeResolver.current = null; setResumeProbeUrl(""); resolve(Object.values(checks).every(Boolean)); }
+            }} /></>}
+          <button type="button" className="pill pill--primary" disabled={!canControl || lifecycleBusy} onClick={() => void sectionAction("resume")}>{lifecycleBusy ? "Checking resources…" : "Resume through Loading Gate"}</button>
+        </section>}
         {completed && <section className="hosted-attempt__results" aria-labelledby="hosted-results-heading">
           <h3 id="hosted-results-heading">Results</h3>
           {resultLoading ? <p role="status">Loading completed Results…</p> : result ?
             <p>{result.correctCount} of {result.questionCount} correct</p> : <p>Results could not be loaded. Return to Your Attempts and try again.</p>}
         </section>}
-        <div className={`player-body ${splitLayout ? "player-body--split" : "player-body--centered"}`}
-          style={splitLayout ? { gridTemplateColumns: `minmax(300px, ${split}fr) 10px minmax(330px, ${100 - split}fr)` } : undefined}>
+        {hasQuestions && <div className="attempt-content-layout"><div className={`player-body ${splitLayout ? "player-body--split" : "player-body--centered"}`}
+          style={splitLayout ? { gridTemplateColumns: `minmax(0, ${split}fr) 10px minmax(0, ${100 - split}fr)` } : undefined}>
           {splitLayout && current && <section className="player-pane player-pane--left"
             aria-label={studentResponse ? "Entry directions" : current.section === "Math" ? "Question" : "Question passage"}>
             <div className="player-pane__scroll" hidden={calculatorOpen && showMathTools}>
@@ -744,25 +820,28 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
               if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
             }} />}
           {questionPanel}
-        </div>
+        </div>{notesOpen && !completed && <AnnotationSidebar onClose={() => setNotesOpen(false)} />}</div>}
       </div>
       {referenceSheet}
       {tutorOpen && <AttemptTutor onClose={() => setTutorOpen(false)} onSessionEnded={onSessionEnded} />}
       <footer className="player-footer">
         <span className="player-footer__brand">Whitebook</span>
-        <button type="button" className="position-pill" aria-expanded={navigatorOpen}
-          onClick={() => setNavigatorOpen((open) => !open)}>Question {currentIndex + 1} of {questionLinks.length}<LineIcon name="chevron"/></button>
-        <div className="player-footer__actions">
+        <button type="button" className="position-pill" disabled={!hasQuestions} aria-expanded={navigatorOpen}
+          onClick={() => setNavigatorOpen((open) => !open)}>{hasQuestions ? <>Question {currentIndex + 1} of {questionLinks.length}<LineIcon name="chevron"/></>
+            : phase === "paused" ? "Section Exam paused" : `Module ${activeModule} complete`}</button>
+        {hasQuestions && <div className="player-footer__actions">
           {!completed && snapshot.kind === "practice" && !snapshot.assisted && <button type="button" className="pill pill--soft" disabled={!canEdit || assistedPending || submitting || navigationPending || exitPending}
             onClick={() => setAssistedConfirmOpen(true)}>{assistedPending ? "Enabling Assisted Practice…" : "Use Assisted Practice"}</button>}
           {!completed && !sectionExam && <button type="button" className="pill pill--soft" disabled={!canEdit || submitting || navigationPending || exitPending}
-            onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit Practice"}</button>}
+            onClick={() => { setReviewOpen(true); setFinishConfirm(false); }}>{submitting ? "Submitting…" : "Submit Practice"}</button>}
           {!completed && sectionExam && phase === "module" && <button type="button" className="pill pill--soft"
-            disabled={!canEdit || lifecycleBusy || saveStatus !== "saved" || submitting || navigationPending || exitPending}
-            onClick={() => void sectionAction("finish-module")}>{activeModule === 1 ? "Finish Module" : "Finish Section Exam"}</button>}
+            disabled={!canEdit || lifecycleBusy || submitting || navigationPending || exitPending}
+            onClick={() => { setReviewOpen(true); setFinishConfirm(false); }}>{activeModule === 1 ? "Finish Module" : "Finish Section Exam"}</button>}
           <button type="button" className="pill pill--outline" aria-label="Previous question" disabled={currentIndex === 0 || navigationPending || submitting} onClick={() => void goTo(currentIndex - 1)}>Back</button>
-          <button type="button" className="pill pill--primary" aria-label="Next question" disabled={currentIndex === questionLinks.length - 1 || navigationPending || submitting} onClick={() => void goTo(currentIndex + 1)}>Next</button>
-        </div>
+          <button type="button" className="pill pill--primary" aria-label={currentIndex === questionLinks.length - 1 && !completed ? "Review questions" : "Next question"}
+            disabled={(completed && currentIndex === questionLinks.length - 1) || navigationPending || submitting}
+            onClick={() => currentIndex === questionLinks.length - 1 ? setReviewOpen(true) : void goTo(currentIndex + 1)}>{currentIndex === questionLinks.length - 1 && !completed ? "Review" : "Next"}</button>
+        </div>}
       </footer>
       {assistedConfirmOpen && <section className="hosted-attempt__assisted-confirm" role="group" aria-labelledby="assisted-confirm-heading">
         <h3 id="assisted-confirm-heading">Confirm Assisted Practice</h3>
@@ -771,7 +850,7 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
         <button type="button" className="practice-button practice-button--quiet" disabled={assistedPending} onClick={() => setAssistedConfirmOpen(false)}>Cancel</button>
       </section>}
       <div className="accent-strip" aria-hidden="true" />
-    </main></HighlightContext.Provider>;
+    </main></AttemptAnnotations>;
   }
 
   async function enterAssistedPractice() {
@@ -787,135 +866,4 @@ export function HostedAttempt({ initial, questions, packageTitle, onSessionEnded
     } finally { setAssistedPending(false); }
   }
 
-  return <section className="hosted-attempt" aria-labelledby="hosted-attempt-heading">
-    <header className="hosted-attempt__header">
-      <div className="hosted-attempt__title"><button type="button" className="practice-button practice-button--quiet" disabled={exitPending || submitting || navigationPending}
-        onClick={() => void exitAttempt()}>{exitPending ? "Checking saved changes…" : "Back to Practice"}</button>
-        <div><h2 id="hosted-attempt-heading">{sectionExam ? `Section Exam · Module ${activeModule}` : "Practice Attempt"}</h2>
-          <p>{packageTitle} · {snapshot.section}{snapshot.category ? ` · ${snapshot.category}` : ""} · {snapshot.questions.length} questions</p></div>
-      </div>
-      <div className="hosted-attempt__header-side">
-        {import.meta.env.VITE_AI_RELEASE_ENABLED === "true" && !completed && <button type="button" className="practice-button practice-button--quiet"
-          disabled={assistedPending || submitting || exitPending || lifecycleBusy} onClick={() => void openTutor()}>AI Tutor</button>}
-        <time className={`hosted-attempt__clock${timeExpired ? " hosted-attempt__clock--expired" : ""}`} aria-label="Attempt clock">{clockLabel}</time>
-        <span className={`practice-chip ${completed ? "practice-chip--ready" : canEdit ? "practice-chip--ready" : "practice-chip--locked"}`}>
-          {completed ? "Submitted" : sectionExam && phase === "paused" ? "Paused" : sectionExam && phase === "transition" ? "Between Modules" : canEdit ? "Editing here" : "Read only"}
-        </span>
-      </div>
-    </header>
-
-    {snapshot.status === "active" && !canControl && <div className="hosted-attempt__lease" role="status">
-          <p>{timeExpired ? "The server deadline has passed. This Attempt is read-only." : paused
-        ? "Editing is paused after a sync conflict or save failure. Refresh the latest Attempt state to continue."
-        : snapshot.lease?.held ? "Another device has the editing lease. Your answers are read-only until you take over."
-        : "The editing lease expired. Reacquire editing to continue."}</p>
-      <button type="button" className="practice-button" disabled={takingOver || timeExpired} onClick={() => void takeOver()}>
-        {takingOver ? "Refreshing Attempt…" : snapshot.lease?.held ? "Take over editing" : "Reacquire editing"}
-      </button>
-    </div>}
-    {syncError && <p className="practice-error" role="alert">{syncError}</p>}
-    {lifecycleError && <p className="practice-error" role="alert">{lifecycleError}</p>}
-    {warning && <p className="hosted-attempt__warning" role="status" aria-label="Low time warning">{sectionExam
-      ? `5 minutes remaining in Module ${activeModule}.` : "5 minutes remaining in this Practice Attempt."}</p>}
-    {sectionExam && phase === "transition" && <section className="hosted-attempt__transition" aria-label="Module transition">
-      <h3>Module 1 is complete</h3><p>Your answers are saved. Continue when you are ready for Module 2.</p>
-      {canControl && <button type="button" className="practice-button practice-button--quiet" disabled={lifecycleBusy}
-        onClick={() => void sectionAction("pause")}>Pause Section Exam</button>}
-      {canControl && <button type="button" className="practice-button" disabled={lifecycleBusy}
-        onClick={() => void sectionAction("continue")}>{lifecycleBusy ? "Preparing Module 2…" : "Continue to Module 2"}</button>}
-    </section>}
-    {sectionExam && phase === "paused" && <section className="hosted-attempt__transition" aria-label="Paused Section Exam">
-      <h3>Section Exam paused</h3><p>The remaining time is held by the server. Reload the Math tools before resuming.</p>
-      {resumeProbeUrl && <><p role="status">Checking the graphing calculator. The scientific calculator will be used if Desmos is unavailable.</p>
-        <DesmosReadinessProbe options={{ expressions: true, settingsMenu: false }} onResult={(checks) => {
-          const resolve = resumeProbeResolver.current;
-          if (resolve) { resumeProbeResolver.current = null; setResumeProbeUrl(""); resolve(Object.values(checks).every(Boolean)); }
-        }} />
-      </>}
-      {canControl && <button type="button" className="practice-button" disabled={lifecycleBusy}
-        onClick={() => void sectionAction("resume")}>{lifecycleBusy ? "Checking resources…" : "Resume through Loading Gate"}</button>}
-    </section>}
-    {sectionExam && phase === "module" && canEdit && <div className="hosted-attempt__module-actions">
-      <button type="button" className="practice-button practice-button--quiet" disabled={lifecycleBusy}
-        onClick={() => void sectionAction("pause")}>Pause Section Exam</button>
-      <button type="button" className="practice-button" disabled={lifecycleBusy || saveStatus !== "saved"}
-        onClick={() => void sectionAction("finish-module")}>{activeModule === 1 ? "Finish Module" : "Finish Section Exam"}</button>
-    </div>}
-    {showMathTools && <details className="hosted-attempt__math-tools">
-      <summary>Calculator & Reference Sheet</summary>
-      {mathTools}
-    </details>}
-    {referenceSheet}
-    {tutorOpen && <AttemptTutor timerPaused={sectionExam && phase !== "module"} onClose={() => setTutorOpen(false)} onSessionEnded={onSessionEnded} />}
-    {failedChanges.length > 0 && <div className="hosted-attempt__unsaved" role="group" aria-label="Unsaved changes">
-      <p>{failedChanges.length === 1 ? "One change was not saved." : `${failedChanges.length} changes were not saved.`} Your unsaved work remains visible here.</p>
-      {canRetryFailedChanges && <button type="button" className="practice-button practice-button--quiet" onClick={reapplyFailedChanges}>Reapply unsaved changes</button>}
-    </div>}
-    <p className={`hosted-attempt__save hosted-attempt__save--${saveStatus}`} role="status" aria-label="Save status">
-      {saveStatus === "pending" ? "Pending · Saving changes…" : saveStatus === "failed" ? "Failed · Changes not saved" : "Saved"}
-    </p>
-
-    {completed && <section className="hosted-attempt__results" aria-labelledby="hosted-results-heading">
-      <h3 id="hosted-results-heading">Results</h3>
-      {resultLoading ? <p role="status">Loading completed Results…</p> : result ?
-        <p>{result.correctCount} of {result.questionCount} correct</p> : <p>Results could not be loaded. Return to Your Attempts and try again.</p>}
-    </section>}
-
-    {(!sectionExam || phase === "module" || completed) && <div className="hosted-attempt__workspace">
-      <nav className="hosted-attempt__navigator" aria-label="Question navigation">
-        <h3>Questions</h3>
-        <ol>{questionLinks.map((link, index) => {
-          const answered = Object.prototype.hasOwnProperty.call(draftState.responses, link.questionId);
-          const isCurrent = index === currentIndex;
-          const markedQuestion = draftState.markedQuestionIds.includes(link.questionId);
-          return <li key={link.questionId}><button type="button" aria-current={isCurrent ? "step" : undefined}
-            aria-label={`Question ${index + 1}${answered ? ", answered" : ", unanswered"}${markedQuestion ? ", marked for review" : ""}`}
-            className={`hosted-attempt__nav-item${isCurrent ? " is-current" : ""}${markedQuestion ? " is-marked" : ""}${answered ? " is-answered" : ""}`}
-            disabled={navigationPending || submitting || exitPending} onClick={() => void goTo(index)}>{index + 1}</button></li>;
-        })}</ol>
-        <p><span className="hosted-attempt__legend hosted-attempt__legend--answered" /> Answered
-          <span className="hosted-attempt__legend hosted-attempt__legend--marked" /> Marked for review</p>
-      </nav>
-
-      <article className="hosted-attempt__question" aria-label="Question Presentation">
-        {current ? <>
-          <div className="hosted-attempt__question-heading">
-            <span>Question {currentIndex + 1}</span>
-            <button type="button" className={`hosted-attempt__mark${marked ? " is-marked" : ""}`} disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending}
-              aria-pressed={marked} onClick={() => enqueue({ type: "mark", questionId: current.questionId, marked: !marked })}>
-              {marked ? "Remove review mark" : "Mark for review"}
-            </button>
-          </div>
-          <HostedBlocks blockPrefix="stimulus" blocks={current.presentation.stimulus} revisionId={snapshot.revisionId} questionId={current.questionId} />
-          <HostedBlocks blocks={current.presentation.stem} revisionId={snapshot.revisionId} questionId={current.questionId} />
-          {current.responseType === "multiple_choice" ? <HostedChoices presentation={current.presentation}
-            revisionId={snapshot.revisionId} questionId={current.questionId}
-            selected={draftState.responses[current.questionId]} eliminated={eliminated}
-            onSelect={(response) => enqueue({ type: "response", questionId: current.questionId, response })}
-            onEliminate={(choiceId) => enqueue({ type: "elimination", questionId: current.questionId,
-                choiceId, eliminated: !eliminated.includes(choiceId) })} disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending} /> :
-            <label className="hosted-attempt__entry">Your response
-              <input value={draftState.responses[current.questionId] ?? ""} maxLength={4096}
-                disabled={!canEdit || lifecycleBusy || navigationPending || submitting || exitPending} onChange={(event) => enqueue({ type: "response", questionId: current.questionId, response: event.target.value })} />
-            </label>}
-          {current.responseType === "student_produced_response" && <AnswerPreview value={draftState.responses[current.questionId] ?? ""} />}
-          {completed && currentResult && <div className={`hosted-attempt__answer hosted-attempt__answer--${currentResult.correct ? "correct" : "incorrect"}`}>
-            <strong>{currentResult.correct ? "Correct" : "Review this answer"}</strong>
-            <span>Your response: {currentResult.response ?? "No response"}</span>
-            <span>Accepted answer: {currentResult.acceptedAnswers.join(" or ")}</span>
-          </div>}
-          {!completed && <footer className="hosted-attempt__footer">
-            <button type="button" className="practice-button practice-button--quiet" disabled={currentIndex === 0 || !canEdit || navigationPending}
-              onClick={() => void goTo(currentIndex - 1)}>Previous question</button>
-            <span>Question {currentIndex + 1} of {questionLinks.length}</span>
-             {snapshot.kind === "practice" && !snapshot.assisted && <button type="button" className="practice-button practice-button--quiet" disabled={!canEdit || assistedPending || submitting || navigationPending} onClick={() => setAssistedConfirmOpen(true)}>{assistedPending ? "Enabling Assisted Practice…" : "Use Assisted Practice"}</button>}
-             {currentIndex < questionLinks.length - 1 ?
-              <button type="button" className="practice-button" disabled={!canEdit || navigationPending || submitting} onClick={() => void goTo(currentIndex + 1)}>Next question</button> :
-              (sectionExam ? null : <button type="button" className="practice-button" disabled={!canEdit || submitting || navigationPending}
-                onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit Attempt"}</button>)}
-          </footer>}
-        </> : <p role="status">The selected Question Presentation is unavailable.</p>}
-      </article>
-    </div>}
-  </section>;
 }

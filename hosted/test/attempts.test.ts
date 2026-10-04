@@ -1205,3 +1205,67 @@ it("persists bounded R&W highlights on the same Attempt and rejects invalid regi
   expect(invalid.status).toBe(400);
 });
 
+it("saves revision-bound colored annotations and notes across devices with ownership and version conflicts", async () => {
+  const { credentials, call } = await fixture();
+  const { attemptId, started } = await startPractice(call, credentials[0]);
+  const highlights = [{ id: "annotation-1", revisionId: "reviewed-rw", block: "stem:0", kind: "text",
+    start: 0, end: 8, quote: "Question", color: "pink", underline: "dashed", note: "Compare this phrase." }];
+  const write = (who = credentials[0], marks = highlights, version = started.stateVersion, editorToken = started.editorToken) =>
+    call(`/api/attempts/${attemptId}/write`, { method: "POST", who,
+      body: { editorToken, expectedStateVersion: version, change: { type: "highlights", questionId: "q1", highlights: marks } } });
+  const saved = await write();
+  expect(saved.status).toBe(200);
+  const next = await saved.json() as { stateVersion: number };
+  expect(await (await call(`/api/attempts/${attemptId}`, { who: credentials[2] })).json())
+    .toMatchObject({ revisionId: "reviewed-rw", state: { highlights: { q1: highlights } } });
+  expect((await call(`/api/attempts/${attemptId}`, { who: credentials[1] })).status).toBe(404);
+  expect((await write()).status).toBe(409);
+  expect((await write(credentials[0], [{ ...highlights[0], revisionId: "other-revision" }], next.stateVersion)).status).toBe(400);
+  expect((await write(credentials[0], [{ ...highlights[0], quote: "Wrong anchor" }], next.stateVersion)).status).toBe(400);
+  expect((await write(credentials[0], [{ ...highlights[0], end: 999 }], next.stateVersion)).status).toBe(400);
+  const transferred = await (await call(`/api/attempts/${attemptId}/takeover`, { method: "POST", who: credentials[2], body: {} })).json() as { stateVersion: number; editorToken: string };
+  expect((await write(credentials[0], highlights, next.stateVersion)).status).toBe(409);
+  const edited = [{ ...highlights[0], color: "blue", underline: "none", note: "Edited on device two." }];
+  const updated = await write(credentials[2], edited, transferred.stateVersion, transferred.editorToken);
+  expect(updated.status).toBe(200);
+  expect(await (await call(`/api/attempts/${attemptId}`, { who: credentials[0] })).json()).toMatchObject({ state: { highlights: { q1: edited } } });
+  const fresh = await startPractice(call, credentials[0]);
+  expect(await (await call(`/api/attempts/${fresh.attemptId}`, { who: credentials[0] })).json()).not.toHaveProperty("state.highlights.q1");
+});
+
+it("retains Section Exam annotations through pause/resume and rejects edits after the module locks", async () => {
+  const { credentials, call } = await fixture();
+  const { started } = await startSectionExam(call, credentials[0], "Reading and Writing");
+  const questionId = started.state.currentQuestionId;
+  const marks = [{ id: "exam-note", revisionId: "reviewed-rw-exam", block: "stem:0", kind: "text",
+    start: 0, end: 7, quote: "Reading", color: "blue", underline: "solid", note: "Keep this observation." }];
+  const savedResponse = await call(`/api/attempts/${started.attemptId}/write`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: started.stateVersion,
+      change: { type: "highlights", questionId, highlights: marks } } });
+  expect(savedResponse.status).toBe(200);
+  const saved = await savedResponse.json() as SectionExamResponse;
+  const mutate = (action: string, version: number) => call(`/api/attempts/${started.attemptId}/${action}`, {
+    method: "POST", who: credentials[0], body: { editorToken: started.editorToken, expectedStateVersion: version } });
+  const pausedResponse = await mutate("pause", saved.stateVersion);
+  expect(pausedResponse.status).toBe(200);
+  const paused = await pausedResponse.json() as SectionExamResponse;
+  expect(paused).toMatchObject({ state: { highlights: { [questionId]: marks }, phase: "paused" } });
+  const resumedResponse = await mutate("resume", paused.stateVersion);
+  expect(resumedResponse.status).toBe(200);
+  const resumed = await resumedResponse.json() as SectionExamResponse;
+  expect(resumed).toMatchObject({ state: { highlights: { [questionId]: marks }, phase: "module" } });
+  const lockedResponse = await mutate("finish-module", resumed.stateVersion);
+  expect(lockedResponse.status).toBe(200);
+  const locked = await lockedResponse.json() as SectionExamResponse;
+  expect(locked).toMatchObject({ state: { highlights: { [questionId]: marks }, lockedModules: [1] } });
+  const continuedResponse = await mutate("continue", locked.stateVersion);
+  expect(continuedResponse.status).toBe(200);
+  const continued = await continuedResponse.json() as SectionExamResponse;
+  const rejected = await call(`/api/attempts/${started.attemptId}/write`, { method: "POST", who: credentials[0],
+    body: { editorToken: started.editorToken, expectedStateVersion: continued.stateVersion,
+      change: { type: "highlights", questionId, highlights: [] } } });
+  expect(rejected.status).toBe(400);
+  expect(await (await call(`/api/attempts/${started.attemptId}`, { who: credentials[2] })).json())
+    .toMatchObject({ state: { highlights: { [questionId]: marks } } });
+});
+

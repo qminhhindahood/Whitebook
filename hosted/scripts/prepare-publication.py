@@ -67,9 +67,9 @@ def validate_blocks(blocks, revision, question, visual_paths):
             exact(block, ("kind", "runs"), "reviewed text block")
             check(isinstance(block["runs"], list) and block["runs"], "Empty reviewed text")
             for run in block["runs"]:
-                check(isinstance(run, dict) and "text" in run and set(run) <= {"text", "emphasis", "blank"}, "Invalid reviewed text run")
+                check(isinstance(run, dict) and "text" in run and set(run) <= {"text", "emphasis", "blank", "underline"}, "Invalid reviewed text run")
                 check(isinstance(run["text"], str) and run["text"] and not LOCAL_PATH.search(run["text"]), "Unsafe reviewed text")
-                check(all(isinstance(run[key], bool) for key in ("emphasis", "blank") if key in run), "Invalid reviewed text marks")
+                check(all(isinstance(run[key], bool) for key in ("emphasis", "blank", "underline") if key in run), "Invalid reviewed text marks")
         elif kind == "latex":
             exact(block, ("kind", "latex"), "Math notation block")
             check(isinstance(block["latex"], str) and block["latex"].strip() and len(block["latex"]) <= 1000 and

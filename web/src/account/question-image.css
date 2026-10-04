@@ -13,3 +13,11 @@
 .attempt-highlight-image { position: relative; display: block; width: fit-content; max-width: 100%; }
 .attempt-highlight-image.is-highlighting { cursor: crosshair; touch-action: none; }
 .attempt-highlight-region { position: absolute; background: #f0cd3880; mix-blend-mode: multiply; pointer-events: none; }
+.question-image__viewport { display: block; max-width: 100%; overflow: auto; }
+.question-image__viewport:has(img[style]) .attempt-highlight-image { max-width: none; }
+.question-image__controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0 16px; font: 12px/1.4 "Segoe UI", Arial, sans-serif; }
+.question-image__controls button { border: 1px solid var(--rule-strong, #c9cfdf); border-radius: 6px; padding: 7px 9px; background: var(--white, #fff); color: var(--ink, #1b2337); font: inherit; cursor: pointer; }
+.question-image__controls button:disabled { opacity: .5; cursor: default; }
+.question-image__controls .question-image__zoom { margin: 0; }
+.question-image-dialog--fullscreen { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0; }
+.question-image-dialog--fullscreen .question-image-dialog__viewport { max-height: calc(100dvh - 100px); }

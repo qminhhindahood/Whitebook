@@ -57,7 +57,7 @@ type AttemptRow = {
 
 const ROOT = "/api/attempts";
 const ATTEMPT_ID = /^[0-9a-f-]{36}$/i;
-const MAX_BODY_CHARS = 65_536;
+const MAX_BODY_CHARS = 700_000; // At most 100 bounded annotations, including quotes and notes.
 const EDITOR_LEASE_MS = 120_000;
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -512,11 +512,24 @@ function parseChange(value: unknown, questions: QuestionLink[]): AttemptChange |
   if (!question) return null;
   const questionId = question.questionId;
   if (value.type === "highlights" && question.section === "Reading and Writing" && Array.isArray(value.highlights) && value.highlights.length <= 100) {
+    const ids = new Set<string>();
     const valid = value.highlights.every((item: unknown) => {
       if (!isObject(item) || typeof item.block !== "string" || !/^(?:stem|stimulus|choice:[A-D]):\d{1,4}(?::\d{1,4})?$/.test(item.block)) return false;
-      if (item.kind === "text") return Object.keys(item).length === 4 && Number.isSafeInteger(item.start) && Number.isSafeInteger(item.end) &&
+      const anchorKeys = item.kind === "text" ? ["block", "kind", "start", "end"] : ["block", "kind", "x", "y", "width", "height"];
+      const extraKeys = ["id", "revisionId", "quote", "color", "underline", "note"];
+      if (Object.keys(item).some(key => ![...anchorKeys, ...extraKeys].includes(key))) return false;
+      if (extraKeys.some(key => key in item)) {
+        if (typeof item.id !== "string" || !/^[\w-]{1,80}$/.test(item.id) || ids.has(item.id) ||
+          typeof item.revisionId !== "string" || item.revisionId.length > 200 ||
+          typeof item.quote !== "string" || item.quote.length > 4000 ||
+          !["yellow", "blue", "pink", "none"].includes(String(item.color)) ||
+          !["solid", "dashed", "none"].includes(String(item.underline)) ||
+          typeof item.note !== "string" || item.note.length > 2000) return false;
+        ids.add(item.id);
+      }
+      if (item.kind === "text") return Number.isSafeInteger(item.start) && Number.isSafeInteger(item.end) &&
         Number(item.start) >= 0 && Number(item.end) > Number(item.start) && Number(item.end) <= 100_000;
-      if (item.kind !== "region" || Object.keys(item).length !== 6) return false;
+      if (item.kind !== "region") return false;
       if (![item.x, item.y, item.width, item.height].every(number => typeof number === "number" && Number.isFinite(number))) return false;
       return Number(item.x) >= 0 && Number(item.y) >= 0 && Number(item.width) > 0 && Number(item.height) > 0 &&
         Number(item.x) + Number(item.width) <= 1.000001 && Number(item.y) + Number(item.height) <= 1.000001;
@@ -734,6 +747,25 @@ async function writeAttempt(request: Request, env: AttemptEnv, accountId: string
   if (denied) return denied;
   const change = parseChange(body.change, parseQuestions(row));
   if (!change) return failure(400, "invalid_attempt_change", "This Attempt change is invalid.");
+  if (change.type === "highlights" && change.highlights.some(mark => "revisionId" in mark)) {
+    const question = parseQuestions(row).find(item => item.questionId === change.questionId)!;
+    const content = await rows<QuestionRow>(env.DB.prepare("SELECT question_id, presentation_json FROM publication_questions WHERE revision_id = ? AND section = ?")
+      .bind(row.revision_id, question.section));
+    const presentation = JSON.parse(content.find(item => item.question_id === change.questionId)?.presentation_json ?? "null");
+    for (const mark of change.highlights) {
+      if (!("revisionId" in mark)) continue; // Original saved highlights remain supported.
+      if (mark.revisionId !== row.revision_id || !presentation)
+        return failure(400, "invalid_annotation_anchor", "This annotation belongs to different question content.");
+      const parts = String(mark.block).split(":");
+      const block = parts[0] === "choice" ? presentation.choices?.find((choice: { id: string }) => choice.id === parts[1])?.content?.[Number(parts[2])]
+        : presentation[parts[0]]?.[Number(parts[1])];
+      const runIndex = parts[0] === "choice" ? parts[3] : parts[2];
+      const text = runIndex === undefined ? block?.text ?? block?.runs?.map((run: { text: string }) => run.text).join("") : block?.runs?.[Number(runIndex)]?.text;
+      if (mark.kind === "text" ? typeof text !== "string" || Number(mark.end) > text.length || text.slice(Number(mark.start), Number(mark.end)) !== mark.quote
+        : !block || !["asset", "image_asset"].includes(block.kind) || runIndex !== undefined)
+        return failure(400, "invalid_annotation_anchor", "Select a span in this question's published content.");
+    }
+  }
   const originalState = parseState(row);
   if (row.kind === "section_exam") {
     if (originalState.phase !== "module")

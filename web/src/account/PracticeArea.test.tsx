@@ -191,6 +191,7 @@ it("resumes an active Attempt from the server snapshot without restarting its cl
   expect(calls.some((call) => call.path.endsWith("/start"))).toBe(false);
   expect(calls.some((call) => call.path.endsWith("/takeover"))).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save & return" }));
   expect(await screen.findByRole("heading", { name: "Your Attempts" })).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(false);
 });
@@ -237,6 +238,7 @@ it("creates a Section Exam with a section-only payload and prepares its Math too
   expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
   expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
   fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save, pause & exit" }));
   expect(await screen.findByText(/Section Exam.*44 questions.*active/)).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(true);
 });
@@ -282,7 +284,7 @@ it.each([
     expect(document.querySelector(".scientific-calculator output")?.textContent).toBe("4");
   }
   fireEvent.click(screen.getByRole("button", { name: "Reference" }));
-  expect(document.querySelector('[role="dialog"][aria-label="Reference Sheet"][aria-modal="true"]')).toBeTruthy();
+  expect(screen.getByRole("dialog", { name: "Reference Sheet" })).toBeTruthy();
 });
 
 it("keeps Math Practice available with the scientific calculator when calculator configuration is unavailable", async () => {
@@ -376,16 +378,12 @@ it.each([
     expect(calls.findIndex((call) => call.path === visualPath)).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
     expect(calls.findIndex((call) => call.path === "/api/math/calculator-config")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
     expect(calls.findIndex((call) => call.path === "/api/math/reference-sheet.png")).toBeLessThan(calls.findIndex((call) => call.path.endsWith("/start")));
-    const tools = document.querySelector(".player-header__tools")!;
-    const calculatorButton = tools.querySelector("button")!;
-    expect(calculatorButton.textContent).toContain("Calculator");
-    fireEvent.click(calculatorButton);
-    const calculator = document.querySelector(".player-calculator")!;
-    fireEvent.change(calculator.querySelector("input")!, { target: { value: "2+2" } });
-    fireEvent.click(calculator.querySelector(".key-equals")!);
+    fireEvent.click(screen.getByRole("button", { name: "Calculator" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Expression" }), { target: { value: "2+2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
     expect(document.querySelector(".scientific-calculator output")?.textContent).toBe("4");
-    fireEvent.click(tools.querySelectorAll("button")[1]);
-    expect(document.querySelector('[role="dialog"][aria-label="Reference Sheet"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reference" }));
+    expect(screen.getByRole("dialog", { name: "Reference Sheet" })).toBeTruthy();
     expect(screen.getByAltText("Math Reference Sheet").getAttribute("src")).toBe("/api/math/reference-sheet.png");
     fireEvent.click(document.querySelector(".reference-overlay header button")!);
     fireEvent.change(document.querySelector('.response-panel input[aria-label="Your response"]')!, { target: { value: answer } });
@@ -397,6 +395,9 @@ it.each([
   await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
   fireEvent.click([...document.querySelectorAll(".player-footer__actions button")]
     .find((button) => button.textContent?.trim() === "Submit Practice")!);
+  fireEvent.click(screen.getByRole("button", { name: "Continue to confirmation" }));
+  expect(calls.some(call => call.path.endsWith("/submit"))).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Confirm submit" }));
   expect(await screen.findByText("1 of 1 correct")).toBeTruthy();
   expect(screen.getByText(`Accepted answer: ${expected}`)).toBeTruthy();
   fireEvent.click([...document.querySelectorAll(".player-header__tools button")]

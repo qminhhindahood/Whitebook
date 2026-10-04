@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Overlay } from "./ui";
 
 export function ReferenceSheet({ onClose }: { onClose: () => void }) {
   const viewer = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
   const scale = useRef(1);
   const anchor = useRef<{ x: number; y: number } | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -25,6 +25,9 @@ export function ReferenceSheet({ onClose }: { onClose: () => void }) {
   };
 
   useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    if (typeof dialog.current?.showModal === "function") dialog.current.showModal();
+    else dialog.current?.setAttribute("open", "");
     const element = viewer.current!;
     const resize = () => setWidth(element.clientWidth);
     resize();
@@ -40,6 +43,7 @@ export function ReferenceSheet({ onClose }: { onClose: () => void }) {
     return () => {
       observer?.disconnect();
       element.removeEventListener("wheel", wheel);
+      previous?.focus();
     };
   }, []);
 
@@ -50,10 +54,13 @@ export function ReferenceSheet({ onClose }: { onClose: () => void }) {
   }, [zoom]);
 
   return (
-    <Overlay title="Reference Sheet" onClose={onClose} className="reference-overlay" style={{ "--reference-aspect": aspect } as CSSProperties}>
+    <dialog ref={dialog} aria-label="Reference Sheet" className="tool-overlay reference-overlay" onCancel={onClose} style={{ "--reference-aspect": aspect } as CSSProperties}>
+      <header><h2>Reference Sheet</h2><button type="button" onClick={onClose}>Close</button></header>
       <div className="reference-controls">
         <span>Scroll to zoom · Drag to move</span>
         <output aria-label="Reference zoom">{Math.round(zoom * 100)}%</output>
+        <button type="button" disabled={zoom <= 1} onClick={() => changeZoom(scale.current / 1.2, 0, 0)}>Zoom out</button>
+        <button type="button" disabled={zoom >= 4} onClick={() => changeZoom(scale.current * 1.2, 0, 0)}>Zoom in</button>
         <button type="button" onClick={() => changeZoom(1, 0, 0)}>Reset zoom</button>
       </div>
       <div
@@ -89,6 +96,6 @@ export function ReferenceSheet({ onClose }: { onClose: () => void }) {
           style={{ width: width ? width * zoom : `${zoom * 100}%` }}
         />
       </div>
-    </Overlay>
+    </dialog>
   );
 }

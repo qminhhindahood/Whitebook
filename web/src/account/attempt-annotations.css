@@ -1,0 +1,42 @@
+.annotation-toolbar {
+  position: fixed; z-index: 100; width: max-content; max-width: calc(100vw - 16px);
+  padding: 10px; border: 1px solid var(--rule-strong, #c9cfdf); border-radius: 12px;
+  background: var(--white, #fff); color: var(--ink, #1b2337); box-shadow: 0 8px 28px rgb(27 35 55 / 20%);
+  font: 13px/1.5 "Segoe UI", Arial, sans-serif;
+}
+.annotation-selection-error { position: fixed; bottom: 80px; left: 16px; z-index: 100; max-width: calc(100vw - 32px); padding: 12px; border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--white); color: var(--ink); }
+.annotation-selection-error button { margin-left: 12px; }
+.annotation-toolbar__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.annotation-toolbar button, .annotation-toolbar select, .annotation-sidebar button {
+  padding: 7px 9px; min-height: 36px; border: 1px solid var(--rule-strong, #c9cfdf); border-radius: 6px;
+  font: inherit; color: inherit; background: var(--white, #fff); cursor: pointer;
+}
+.annotation-toolbar button:hover, .annotation-sidebar button:hover { border-color: var(--indigo, #3f51c5); }
+.annotation-toolbar button:disabled, .annotation-sidebar button:disabled { opacity: .5; cursor: default; }
+.annotation-toolbar .annotation-swatch { width: 36px; height: 36px; border-radius: 50%; }
+.annotation-swatch[aria-pressed="true"] { outline: 2px solid var(--indigo, #3f51c5); outline-offset: 2px; }
+[data-color="yellow"] { --annotation-color: #fff0a2; --annotation-ink: #846400; }
+[data-color="blue"] { --annotation-color: #cde4ff; --annotation-ink: #205fab; }
+[data-color="pink"] { --annotation-color: #fad3e6; --annotation-ink: #9e3066; }
+[data-color="none"] { --annotation-color: transparent; --annotation-ink: #3f51c5; }
+.annotation-toolbar .annotation-swatch { background: var(--annotation-color); }
+.attempt-highlight-text mark { background: var(--annotation-color, #fff0a2); color: inherit; border-radius: 1px; }
+.attempt-highlight-text mark[data-underline="solid"], .attempt-highlight-text mark[data-underline="dashed"] {
+  text-decoration-line: underline; text-decoration-color: var(--annotation-ink); text-decoration-thickness: 2px; text-underline-offset: 4px;
+}
+.attempt-highlight-text mark[data-underline="dashed"] { text-decoration-style: dashed; }
+.attempt-highlight-region[data-color] { background: var(--annotation-color); opacity: .65; }
+.question-content__underline { text-decoration: underline; text-underline-offset: 3px; }
+.annotation-toolbar textarea, .annotation-sidebar textarea { display: block; width: 100%; min-height: 90px; padding: 8px; margin-block: 6px; border: 1px solid var(--rule-strong, #c9cfdf); border-radius: 6px; font: inherit; color: inherit; background: #fff; resize: vertical; }
+.annotation-toolbar form { margin-top: 12px; }
+.annotation-toolbar form > button + button { margin-left: 6px; }
+.annotation-sidebar { flex: 0 0 clamp(240px, 24vw, 320px); min-width: 0; max-width: 40%; overflow: auto; border-left: 1px solid var(--rule); background: var(--canvas); padding: 16px; font-size: 14px; }
+.annotation-sidebar header { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.annotation-sidebar h2 { margin: 0; font-size: 17px; }
+.annotation-sidebar ol { list-style: none; padding: 0; margin: 18px 0; }
+.annotation-sidebar li { margin-bottom: 16px; overflow-wrap: anywhere; border: 1px solid var(--rule-strong); border-radius: 8px; overflow: hidden; background: var(--white); }
+.annotation-sidebar blockquote { margin: 0; padding: 12px; background: var(--annotation-color, #fff0a2); font-weight: 650; white-space: pre-wrap; }
+.annotation-sidebar li > p, .annotation-sidebar li > form { margin: 12px; white-space: pre-wrap; }
+.annotation-sidebar__actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; }
+.annotation-toolbar :focus-visible, .annotation-sidebar :focus-visible { outline: 3px solid var(--indigo, #3f51c5); outline-offset: 2px; }
+@media (max-width: 1100px) { .annotation-sidebar { position: absolute; right: 0; top: 0; bottom: 0; z-index: 5; width: min(320px, 85vw); max-width: 85%; box-shadow: -8px 0 24px rgb(27 35 55 / 12%); } }

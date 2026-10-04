@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { HostedAttempt } from "./HostedAttempt";
 import type { AttemptResult, AttemptSnapshot, PresentationQuestion } from "./PracticeArea";
 
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); sessionStorage.clear(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); sessionStorage.clear(); });
 
 const token = "a".repeat(64);
 const now = 1_800_000_000_000;
@@ -57,6 +57,38 @@ it("shows pending until the server confirms a response save", async () => {
   await act(async () => { resolveSave(savedResponse(2, { responses: { q1: "A" }, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" })); });
   expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i);
   expect((screen.getByRole("radio", { name: /AOption A/ }) as HTMLInputElement).checked).toBe(true);
+});
+
+it("flushes a typed attached note before navigation and restores it when returning", async () => {
+  let state: Record<string, unknown> = { responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1", highlights: {} };
+  let version = 1;
+  const changes: Record<string, unknown>[] = [];
+  const { view } = fixture(async (path, init) => {
+    if (!path.endsWith("/write")) throw Error(path);
+    const { change } = JSON.parse(String(init?.body)); changes.push(change);
+    if (change.type === "highlights") state = { ...state, highlights: { ...(state.highlights as object), [change.questionId]: change.highlights } };
+    if (change.type === "navigation") state = { ...state, currentQuestionId: change.questionId };
+    return savedResponse(++version, state);
+  });
+  view();
+  fireEvent.click(screen.getByRole("button", { name: "Highlight" }));
+  const text = screen.getByText("Question 1");
+  const selection = window.getSelection()!;
+  const range = document.createRange(); range.selectNodeContents(text);
+  selection.removeAllRanges(); selection.addRange(range);
+  fireEvent.pointerUp(text);
+  fireEvent.click(screen.getByRole("button", { name: "Blue highlight" }));
+  fireEvent.click(screen.getByRole("button", { name: "Attach note" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Annotation note" }), { target: { value: "A note typed before navigating." } });
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Next question" }));
+  fireEvent.click(screen.getByRole("button", { name: "Next question" }));
+  await screen.findByText("Question 2 of 2");
+  expect(changes.map(change => change.type)).toEqual(["highlights", "navigation"]);
+  expect(changes[0]).toMatchObject({ questionId: "q1", highlights: [{ revisionId: "reviewed-rw", quote: "Question 1", color: "blue", note: "A note typed before navigating." }] });
+  fireEvent.click(screen.getByRole("button", { name: "Previous question" }));
+  await screen.findByText("Question 1 of 2");
+  fireEvent.click(screen.getByRole("button", { name: "Highlights & Notes" }));
+  expect(screen.getByText("A note typed before navigating.")).toBeTruthy();
 });
 
 it("explains whole-Attempt evidence exclusion and asks for confirmation before Assisted Practice", async () => {
@@ -158,6 +190,8 @@ it("waits for a pending typed response before submitting the Attempt", async () 
 
   fireEvent.change(screen.getByRole("textbox", { name: "Your response" }), { target: { value: "8" } });
   fireEvent.click(screen.getByRole("button", { name: "Submit Practice" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue to confirmation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm submit" }));
 
   expect(await screen.findByText("1 of 2 correct")).toBeTruthy();
   expect(requestOrder).toEqual(["write", "submit"]);
@@ -173,6 +207,8 @@ it("leaves a submitted Practice Result without sending another Attempt write", a
   view(attempt(), questions, onExit);
 
   fireEvent.click(screen.getByRole("button", { name: "Submit Practice" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue to confirmation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm submit" }));
   expect(await screen.findByText("1 of 2 correct")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
   await waitFor(() => expect(onExit).toHaveBeenCalledOnce());
@@ -269,6 +305,7 @@ it("keeps a failed typed response visible and offers retry instead of leaving as
   await waitFor(() => expect(screen.getByLabelText("Save status").textContent).toMatch(/saved/i));
   expect(calls.filter((call) => call.path.endsWith("/write"))).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save & return" }));
   await waitFor(() => expect(onExit).toHaveBeenCalledOnce());
 });
 
@@ -317,7 +354,7 @@ it("uses the familiar player shell for Practice while keeping its hosted save co
     .toMatchObject({ editorToken: token, expectedStateVersion: 1, change: { type: "response", questionId: "q1", response: "A" } });
 });
 
-it("uses the local full-screen controls and split question layout for a hosted Section Exam", () => {
+it("uses persistent controls and centered Math content for a hosted Section Exam", () => {
   const mathQuestions = questions.map((question) => ({ ...question, section: "Math" as const }));
   const initial = attempt({ kind: "section_exam", section: "Math", modules: [1, 2],
     state: { phase: "module", activeModule: 1, responses: {}, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" } });
@@ -331,7 +368,8 @@ it("uses the local full-screen controls and split question layout for a hosted S
   expect(screen.getByRole("button", { name: "Calculator" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Reference" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Save & Exit" })).toBeTruthy();
-  expect(screen.getByRole("separator", { name: "Resize question and answer panels" })).toBeTruthy();
+  expect(screen.queryByRole("separator")).toBeNull();
+  expect(container.querySelector(".player-body--centered")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Finish Module" })).toBeTruthy();
   expect(screen.getByText("Question 1 of 2")).toBeTruthy();
 });
@@ -406,6 +444,7 @@ it("keeps a failed response visible and stops editing without claiming it was sa
 });
 
 it("keeps a second device read-only until explicit takeover refreshes state without resetting time", async () => {
+  vi.spyOn(performance, "now").mockReturnValue(0);
   const before = attempt({ editorToken: undefined });
   const takeoverState = attempt({ stateVersion: 2, state: { responses: { q1: "B" }, markedQuestionIds: [], eliminatedChoices: {}, currentQuestionId: "q1" },
     editorToken: "b".repeat(64), deadlineAt: before.deadlineAt, serverNow: now, lease: { held: true, expiresAt: now + 125_000 } });
@@ -443,6 +482,8 @@ it("submits the final server version and renders the returned graded Result", as
   });
   view(attempt({ state: finalState }));
   fireEvent.click(screen.getByRole("button", { name: "Submit Practice" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue to confirmation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm submit" }));
   expect(await screen.findByText("2 of 2 correct")).toBeTruthy();
   expect(calls.find((call) => call.path.endsWith("/submit"))).toBeTruthy();
   expect(JSON.parse(String(calls.find((call) => call.path.endsWith("/submit"))!.init?.body)))
@@ -500,6 +541,11 @@ it("shows only Module 1 and uses finish-module before the untimed transition", a
   expect(screen.queryByRole("button", { name: "Question 3, unanswered" })).toBeNull();
   expect(screen.getByRole("button", { name: "Finish Module" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Finish Module" }));
+  expect(calls.some(call => call.path.endsWith("/finish-module"))).toBe(false);
+  expect(screen.getByText("2 unanswered · 0 marked for review")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Continue to confirmation" }));
+  expect(screen.getByText(/permanently locks Module 1/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm finish" }));
   await waitFor(() => expect(calls.some((call) => call.path.endsWith("/finish-module"))).toBe(true));
   expect(await screen.findByText(/Module 1 is complete/i)).toBeTruthy();
   expect(screen.getByText(/4 questions/)).toBeTruthy();
@@ -536,6 +582,7 @@ it("pauses and resumes through the Section Exam lifecycle endpoints", async () =
   });
   view(base);
   fireEvent.click(screen.getByRole("button", { name: "Save & Exit" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save, pause & exit" }));
   expect(await screen.findByRole("heading", { name: "Section Exam paused" })).toBeTruthy();
   expect(calls.some((call) => call.path.endsWith("/pause"))).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Resume through Loading Gate" }));

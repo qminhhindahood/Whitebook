@@ -66,6 +66,13 @@ def fixture(root):
 
 
 class PublicationTests(unittest.TestCase):
+    def test_preserves_reviewed_source_underlining_and_rejects_non_boolean_marks(self):
+        blocks = [{"kind": "reviewed_text", "runs": [{"text": "Underlined source phrase", "underline": True, "emphasis": True}]}]
+        publication.validate_blocks(blocks, "r", "q", {})
+        blocks[0]["runs"][0]["underline"] = "yes"
+        with self.assertRaisesRegex(ValueError, "Invalid reviewed text marks"):
+            publication.validate_blocks(blocks, "r", "q", {})
+
     def test_publishes_reviewed_question_categories_without_guessing_missing_ones(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
