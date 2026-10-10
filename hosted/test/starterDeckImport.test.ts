@@ -48,10 +48,10 @@ it("imports exactly the owner-reviewed published decks and skips drafts", () => 
   expect(imported.map((deck) => `${deck.deck} v${deck.version} (${deck.cards})`).sort()).toEqual([
     "anki_starter v2 (839)",
     "b2c1_1000 v3 (1000)",
+    "c1c2_wic500 v1 (500)",
   ]);
-  expect(skipped.map((deck) => deck.deck)).toEqual(["c1c2_wic500"]);
-  expect(skipped[0].reason).toContain("not published");
-  expect(sql.split("INSERT OR IGNORE INTO starter_deck_cards").length - 1).toBe(1839);
+  expect(skipped.map((deck) => deck.deck)).toEqual([]);
+  expect(sql.split("INSERT OR IGNORE INTO starter_deck_cards").length - 1).toBe(2339);
 });
 
 it("keeps manifest provenance out of the learner payload SQL", () => {
@@ -64,7 +64,7 @@ it("keeps manifest provenance out of the learner payload SQL", () => {
   ]);
   // Provenance values from the real manifests must never appear.
   for (const forbidden of [
-    "D:\\Notion", "1000_tu_SAT_B2-C1", "aanhlle", ".apkg", ".pdf",
+    "D:\\Notion", "1000_tu_SAT_B2-C1", ".apkg", ".pdf",
     "anki21b-sqlite", "tesseract-eng+vie-300dpi-threshold", "pymupdf-table-grid+span-rebuild",
     "review_status", "draft-pending-owner-review",
   ])
@@ -114,9 +114,10 @@ it("applies the real bundle into D1-shaped storage idempotently", () => {
   expect(versions).toEqual([
     { deck_id: "anki_starter", version: 2, status: "published", card_count: 839 },
     { deck_id: "b2c1_1000", version: 3, status: "published", card_count: 1000 },
+    { deck_id: "c1c2_wic500", version: 1, status: "published", card_count: 500 },
   ]);
   const cards = db.prepare("SELECT COUNT(*) AS n FROM starter_deck_cards").get() as { n: number };
-  expect(cards.n).toBe(1839);
+  expect(cards.n).toBe(2339);
   const vietnamese = db.prepare(
     "SELECT front, meaning_vi FROM starter_deck_cards WHERE deck_id = 'anki_starter' AND stable_id = '9aab0358a15c8172'",
   ).get() as { front: string; meaning_vi: string };
@@ -124,5 +125,5 @@ it("applies the real bundle into D1-shaped storage idempotently", () => {
   expect(vietnamese.meaning_vi.length).toBeGreaterThan(0); // diacritics survived the round trip
   db.exec(sql); // re-running the same bundle must be a no-op
   const after = db.prepare("SELECT COUNT(*) AS n FROM starter_deck_cards").get() as { n: number };
-  expect(after.n).toBe(1839);
+  expect(after.n).toBe(2339);
 });

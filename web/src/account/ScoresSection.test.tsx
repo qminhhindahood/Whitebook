@@ -27,11 +27,12 @@ it("lists saved results with learner-entered labeling and band text", async () =
   stubFetch(() => okList());
   render(<ScoresSection />);
   expect(await screen.findByText("SAT — 23 August 2026")).toBeTruthy();
-  expect(screen.getByText("Total 1310 · Reading and Writing 610 · Math 700")).toBeTruthy();
+  expect(screen.getByText("Reading and Writing 610 · Math 700")).toBeTruthy();
+  expect(screen.getByText("1310")).toBeTruthy();
   expect(screen.getAllByText("Entered by you")).toHaveLength(1);
-  expect(screen.getByText("Band 3 of 7")).toBeTruthy();
-  expect(screen.getByText("Band 5 of 7")).toBeTruthy();
-  expect(screen.getAllByText("Not provided").length).toBe(6);
+  expect(screen.getByText(/Band 3 of 7/)).toBeTruthy();
+  expect(screen.getByText(/Band 5 of 7/)).toBeTruthy();
+  expect(screen.getAllByText(/Not provided/).length).toBeGreaterThanOrEqual(6);
   expect(screen.queryByText(/percent|%|predicted/i)).toBeNull();
 });
 
@@ -84,6 +85,8 @@ it("explains range, increment, and sum-consistency mistakes without sending a re
   fireEvent.click(screen.getByRole("button", { name: "Save result" }));
   expect((await screen.findByRole("alert")).textContent).toBe("Reading and Writing scores run from 200 to 800 in 10-point increments.");
   fireEvent.change(screen.getByLabelText("Reading and Writing"), { target: { value: "610" } });
+  // Total auto-sums to 1310 (610 + 700); override it to test the Total increment rule.
+  fireEvent.change(screen.getByLabelText("Total"), { target: { value: "1315" } });
   fireEvent.click(screen.getByRole("button", { name: "Save result" }));
   expect((await screen.findByRole("alert")).textContent).toBe("Total scores run from 400 to 1600 in 10-point increments.");
   fireEvent.change(screen.getByLabelText("Total"), { target: { value: "1320" } });
@@ -148,12 +151,22 @@ it("keeps band controls as named radio groups with text selection state", async 
   const notProvided = radios[0];
   expect(notProvided.checked).toBe(true);
   expect(radios[0].getAttribute("aria-label")).toBe("Not provided");
-  expect(radios[1].getAttribute("aria-label")).toBe("Band 1 of 7");
-  expect(radios[7].getAttribute("aria-label")).toBe("Band 7 of 7");
+  expect(radios[1].getAttribute("aria-label")).toContain("Band 1 of 7");
+  expect(radios[7].getAttribute("aria-label")).toContain("Band 7 of 7");
   expect(screen.getByText("Craft and Structure")).toBeTruthy();
   fireEvent.click(radios[3]);
   expect(radios[3].checked).toBe(true);
   expect(notProvided.checked).toBe(false);
   const group = radios[0].closest("fieldset");
   expect(group?.querySelector("legend")?.textContent).toContain("Band 3 of 7");
+  expect(group?.textContent).toContain("420–480");
+});
+
+it("auto-calculates the total from Reading and Writing plus Math", async () => {
+  stubFetch(() => Response.json({ results: [] }));
+  render(<ScoresSection />);
+  fireEvent.click(await screen.findByRole("button", { name: "Add a result" }));
+  fireEvent.change(screen.getByLabelText("Reading and Writing"), { target: { value: "620" } });
+  fireEvent.change(screen.getByLabelText("Math"), { target: { value: "680" } });
+  expect((screen.getByLabelText("Total") as HTMLInputElement).value).toBe("1300");
 });

@@ -125,11 +125,12 @@ it("the due queue starts with never-rated cards and the two starter decks carry 
   expect(body.studyDate).toBe("2026-10-02"); // the instant falls on Oct 2 in Ho Chi Minh City
   expect(body.zoneSource).toBe("device");
   expect(body.starter).toEqual([
-    { deckId: "anki_starter", title: "Anki starter: SAT words", version: 2, total: 839, due: 839 },
-    { deckId: "b2c1_1000", title: "B2-C1 SAT vocabulary (1,000 words)", version: 3, total: 1000, due: 1000 },
+    { deckId: "anki_starter", title: "aanhlle's sat words", version: 2, total: 839, due: 839, setSize: 30, sets: expect.any(Array) },
+    { deckId: "b2c1_1000", title: "B2-C1 SAT vocabulary (1,000 words)", version: 3, total: 1000, due: 1000, setSize: 30, sets: expect.any(Array) },
+    { deckId: "c1c2_wic500", title: "C1-C2 word-in-context vocabulary (500 words)", version: 1, total: 500, due: 500, setSize: 30, sets: expect.any(Array) },
   ]);
   expect(body.personal).toEqual([]);
-  expect(body.totalDue).toBe(1839);
+  expect(body.totalDue).toBe(2339);
 
   const page = await studyRoute(request("/api/cards/study/cards?zone=Asia/Ho_Chi_Minh&limit=2&offset=839", { token: SESSION_A }), env, () => NY_LATE_EVENING)!;
   const pageBody = await (page as Response).json() as {

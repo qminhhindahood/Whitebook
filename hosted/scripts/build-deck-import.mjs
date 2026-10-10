@@ -29,7 +29,7 @@ const DEFAULT_MANIFEST_DIR = resolve(SCRIPT_DIR, "..", "..", "vocab", "manifests
 
 /** English UI titles for known deck ids; content itself stays unstated chrome. */
 const DECK_TITLES = {
-  anki_starter: "Anki starter: SAT words",
+  anki_starter: "aanhlle's sat words",
   b2c1_1000: "B2-C1 SAT vocabulary (1,000 words)",
   c1c2_wic500: "C1-C2 word-in-context vocabulary (500 words)",
 };

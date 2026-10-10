@@ -20,20 +20,14 @@ export const SAT_CATALOG: {
   sourceUrl: "https://satsuite.collegeboard.org/sat/dates-deadlines",
   lastCheckedAt: "2026-09-26",
   dates: [
+    { date: "2026-08-22", status: "confirmed" },
+    { date: "2026-09-12", status: "confirmed" },
     { date: "2026-10-03", status: "confirmed" },
     { date: "2026-11-07", status: "confirmed" },
     { date: "2026-12-05", status: "confirmed" },
     { date: "2027-03-06", status: "confirmed" },
     { date: "2027-05-01", status: "confirmed" },
     { date: "2027-06-05", status: "confirmed" },
-    { date: "2027-08-28", status: "anticipated" },
-    { date: "2027-09-18", status: "anticipated" },
-    { date: "2027-10-02", status: "anticipated" },
-    { date: "2027-11-06", status: "anticipated" },
-    { date: "2027-12-04", status: "anticipated" },
-    { date: "2028-03-04", status: "anticipated" },
-    { date: "2028-05-06", status: "anticipated" },
-    { date: "2028-06-03", status: "anticipated" },
   ],
 };
 

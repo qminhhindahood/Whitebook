@@ -414,3 +414,9 @@
   .hosted-practice-player .attempt-content-layout { overflow: visible; }
   .hosted-practice-player .player-calculator { min-width: 0; height: min(600px, 65dvh); max-height: none; }
 }
+
+/* The full-screen Question Bank viewer must fit tablet viewports. Global desktop minimums return when it unmounts. */
+html:has(.question-bank-viewer),
+body:has(.question-bank-viewer) {
+  min-width: 0;
+}

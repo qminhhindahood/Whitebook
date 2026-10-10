@@ -37,4 +37,33 @@
 .plan-assistant pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; background: #eef3f8; padding: 12px; border-radius: 8px; }
 .plan-assistant dl { display: grid; gap: 7px; }.plan-assistant dl div { display: flex; flex-wrap: wrap; gap: 8px; }.plan-assistant dt { font-weight: 700; }
 .plan-assistant__draft li { margin-bottom: 12px; }.plan-assistant__preview button, .plan-assistant__draft button { margin-right: 8px; }
+.plan-area__header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.plan-area__actions { display: flex; gap: 10px; align-items: center; }
+.plan-suggest-hint { border: 1px solid #cbd0bf; border-radius: 8px; padding: 8px 12px; background: #fffefa; }
+.plan-rebuild, .plan-ai-update { background: #4c6243 !important; border-color: #4c6243 !important; }
+.plan-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.plan-metric { display: flex; gap: 12px; align-items: start; background: #fffefa; border: 1px solid #dce4ef; border-radius: 16px; padding: 16px; }
+.plan-metric__icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; }
+.plan-metric__icon--done { background: #e0e7d5; color: #4c6243; }
+.plan-metric__icon--missed { background: #f3e8d8; color: #8a6d3b; }
+.plan-metric__icon--due { background: #e9eef3; color: #294e75; }
+.plan-metric__icon--goal { background: #f3e8e7; color: #8d424a; }
+.plan-metric__label { display: block; font-size: 12px; color: #50647c; }
+.plan-metric strong { display: block; font-size: 20px; font-family: Lora, Georgia, serif; color: #343a30; }
+.plan-metric small { color: #646b59; font-size: 12px; }
+.plan-columns { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.plan-schedule .plan-weekdays label:has(input:checked) { background: #4c6243; color: #fff9e9; border-color: #4c6243; }
+.plan-ai-update { width: 100%; margin-top: 12px; }
+.plan-agenda { display: grid; gap: 16px; min-width: 0; }
+.plan-week__progress { height: 10px; border-radius: 999px; background: #eef3f8; overflow: hidden; margin: 10px 0; }
+.plan-week__progress > div { height: 100%; background: #4c6243; border-radius: 999px; }
+.plan-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.plan-dot--done { background: #4c6243; } .plan-dot--due { background: #d69740; } .plan-dot--upcoming { background: #9aaec3; }
+.plan-badge { border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.plan-badge--done { background: #e0e7d5; color: #415239; }
+.plan-badge--past { background: #f3e8d8; color: #8a6d3b; }
+.plan-badge--upcoming { background: #e9eef3; color: #294e75; }
+.plan-badge--skipped { background: #efe9e0; color: #646b59; }
+.plan-reschedule { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: #fffaf0; border: 1px solid #ddc9b5; font-size: 13px; }
+@media (max-width: 900px) { .plan-metrics { grid-template-columns: repeat(2, 1fr); } .plan-columns { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .plan-progress { display: block; } .plan-week__tasks { grid-template-columns: 1fr; } .plan-inputs { display: grid; } }

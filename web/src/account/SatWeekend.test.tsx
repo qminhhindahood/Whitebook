@@ -9,20 +9,14 @@ const CATALOG = {
   sourceUrl: "https://satsuite.collegeboard.org/sat/dates-deadlines",
   lastCheckedAt: "2026-09-26",
   dates: [
+    { date: "2026-08-22", status: "confirmed" },
+    { date: "2026-09-12", status: "confirmed" },
     { date: "2026-10-03", status: "confirmed" },
     { date: "2026-11-07", status: "confirmed" },
     { date: "2026-12-05", status: "confirmed" },
     { date: "2027-03-06", status: "confirmed" },
     { date: "2027-05-01", status: "confirmed" },
     { date: "2027-06-05", status: "confirmed" },
-    { date: "2027-08-28", status: "anticipated" },
-    { date: "2027-09-18", status: "anticipated" },
-    { date: "2027-10-02", status: "anticipated" },
-    { date: "2027-11-06", status: "anticipated" },
-    { date: "2027-12-04", status: "anticipated" },
-    { date: "2028-03-04", status: "anticipated" },
-    { date: "2028-05-06", status: "anticipated" },
-    { date: "2028-06-03", status: "anticipated" },
   ],
 };
 
@@ -44,12 +38,28 @@ it("lists the official Weekend dates with their source and status", async () => 
   await renderAt(new Date("2026-09-26T03:00:00Z"));
   expect(screen.getByRole("heading", { name: "SAT test date" })).toBeTruthy();
   expect(screen.getAllByRole("checkbox")).toHaveLength(CATALOG.dates.length);
-  expect(screen.getAllByText("Confirmed")).toHaveLength(6);
-  expect(screen.getAllByText("Anticipated")).toHaveLength(8);
+  expect(screen.getAllByText("Confirmed")).toHaveLength(8);
+  expect(screen.queryByText("Anticipated")).toBeNull();
   expect(screen.getByText(/Source: College Board SAT test dates and deadlines\. Last checked 2026-09-26/)).toBeTruthy();
   expect(screen.getByRole("link", { name: "Open the College Board schedule" }).getAttribute("href"))
     .toBe("https://satsuite.collegeboard.org/sat/dates-deadlines");
   expect(screen.queryByText(/school day/i)).toBeNull();
+});
+
+it("filters dates by year without losing the learner selection", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => satDatesResponse({ dates: ["2026-10-03"], primary: "2026-10-03" })));
+  await renderAt(new Date("2026-09-26T03:00:00Z"));
+  expect(screen.getByRole("button", { name: "All (8)" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "2026 (5)" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "2027 (3)" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "2026 (5)" }));
+  expect(screen.getAllByRole("checkbox")).toHaveLength(5);
+  expect(screen.getByRole("checkbox", { name: /Saturday, 3 October 2026/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "2027 (3)" }));
+  expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+  fireEvent.click(screen.getByRole("button", { name: "All (8)" }));
+  expect(screen.getAllByRole("checkbox")).toHaveLength(8);
+  expect((screen.getByRole("checkbox", { name: /Saturday, 3 October 2026/ }) as HTMLInputElement).checked).toBe(true);
 });
 
 function ymdOffset(base: string, days: number): string {
@@ -113,8 +123,10 @@ it("saves multiple selected dates and one primary target to the account", async 
   fireEvent.click(december);
   const radios = screen.getAllByRole("radio", { name: "Primary target" }) as HTMLInputElement[];
   expect(radios.every((radio) => radio.getAttribute("type") === "radio")).toBe(true);
-  expect(radios[0].disabled).toBe(false);
-  expect(radios[1].disabled).toBe(true);
+  const octoberRadio = radios.find((radio) => radio.closest(".sat-row")!.textContent!.includes("October"))!;
+  const augustRadio = radios.find((radio) => radio.closest(".sat-row")!.textContent!.includes("August"))!;
+  expect(octoberRadio.disabled).toBe(false);
+  expect(augustRadio.disabled).toBe(true);
   const decemberRadio = radios.find((radio) => !radio.disabled && radio.closest(".sat-row")!.textContent!.includes("December"))!;
   fireEvent.click(decemberRadio);
   fireEvent.click(screen.getByRole("button", { name: "Save dates" }));

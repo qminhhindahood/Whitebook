@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type ComponentType } from "react";
-import { areas, Icon, CalendarRail, StudyDashboard, DatesDialog, useWorkspaceData, type Area, type StudyAction } from "./StudyWorkspace";
+import { areas, Icon, CalendarRail, StudyDashboard, DatesDialog, PackageCard, useWorkspaceData, type Area, type StudyAction } from "./StudyWorkspace";
 import { accountFetch, csrfToken } from "./accountClient";
 import { FlashcardsArea } from "./FlashcardStudy";
 import { Reminders } from "./Reminders";
@@ -14,6 +14,8 @@ import "./assistant-experience.css";
 import studyIllustration from "./design-assets/study-illustration.webp";
 import { ProgressArea } from "./ProgressArea";
 import { PlanArea } from "./PlanArea";
+import { StatsArea } from "./StatsArea";
+import { ScoresSection } from "./ScoresSection";
 import { AssistantSettings } from "./AssistantSettings";
 import { UserMenuPopover } from "./UserMenuPopover";
 import { POPULAR_TIME_ZONES, getAllTimeZones } from "./timeZones";
@@ -37,7 +39,32 @@ export function AccountApp() {
   const [timeZone, setTimeZone] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [message, setMessage] = useState("");
-  const readView = (): Area => { const area = window.location.hash.slice(1); return area === "tutor" ? (tutorEnabled ? "tutor" : "dashboard") : areas.some(item => item.id === area) ? area as Area : "dashboard"; };
+  const [libraryTab, setLibraryTab] = useState<"practice" | "bank">(() => {
+    const raw = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    return raw === "bank" || raw === "question-bank" ? "bank" : "practice";
+  });
+  const [historyTab, setHistoryTab] = useState<"history" | "progress">(() => {
+    const raw = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    return raw === "progress" ? "progress" : "history";
+  });
+  const [planTab, setPlanTab] = useState<"plan" | "stats">(() => {
+    const raw = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    return raw === "stats" || raw === "scores" ? "stats" : "plan";
+  });
+  const [statsSource, setStatsSource] = useState<"exams" | "official">(() => {
+    const raw = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    return raw === "scores" ? "official" : "exams";
+  });
+
+  const readView = (): Area => {
+    const raw = window.location.hash.slice(1);
+    if (raw === "tutor") return tutorEnabled ? "tutor" : "dashboard";
+    if (raw === "practice" || raw === "bank" || raw === "question-bank") return "library";
+    if (raw === "progress") return "history";
+    if (raw === "stats" || raw === "scores") return "plan";
+    if (areas.some((item) => item.id === raw)) return raw as Area;
+    return "dashboard";
+  };
   const [view, updateView] = useState<Area>(readView);
   const [datesOpen, setDatesOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -46,12 +73,49 @@ export function AccountApp() {
   const [playerOpen, setPlayerOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const allZones = getAllTimeZones();
-  function setView(area: Area) {
+  function setView(area: Area | string) {
+    let target = area;
+    if (area === "practice") {
+      setLibraryTab("practice");
+      target = "library";
+    } else if (area === "bank" || area === "question-bank") {
+      setLibraryTab("bank");
+      target = "library";
+    } else if (area === "progress") {
+      setHistoryTab("progress");
+      target = "history";
+    } else if (area === "history") {
+      setHistoryTab("history");
+      target = "history";
+    } else if (area === "stats") {
+      setPlanTab("stats");
+      setStatsSource("exams");
+      target = "plan";
+    } else if (area === "scores") {
+      setPlanTab("stats");
+      setStatsSource("official");
+      target = "plan";
+    } else if (area === "plan") {
+      setPlanTab("plan");
+      target = "plan";
+    }
     if (window.location.hash !== `#${area}`) window.history.pushState(null, "", `#${area}`);
-    updateView(area); setPlayerOpen(false);
+    updateView(target as Area);
+    setPlayerOpen(false);
   }
   useEffect(() => {
-    const restore = () => { updateView(readView()); setPlayerOpen(false); };
+    const restore = () => {
+      const raw = window.location.hash.slice(1);
+      if (raw === "practice") setLibraryTab("practice");
+      if (raw === "bank" || raw === "question-bank") setLibraryTab("bank");
+      if (raw === "progress") setHistoryTab("progress");
+      if (raw === "history") setHistoryTab("history");
+      if (raw === "stats") { setPlanTab("stats"); setStatsSource("exams"); }
+      if (raw === "scores") { setPlanTab("stats"); setStatsSource("official"); }
+      if (raw === "plan") setPlanTab("plan");
+      updateView(readView());
+      setPlayerOpen(false);
+    };
     window.addEventListener("popstate", restore);
     window.addEventListener("hashchange", restore);
     return () => { window.removeEventListener("popstate", restore); window.removeEventListener("hashchange", restore); };
@@ -237,11 +301,177 @@ export function AccountApp() {
         {view === "dashboard" ? <><Reminders accountId={me.account.id} refreshKey={refreshKey} onChooseDate={() => setDatesOpen(true)} onSessionEnded={handleSessionEnded} /><StudyDashboard data={workspace.data} name={name} timeZone={me.account.timeZone} onNavigate={navigate} onDates={() => setDatesOpen(true)} onPractice={startPractice} onResume={resumeAttempt} />{workspace.error && <p className="workspace-notice" role="status">{workspace.error} <button className="secondary" onClick={workspace.retry}>Retry</button></p>}</> :
           view === "tutor" && tutorEnabled ? null :
           view === "cards" ? <FlashcardsArea learnerName={name} onSessionEnded={handleSessionEnded} /> :
-          view === "library" ? <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={startPractice} /> :
-          view === "practice" ? <PracticeArea key={`${practiceRevisionId}-${resumeId}-${practiceExam}`} initialRevisionId={practiceRevisionId} initialSection={practiceSection} initialExam={practiceExam} initialAttemptId={resumeId} onPlayerChange={setPlayerOpen} onSessionEnded={handleSessionEnded} /> :
-          view === "history" ? <HistoryArea initialTarget={historyTarget} onResume={resumeAttempt} onSessionEnded={handleSessionEnded} /> :
-          view === "progress" ? <ProgressArea onSessionEnded={handleSessionEnded} /> :
-          view === "plan" ? <PlanArea onSessionEnded={handleSessionEnded} onGoDates={() => setDatesOpen(true)} onAction={followAction} /> :
+          view === "library" ? (
+            practiceRevisionId || resumeId ? (
+              <PracticeArea
+                key={`${practiceRevisionId}-${resumeId}-${practiceExam}`}
+                initialRevisionId={practiceRevisionId}
+                initialSection={practiceSection}
+                initialExam={practiceExam}
+                initialAttemptId={resumeId}
+                onPlayerChange={setPlayerOpen}
+                onSessionEnded={handleSessionEnded}
+              />
+            ) : (
+              <>
+                <div className="cards-tabs" role="tablist" aria-label="Library areas">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={libraryTab === "practice"}
+                    className={libraryTab === "practice" ? "cards-tab cards-tab--active" : "cards-tab"}
+                    onClick={() => {
+                      setLibraryTab("practice");
+                      if (window.location.hash !== "#library" && window.location.hash !== "#practice") window.history.pushState(null, "", "#library");
+                    }}
+                  >
+                    Practice
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={libraryTab === "bank"}
+                    className={libraryTab === "bank" ? "cards-tab cards-tab--active" : "cards-tab"}
+                    onClick={() => {
+                      setLibraryTab("bank");
+                      if (window.location.hash !== "#bank") window.history.pushState(null, "", "#bank");
+                    }}
+                  >
+                    Question Bank
+                  </button>
+                </div>
+                {libraryTab === "practice" ? (
+                  <section className="library-shelf" aria-labelledby="library-shelf-heading">
+                    <p className="library-shelf-subtitle" style={{ color: "var(--muted)", margin: "-6px 0 20px" }}>
+                      Owner reviewed packages available to your account.
+                    </p>
+                    {!workspace.data.packages ? (
+                      <p role="status">Loading your packages…</p>
+                    ) : workspace.data.packages.length === 0 ? (
+                      <p>No published packages are available yet.</p>
+                    ) : (
+                      <div className="package-grid">
+                        {workspace.data.packages.map((item) => (
+                          <PackageCard
+                            key={item.revisionId}
+                            item={item}
+                            onPractice={(revId, exam) => startPractice(revId, !!exam)}
+                            onPreview={() => setLibraryTab("bank")}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                ) : (
+                  <CuratedLibrary onSessionEnded={handleSessionEnded} onBuildPractice={startPractice} />
+                )}
+              </>
+            )
+          ) :
+          view === "history" ? (
+            <>
+              <div className="cards-tabs" role="tablist" aria-label="History areas">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={historyTab === "history"}
+                  className={historyTab === "history" ? "cards-tab cards-tab--active" : "cards-tab"}
+                  onClick={() => {
+                    setHistoryTab("history");
+                    if (window.location.hash !== "#history") window.history.pushState(null, "", "#history");
+                  }}
+                >
+                  History
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={historyTab === "progress"}
+                  className={historyTab === "progress" ? "cards-tab cards-tab--active" : "cards-tab"}
+                  onClick={() => {
+                    setHistoryTab("progress");
+                    if (window.location.hash !== "#progress") window.history.pushState(null, "", "#progress");
+                  }}
+                >
+                  Progress
+                </button>
+              </div>
+              {historyTab === "history" ? (
+                <HistoryArea initialTarget={historyTarget} onResume={resumeAttempt} onSessionEnded={handleSessionEnded} />
+              ) : (
+                <ProgressArea onSessionEnded={handleSessionEnded} />
+              )}
+            </>
+          ) :
+          view === "plan" ? (
+            <>
+              <div className="cards-tabs" role="tablist" aria-label="Plan areas">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={planTab === "plan"}
+                  className={planTab === "plan" ? "cards-tab cards-tab--active" : "cards-tab"}
+                  onClick={() => {
+                    setPlanTab("plan");
+                    if (window.location.hash !== "#plan") window.history.pushState(null, "", "#plan");
+                  }}
+                >
+                  Plan
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={planTab === "stats"}
+                  className={planTab === "stats" ? "cards-tab cards-tab--active" : "cards-tab"}
+                  onClick={() => {
+                    setPlanTab("stats");
+                    if (window.location.hash !== "#stats" && window.location.hash !== "#scores") {
+                      window.history.pushState(null, "", statsSource === "official" ? "#scores" : "#stats");
+                    }
+                  }}
+                >
+                  Stats
+                </button>
+              </div>
+              {planTab === "plan" ? (
+                <PlanArea onSessionEnded={handleSessionEnded} onGoDates={() => setDatesOpen(true)} onAction={followAction} />
+              ) : (
+                <>
+                  <div className="cards-tabs stats-source-tabs" role="tablist" aria-label="Stats source" style={{ marginBottom: 20 }}>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={statsSource === "exams"}
+                      className={statsSource === "exams" ? "cards-tab cards-tab--active" : "cards-tab"}
+                      onClick={() => {
+                        setStatsSource("exams");
+                        if (window.location.hash !== "#stats") window.history.pushState(null, "", "#stats");
+                      }}
+                    >
+                      Section exam on our website
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={statsSource === "official"}
+                      className={statsSource === "official" ? "cards-tab cards-tab--active" : "cards-tab"}
+                      onClick={() => {
+                        setStatsSource("official");
+                        if (window.location.hash !== "#scores") window.history.pushState(null, "", "#scores");
+                      }}
+                    >
+                      Official SAT scores
+                    </button>
+                  </div>
+                  {statsSource === "exams" ? (
+                    <StatsArea onSessionEnded={handleSessionEnded} />
+                  ) : (
+                    <ScoresSection />
+                  )}
+                </>
+              )}
+            </>
+          ) :
             <>{tutorEnabled && <AssistantSettings onSessionEnded={handleSessionEnded} />}
             <section className="dashboard-account" id="account-settings" aria-labelledby="account-heading" style={{ marginTop: 24 }}>
               <h2 id="account-heading">Account</h2>

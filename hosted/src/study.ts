@@ -16,6 +16,21 @@ const REQUEST_ID_MAX = 100;
 const CARD_ID_MAX = 64;
 const PAGE_DEFAULT = 25;
 const PAGE_MAX = 50;
+export const STARTER_SET_SIZE = 30;
+
+export function starterSetCount(total: number): number {
+  return Math.max(1, Math.ceil(total / STARTER_SET_SIZE));
+}
+
+export function starterSetsFor(deckId: string, title: string, total: number): { set: number; label: string; count: number }[] {
+  const prefix = deckId === "anki_starter" ? "aanhlle's set" : deckId === "b2c1_1000" ? "B2-C1 set" : deckId === "c1c2_wic500" ? "C1-C2 set" : title;
+  const count = starterSetCount(total);
+  return Array.from({ length: count }, (_, index) => {
+    const set = index + 1;
+    const remaining = total - index * STARTER_SET_SIZE;
+    return { set, label: `${prefix} ${set}`, count: Math.min(STARTER_SET_SIZE, remaining) };
+  });
+}
 
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -117,6 +132,7 @@ async function overview(request: Request, env: AccountEnv, session: Session, now
     starter: starter.map((deck) => ({
       deckId: deck.deck_id, title: deck.title, version: deck.version,
       total: Number(deck.total), due: Number(deck.due),
+      setSize: STARTER_SET_SIZE, sets: starterSetsFor(deck.deck_id, deck.title, Number(deck.total)),
     })),
   });
 }
@@ -163,8 +179,18 @@ async function dueCards(request: Request, env: AccountEnv, session: Session, now
   if (zone instanceof Response) return zone;
   const filter = parseDeckFilter(url.searchParams.get("deck"));
   if (filter instanceof Response) return filter;
-  const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0") || 0);
-  const limit = Math.min(PAGE_MAX, Math.max(1, Number(url.searchParams.get("limit") ?? String(PAGE_DEFAULT)) || PAGE_DEFAULT));
+  const setParam = url.searchParams.get("set");
+  const setNumber = setParam === null ? null : Math.floor(Number(setParam));
+  if (setParam !== null && (setNumber === null || !Number.isFinite(setNumber) || setNumber < 1 || setNumber > 100))
+    return failure(400, "invalid_request", "Deck sets are numbered from 1.");
+  if (setParam !== null && !filter.starterDeckId)
+    return failure(400, "invalid_request", "Deck sets only apply to a starter deck filter.");
+  let offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0") || 0);
+  let limit = Math.min(PAGE_MAX, Math.max(1, Number(url.searchParams.get("limit") ?? String(PAGE_DEFAULT)) || PAGE_DEFAULT));
+  if (setNumber !== null) {
+    offset = (setNumber - 1) * STARTER_SET_SIZE;
+    limit = STARTER_SET_SIZE;
+  }
   const today = localCalendarDate(now, zone.zone);
   const accountId = session.account_id;
   // A deck filter zeroes out the other card kind's branch entirely.

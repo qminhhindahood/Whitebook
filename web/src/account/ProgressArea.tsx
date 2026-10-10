@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { accountFetch } from "./accountClient";
-import { ScoresSection } from "./ScoresSection";
 import "./progress.css";
 
 type EvidenceRow = {
@@ -123,6 +122,5 @@ export function ProgressArea({ onSessionEnded }: { onSessionEnded: () => void })
         <p className="progress-footnote">Average time uses only questions with recorded timing. Recent trend compares the latest two completed Attempts when each has at least five questions in that group. Small samples, one Attempt, or a large difference are labeled tentative.</p>
       </>}
     </section>
-    <ScoresSection />
   </div>;
 }

@@ -127,7 +127,8 @@ it("opens Progress with Whitebook evidence separate from learner-entered SAT ban
     throw Error(`Unexpected ${path}`);
   }));
   render(<AccountApp />);
-  fireEvent.click(await screen.findByRole("button", { name: "Progress" }));
+  fireEvent.click(await screen.findByRole("button", { name: "History" }));
+  fireEvent.click(await screen.findByRole("tab", { name: "Progress" }));
   expect(await screen.findByRole("heading", { name: "Whitebook practice evidence" })).toBeTruthy();
   expect(screen.getByText("50.0%")).toBeTruthy();
   expect(screen.getAllByText(/Fewer than 10 graded questions/).length).toBeGreaterThan(0);
@@ -135,9 +136,13 @@ it("opens Progress with Whitebook evidence separate from learner-entered SAT ban
   expect(screen.getByRole("heading", { name: "By Content Domain" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Unmapped practice questions" })).toBeTruthy();
   expect(screen.getAllByText(/0 timed of 1/).length).toBeGreaterThan(0);
-  expect(screen.getByRole("heading", { name: "Official SAT Results" })).toBeTruthy();
-  expect(await screen.findByText("Band 3 of 7")).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Official SAT Results" })).toBeNull();
   expect(screen.queryByText(/predicted SAT|trap susceptibility/i)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Study Plan" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Stats" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Official SAT scores" }));
+  expect(await screen.findByRole("heading", { name: "Official SAT Results" })).toBeTruthy();
+  expect(await screen.findByText(/Band 3 of 7/)).toBeTruthy();
 });
 
 it("opens the Flashcards area from the dashboard navigation and reaches the study day", async () => {
@@ -178,12 +183,17 @@ it("opens the hosted Practice builder from workspace navigation", async () => {
       selection: { dates: [], primary: null },
     });
     if (path === "/api/account/scores") return Response.json({ results: [] });
-    if (path === "/api/library") return Response.json({ packages: [] });
+    if (path === "/api/library") return Response.json({ packages: [{
+      revisionId: "rev-test", title: "Practice Package", publishedRevision: 1, questionCount: 10, sections: ["Math"], categories: []
+    }] });
+    if (path === "/api/library/rev-test/questions") return Response.json({ questions: [] });
     if (path === "/api/attempts") return Response.json({ attempts: [] });
     throw new Error(`Unexpected route ${path}`);
   }));
   render(<AccountApp />);
-  fireEvent.click(await screen.findByRole("button", { name: "Practice" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Library" }));
+  expect(await screen.findByText("Owner reviewed packages available to your account.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Practice" }));
   expect(await screen.findByRole("heading", { name: "Build a Practice Attempt" })).toBeTruthy();
   expect(screen.getByLabelText("Test Package")).toBeTruthy();
 });

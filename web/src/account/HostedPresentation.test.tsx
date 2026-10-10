@@ -14,3 +14,17 @@ it("lets a learner zoom a protected image and return focus without selecting an 
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.activeElement).toBe(trigger);
 });
+
+it("renders bold while preserving emphasis, underline, and inline evidence highlighting", () => {
+  const { container } = render(<HostedBlocks revisionId="rev" questionId="q1" highlightQuote="key phrase" blocks={[{ kind: "reviewed_text", runs: [{ text: "A key phrase.", bold: true, emphasis: true, underline: true }] }]} />);
+  const strong = container.querySelector("strong")!;
+  expect(strong.querySelector("em")).toBeTruthy();
+  expect(strong.querySelector(".question-content__underline")).toBeTruthy();
+  expect(strong.querySelector("mark")?.textContent).toBe("key phrase");
+});
+
+it("keeps an unbolded formatted run unwrapped by strong", () => {
+  const { container } = render(<HostedBlocks revisionId="rev" questionId="q1" blocks={[{ kind: "reviewed_text", runs: [{ text: "Italic only", emphasis: true, underline: true }] }]} />);
+  expect(container.querySelector("strong")).toBeNull();
+  expect(container.querySelector("em .question-content__underline")).toBeTruthy();
+});

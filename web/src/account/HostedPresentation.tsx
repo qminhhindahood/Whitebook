@@ -5,7 +5,7 @@ import "../math-presentation.css";
 import { QuestionImage } from "./QuestionImage";
 import { HighlightContext, HighlightText } from "./AttemptHighlights";
 
-type TextRun = { text: string; emphasis?: boolean; blank?: boolean; underline?: boolean };
+type TextRun = { text: string; emphasis?: boolean; blank?: boolean; underline?: boolean; bold?: boolean };
 export type HostedBlock =
   | { kind: "text"; text: string }
   | { kind: "reviewed_text"; runs: TextRun[] }
@@ -51,6 +51,8 @@ export function HostedBlocks({ blocks, revisionId, questionId, highlightQuote, b
           let highlighted = <HighlightText selectable={false} block={`${blockPrefix}:${index}:${runIndex}`} text={run.text}>{matched}</HighlightText>;
           if (run.blank) highlighted = <span className="question-content__blank">{highlighted}</span>;
           if (run.underline) highlighted = <span className="question-content__underline">{highlighted}</span>;
+          const emphasized = run.emphasis ? <em>{highlighted}</em> : highlighted;
+          if (run.bold) return <strong key={runIndex}>{emphasized}</strong>;
           return run.emphasis ? <em key={runIndex}>{highlighted}</em> : <span key={runIndex}>{highlighted}</span>;
         })}
         </HighlightText>

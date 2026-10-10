@@ -13,13 +13,15 @@ import "./flashcard-experience.css";
 
 export type CardRating = "not_sure" | "sure";
 
+export type StarterSet = { set: number; label: string; count: number };
+
 export type StudyOverview = {
   studyDate: string;
   zone: string;
   zoneSource: "account" | "device" | "default";
   totalDue: number;
   personal: { deck: string; total: number; due: number }[];
-  starter: { deckId: string; title: string; version: number; total: number; due: number }[];
+  starter: { deckId: string; title: string; version: number; total: number; due: number; setSize?: number; sets?: StarterSet[] }[];
 };
 
 export type StudyCard = {
@@ -47,7 +49,19 @@ export type SessionPlan = {
   studyDate: string;
   zone: string;
   zoneSource: StudyOverview["zoneSource"];
+  set?: number;
 };
+
+export function setsForDeck(deckId: string, title: string, total: number, sets?: StarterSet[]): StarterSet[] {
+  if (sets && sets.length) return sets;
+  const prefix = deckId === "anki_starter" ? "aanhlle's set" : deckId === "b2c1_1000" ? "B2-C1 set" : deckId === "c1c2_wic500" ? "C1-C2 set" : title;
+  const count = Math.max(1, Math.ceil(total / 30));
+  return Array.from({ length: count }, (_, index) => ({
+    set: index + 1,
+    label: `${prefix} ${index + 1}`,
+    count: Math.min(30, total - index * 30),
+  }));
+}
 
 const PAGE_SIZE = 25;
 const PREFETCH_AHEAD = 5;
@@ -111,6 +125,7 @@ export function StudyHome({ onStart, onSessionEnded, onAddCard }: {
   const [overview, setOverview] = useState<StudyOverview | null>(null);
   const [error, setError] = useState(false);
   const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   async function load() {
     setError(false);
@@ -128,11 +143,19 @@ export function StudyHome({ onStart, onSessionEnded, onAddCard }: {
 
   const decks = overview ? [
     ...overview.personal.map(deck => ({ key: `personal:${deck.deck}`, title: deck.deck, total: deck.total, due: deck.due, shared: false })),
-    ...overview.starter.map(deck => ({ key: `starter:${deck.deckId}`, title: deck.title, total: deck.total, due: deck.due, shared: true })),
+    ...overview.starter.map(deck => ({ key: `starter:${deck.deckId}`, title: deck.title, total: deck.total, due: deck.due, shared: true, deckId: deck.deckId, version: deck.version, sets: setsForDeck(deck.deckId, deck.title, deck.total, deck.sets) })),
   ].filter(deck => deck.title.toLocaleLowerCase().includes(query.toLocaleLowerCase().trim())) : [];
-  const start = (deck: string | null, deckLabel: string, total: number) => {
-    if (overview) onStart({ deck, deckLabel, total, studyDate: overview.studyDate, zone: overview.zone, zoneSource: overview.zoneSource });
+  const start = (deck: string | null, deckLabel: string, total: number, set?: number) => {
+    if (overview) onStart({ deck, deckLabel, total, studyDate: overview.studyDate, zone: overview.zone, zoneSource: overview.zoneSource, set });
   };
+  function toggleFolder(key: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return <section className="cards wb-flash-home" aria-labelledby="study-heading">
     <div className="wb-flash-home__intro"><div><span className="wb-flash-eyebrow">Your word collection</span><h2 id="study-heading">Study</h2>
@@ -149,11 +172,29 @@ export function StudyHome({ onStart, onSessionEnded, onAddCard }: {
       {[true, false].map(shared => <section key={String(shared)} className="wb-flash-deck-group" aria-label={shared ? "Starter Decks" : "Personal Cards"}>
       <div className="wb-flash-home__section-head"><h3>{shared ? "Starter Decks" : "Personal Cards"}</h3><span>{decks.filter(deck => deck.shared === shared).length} shown</span></div>
       <div className="wb-flash-decks">
-        {decks.filter(deck => deck.shared === shared).map((deck, position) => <article key={deck.key} className={`wb-flash-deck wb-flash-deck--${position % 4}`}>
-          <div><span className="wb-flash-deck__kind">{deck.shared ? "Starter deck" : "Personal deck"}</span><h4>{deck.title}</h4></div>
-          <div className="wb-flash-deck__bottom"><span>{deck.total} cards</span><span>{deck.due} due of {deck.total} cards</span>
-            {deck.due > 0 && <button type="button" aria-label={`Study deck ${deck.title}`} onClick={() => start(deck.key, deck.title, deck.due)}>Study deck <span aria-hidden="true">↗</span></button>}</div>
-        </article>)}
+        {decks.filter(deck => deck.shared === shared).map((deck, position) => {
+          if (deck.shared && "sets" in deck && Array.isArray((deck as unknown as { sets: StarterSet[] }).sets)) {
+            const folder = deck as unknown as { key: string; title: string; total: number; due: number; deckId: string; sets: StarterSet[] };
+            const open = expanded.has(folder.key);
+            return <article key={folder.key} className={`wb-flash-deck wb-flash-folder wb-flash-deck--${position % 4}`}>
+              <div><span className="wb-flash-deck__kind">Folder · {folder.sets.length} sets of up to 30 words</span><h4>{folder.title}</h4></div>
+              <div className="wb-flash-deck__bottom"><span>{folder.total} cards</span><span>{folder.due} due of {folder.total} cards</span>
+                <button type="button" aria-expanded={open} aria-label={`${open ? "Collapse" : "Expand"} folder ${folder.title}`} onClick={() => toggleFolder(folder.key)}>{open ? "Collapse folder" : "Open folder"} <span aria-hidden="true">{open ? "▾" : "▸"}</span></button>
+                {folder.due > 0 && <button type="button" aria-label={`Study deck ${folder.title}`} onClick={() => start(folder.key, folder.title, folder.due)}>Study deck <span aria-hidden="true">↗</span></button>}</div>
+              {open && <div className="wb-flash-sets">
+                {folder.sets.map((subset) => <article key={subset.set} className="wb-flash-set">
+                  <div><span className="wb-flash-set__badge">30-word set</span><h5>{subset.label}</h5><span>{subset.count} cards</span></div>
+                  <button type="button" aria-label={`Study set ${subset.label}`} onClick={() => start(folder.key, subset.label, subset.count, subset.set)}>Study set <span aria-hidden="true">↗</span></button>
+                </article>)}
+              </div>}
+            </article>;
+          }
+          return <article key={deck.key} className={`wb-flash-deck wb-flash-deck--${position % 4}`}>
+            <div><span className="wb-flash-deck__kind">{deck.shared ? "Starter deck" : "Personal deck"}</span><h4>{deck.title}</h4></div>
+            <div className="wb-flash-deck__bottom"><span>{deck.total} cards</span><span>{deck.due} due of {deck.total} cards</span>
+              {deck.due > 0 && <button type="button" aria-label={`Study deck ${deck.title}`} onClick={() => start(deck.key, deck.title, deck.due)}>Study deck <span aria-hidden="true">↗</span></button>}</div>
+          </article>;
+        })}
       </div>
       {!shared && overview.personal.length === 0 && <p className="cards-empty">You have no personal cards yet. Manage my cards to add your own; Starter Decks are ready above.</p>}
       </section>)}
@@ -188,6 +229,11 @@ export function StudySession({ plan, onExit, onSessionEnded }: {
         limit: String(PAGE_SIZE),
       });
       if (plan.deck) params.set("deck", plan.deck);
+      if (plan.set) {
+        params.set("set", String(plan.set));
+        params.delete("offset");
+        params.delete("limit");
+      }
       const response = await accountFetch(`/api/cards/study/cards?${params.toString()}`);
       if (response.status === 401) { onSessionEnded?.(); return; }
       if (!response.ok) throw new Error("queue unavailable");

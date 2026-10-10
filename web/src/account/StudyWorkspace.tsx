@@ -5,12 +5,14 @@ import { SatWeekend } from "./SatWeekend";
 import type { AttemptSummary } from "./PracticeArea";
 import type { StudyOverview } from "./FlashcardStudy";
 
-export type Area = "dashboard" | "library" | "practice" | "cards" | "history" | "progress" | "plan" | "tutor" | "settings";
+export type Area = "dashboard" | "library" | "practice" | "cards" | "history" | "progress" | "stats" | "plan" | "scores" | "tutor" | "settings";
 export const areas: { id: Area; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Dashboard", icon: "home" }, { id: "library", label: "Library", icon: "book" },
-  { id: "practice", label: "Practice", icon: "pen" }, { id: "cards", label: "Flashcards", icon: "cards" },
-  { id: "history", label: "History", icon: "review" }, { id: "progress", label: "Progress", icon: "chart" },
-  { id: "plan", label: "Study Plan", icon: "calendar" }, { id: "tutor", label: "AI Tutor", icon: "chat" },
+  { id: "dashboard", label: "Dashboard", icon: "home" },
+  { id: "library", label: "Library", icon: "book" },
+  { id: "cards", label: "Flashcards", icon: "cards" },
+  { id: "history", label: "History", icon: "review" },
+  { id: "plan", label: "Study Plan", icon: "calendar" },
+  { id: "tutor", label: "AI Tutor", icon: "chat" },
   { id: "settings", label: "Account & Settings", icon: "settings" },
 ];
 const paths: Record<string, string> = {
@@ -27,6 +29,7 @@ const paths: Record<string, string> = {
   arrowUp: "M12 19V5m-6 6 6-6 6 6",
   copy: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2Zm-4 4v12a2 2 0 0 0 2 2h10",
   check: "m5 13 4 4L19 7",
+  award: "M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5Z",
   sparkle: "M12 3c.5 3 2.5 5 5.5 5.5-3 .5-5 2.5-5.5 5.5-.5-3-2.5-5-5.5-5.5 3-.5 5-2.5 5.5-5.5Z",
 };
 export function Icon({ name, className = "" }: { name: string; className?: string }) {

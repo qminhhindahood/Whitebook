@@ -124,6 +124,9 @@
 .whitebook-workspace .sat-status--anticipated { background: #efe9e0; color: #725c45; }
 .whitebook-workspace .sat-source { font-size: 11px; margin-top: 14px; }
 .sat-source a { text-decoration: underline; }
+.sat-year-filter { display: flex; gap: 8px; margin: 12px 0 16px; }
+.sat-year-pill { border: 1px solid #cbd0bf; background: #fffefa; border-radius: 999px; padding: 8px 14px; font-size: 12px; color: #415239; cursor: pointer; }
+.sat-year-pill--active { background: #4c6243; border-color: #4c6243; color: #fff9e9; }
 .preview-toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
 .preview-toolbar label { display: grid; gap: 6px; margin-left: auto; font-size: 12px; }
 .whitebook-workspace .curated-library__question { background: #fffefa; border: 1px solid var(--line); border-radius: 11px; max-width: 1000px; margin: 24px auto; padding: 28px; }
@@ -160,7 +163,7 @@
 .exam-navigator summary { cursor: pointer; padding: 12px 16px; width: fit-content; border: 1px solid #cbd0bf; border-radius: 6px; background: #fffefa; font-size: 12px; }
 .whitebook-workspace .hosted-attempt__navigator { background: #f3f3eb; border-color: var(--line); padding: 20px; margin-top: 8px; }
 .whitebook-workspace .hosted-attempt__navigator ol { display: flex; flex-wrap: wrap; }
-.whitebook-workspace .hosted-attempt__nav-item.is-current { color: #fff9e9; background: #4c6243; border-color: #4c6243; }
+.whitebook-workspace .hosted-attempt__nav-item.is-current { color: #fff9e9; background: #4c6243; border-color: #4c6243; border-color: #4c6243; }
 .whitebook-workspace .hosted-attempt__question { background: #fffefa; border: 1px solid var(--line); padding: 0; border-radius: 10px; }
 .whitebook-workspace .hosted-attempt__question-heading { padding: 14px 24px; background: #f3f3eb; border-bottom: 1px solid var(--line); margin: 0; }
 .exam-panes { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); min-height: 55vh; }
@@ -208,11 +211,4 @@
   .whitebook-workspace .hosted-attempt__header-side { width: 100%; justify-content: space-between; }
   .whitebook-workspace .hosted-attempt__title { flex-wrap: wrap; }
   .exam-passage,.exam-response { padding: 20px; }
-  .whitebook-workspace .hosted-attempt__footer { gap: 6px; flex-wrap: wrap; }
-  .whitebook-workspace .hosted-attempt__footer>span { order: -1; flex-basis: 100%; text-align: center; padding: 5px; }
-  .whitebook-workspace .hosted-attempt__footer button { flex: 1; font-size: 11px; }
-  .whitebook-workspace .hosted-attempt { padding-bottom: 120px; }
-  .whitebook-workspace .choice-card { padding: 12px; gap: 8px; }
-  .whitebook-workspace .content-choice { gap: 6px; }
 }
-@media(prefers-reduced-motion:reduce) { .whitebook-workspace * { transition: none; scroll-behavior: auto; } }

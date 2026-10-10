@@ -109,7 +109,11 @@ export function PlanArea({ onSessionEnded, onGoDates, onAction }: Props) {
 
   return <section className="plan-area" aria-labelledby="plan-heading">
     <header className="plan-area__header"><div><h2 id="plan-heading">Study Plan</h2>
-      <p>A weekly schedule from your own study time, due cards, missed questions, and available Practice.</p></div></header>
+      <p>{plan?.primaryDate ? `Weekly schedule · Exam on ${plan.primaryDate} · ${settings?.dailyMinutes ?? plan.versions[0]?.settings.dailyMinutes ?? 30} min per day` : "A weekly schedule from your own study time, due cards, missed questions, and available Practice."}</p></div>
+      <div className="plan-area__actions">
+        {import.meta.env.VITE_AI_RELEASE_ENABLED === "true" && <span className="plan-suggest-hint">Suggest</span>}
+        {settings && plan?.primaryDate && <button type="button" className="plan-rebuild" disabled={busy || !settings.studyDays.length || plan.primaryDate <= plan.today} onClick={() => void rebuild()}>+ Rebuild Plan</button>}
+      </div></header>
     {loading ? <p role="status">Loading your Study Plan…</p> : <>
       {error && <p className="plan-error" role="alert">{error}</p>}
       {message && <p className="plan-message" role="status">{message}</p>}
@@ -120,11 +124,19 @@ export function PlanArea({ onSessionEnded, onGoDates, onAction }: Props) {
       {plan.primaryDate && <>
         {plan.baseline && <div className="plan-callout"><h3>Start with a baseline</h3>
           <p>You have no completed Attempt or learner-entered Official SAT Result yet. Try an available Practice activity before treating any area as a weakness.</p></div>}
+        <div className="plan-metrics" aria-label="Study summary">
+          <article className="plan-metric"><span className="plan-metric__icon plan-metric__icon--done" aria-hidden="true">✓</span><div><span className="plan-metric__label">Completed</span><strong>{plan.evidence.completedAttempts} attempt(s)</strong><small>last on {plan.today}</small></div></article>
+          <article className="plan-metric"><span className="plan-metric__icon plan-metric__icon--missed" aria-hidden="true">!</span><div><span className="plan-metric__label">Missed</span><strong>{plan.evidence.missedQuestions} questions</strong><small>ready for review · Review →</small></div></article>
+          <article className="plan-metric"><span className="plan-metric__icon plan-metric__icon--due" aria-hidden="true">▦</span><div><span className="plan-metric__label">Due Cards</span><strong>{plan.evidence.dueCards}</strong><small>due now · Open</small></div></article>
+          <article className="plan-metric"><span className="plan-metric__icon plan-metric__icon--goal" aria-hidden="true">◎</span><div><span className="plan-metric__label">Goal</span><strong>{settings?.officialScoreGoal ?? plan.versions[0]?.settings.officialScoreGoal ?? "—"}{typeof (settings?.officialScoreGoal ?? plan.versions[0]?.settings.officialScoreGoal) === "number" ? " SAT" : ""}</strong><small>target score</small></div></article>
+        </div>
         <div className="plan-evidence" aria-label="Current evidence"><span>{plan.evidence.completedAttempts} completed Attempts</span>
           <span>{plan.evidence.missedQuestions} missed questions ready for review</span><span>{plan.evidence.dueCards} due cards</span>
           <span>{plan.evidence.officialResultCount} learner-entered Official SAT Results</span></div>
-        <section className="plan-settings" aria-labelledby="plan-settings-heading"><h3 id="plan-settings-heading">Build your schedule</h3>
-          <p>Primary exam: <strong>{plan.primaryDate}</strong> · Today in {plan.zone}: {plan.today}. <button type="button" className="plan-text-button" onClick={onGoDates}>Change exam date</button></p>
+        <div className="plan-columns">
+        <section className="plan-settings plan-schedule" aria-labelledby="plan-settings-heading"><h3 id="plan-settings-heading">Schedule</h3>
+          <p>Exam date <strong>{plan.primaryDate}</strong> <button type="button" className="plan-text-button" onClick={onGoDates}>Change</button></p>
+          <p className="plan-today">Today in {plan.zone}: {plan.today}.</p>
           {settings && <><fieldset><legend>Study days</legend><div className="plan-weekdays">{weekdays.map((name, day) =>
             <label key={name}><input type="checkbox" checked={settings.studyDays.includes(day)} onChange={(event) => {
               const studyDays = event.target.checked ? [...settings.studyDays, day].sort() : settings.studyDays.filter((item) => item !== day);
@@ -136,13 +148,14 @@ export function PlanArea({ onSessionEnded, onGoDates, onAction }: Props) {
                 value={settings.officialScoreGoal ?? ""} placeholder="No goal set"
                 onChange={(event) => setSettings({ ...settings, officialScoreGoal: event.target.value ? Number(event.target.value) : null })} /></label></div>
             <p className="plan-footnote">The score goal is a personal target. Whitebook Raw Accuracy is never converted into SAT points.</p>
-            <button type="button" disabled={busy || !settings.studyDays.length || plan.primaryDate <= plan.today} onClick={() => void rebuild()}>
-              {plan.versions.length ? "Rebuild from current evidence" : "Create Study Plan"}</button></>}
+            <button type="button" className="plan-ai-update" disabled={busy || !settings.studyDays.length || plan.primaryDate <= plan.today} onClick={() => void rebuild()}>
+              {plan.versions.length ? "Update plan with AI" : "Create Study Plan"}</button>
+            <p className="plan-footnote">Plan is optimized using your recent practice and missed questions.</p></>}
         </section>
+        <div className="plan-agenda">
         {import.meta.env.VITE_AI_RELEASE_ENABLED === "true" && settings && <Suspense fallback={null}><PlanAssistant
           settings={{ ...settings, primaryDate: plan.primaryDate }} expectedVersionId={plan.versions[0]?.id ?? null}
           onSessionEnded={onSessionEnded} onSaved={() => load()} /></Suspense>}
-      </>}
         {plan.versions.length > 0 && <><section className="plan-progress" aria-labelledby="plan-progress-heading">
           <div><h3 id="plan-progress-heading">Plan progress</h3><p>{done} done · {pending} pending · {skipped} skipped in this version</p>
             <p>{plan.completedHistory} completed tasks retained across all plan versions</p></div>
@@ -155,10 +168,15 @@ export function PlanArea({ onSessionEnded, onGoDates, onAction }: Props) {
             {plan.versions.map((version) => <option key={version.id} value={version.id}>Version {version.version} · {new Date(version.createdAt).toLocaleDateString()}</option>)}</select></label>
           {!current && <p className="plan-footnote">This saved version is read only. Its tasks and completion state remain available.</p>}
           {[...weeks].map(([start, tasks]) => { const weekDone = tasks.filter((task) => task.status === "done").length;
-            return <section key={start} className="plan-week" aria-label={`Week of ${start}`}><header><h3>Week of {start}</h3>
-              <span>{weekDone} of {tasks.length} done</span></header><div className="plan-week__tasks">{tasks.map((task) =>
-                <article key={task.id} className={`plan-task plan-task--${task.status}`}><div className="plan-task__top"><span>{task.date} · {task.minutes} min</span>
-                  <span>{task.status === "done" ? "Done" : task.status === "skipped" ? "Skipped" : task.date < plan.today ? "Past due" : "Pending"}</span></div>
+            const total = tasks.length || 1;
+            const percent = Math.round(weekDone / total * 100);
+            const isThisWeek = start === weekStart(plan.today);
+            return <section key={start} className={`plan-week${isThisWeek ? " plan-week--this" : ""}`} aria-label={isThisWeek ? "This Week's Plan" : `Week of ${start}`}><header><h3>{isThisWeek ? "This Week's Plan" : `Week of ${start}`}</h3>
+              <span>{weekDone} of {tasks.length} done · {percent}% complete</span></header>
+              {isThisWeek && <div className="plan-week__progress" role="progressbar" aria-label="Weekly completion" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${percent}%` }} /></div>}
+              <div className="plan-week__tasks">{tasks.map((task) =>
+                <article key={task.id} className={`plan-task plan-task--${task.status}`}><div className="plan-task__top"><span><span className={`plan-dot plan-dot--${task.status === "done" ? "done" : task.date < plan.today && task.status === "pending" ? "due" : "upcoming"}`} aria-hidden="true" />{task.date} · {task.minutes} min</span>
+                  <span className={`plan-badge plan-badge--${task.status === "done" ? "done" : task.status === "skipped" ? "skipped" : task.date < plan.today ? "past" : "upcoming"}`}>{task.status === "done" ? "Done" : task.status === "skipped" ? "Skipped" : task.date < plan.today ? "Past due" : task.date === plan.today ? "Today" : "Upcoming"}</span></div>
                   <h4>{task.title}</h4><p>{task.explanation}</p><div className="plan-task__meta"><span>{task.evidenceCount} evidence {task.evidenceCount === 1 ? "item" : "items"}</span>
                     {task.tentative && <span>Tentative</span>}</div>
                   {editing === task.id ? <form className="plan-task__edit" onSubmit={(event) => { event.preventDefault(); void change(task, draft); }}>
@@ -174,9 +192,14 @@ export function PlanArea({ onSessionEnded, onGoDates, onAction }: Props) {
                         <button type="button" disabled={busy} onClick={() => { setDraft({ title: task.title, date: task.date, minutes: task.minutes }); setEditing(task.id); }}>Edit</button>
                         {task.status === "pending" && task.date < plan.today && <button type="button" disabled={busy || !nextStudyDate(task, plan)}
                           onClick={() => { const date = nextStudyDate(task, plan); if (date) void change(task, { date }); }}>Move to next open day</button>}</>}</div>}
-                </article>)}</div></section>; })}
+                </article>)}</div>
+              {plan.catchUp.overdueCount > 0 && current && <div className="plan-reschedule"><span>✦ {plan.catchUp.overdueCount} past tasks can be rescheduled</span><span>Review &amp; reschedule →</span></div>}
+            </section>; })}
           {plan.tasks.length === 0 && <p>No tasks fit before your exam date with the current activities and study days. Adjust your time or try Practice.</p>}
         </>}
+        </div>
+        </div>
+      </>}
       </>}
     </>}
   </section>;

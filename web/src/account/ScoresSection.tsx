@@ -40,6 +40,15 @@ function bandText(band: number | null): string {
   return band === null ? "Not provided" : `Band ${band} of 7`;
 }
 
+export const BAND_RANGES: Record<number, string> = {
+  1: "200–370", 2: "380–410", 3: "420–480", 4: "490–540",
+  5: "550–600", 6: "610–670", 7: "680–800",
+};
+
+function bandRangeText(band: number | null): string {
+  return band === null ? "Not provided" : BAND_RANGES[band];
+}
+
 function csrfToken(): string {
   const match = /(?:^|;\s*)__Host-wb_csrf=([a-f0-9]{64})(?:;|$)/.exec(document.cookie);
   return match?.[1] ?? "";
@@ -107,21 +116,53 @@ function BandGroup({ domain, value, onChange, formId }: {
   const name = `${formId}-band-${domain.key}`;
   return (
     <fieldset className="band-group">
-      <legend>{domain.label} <span className="band-selected">{bandText(value)}</span></legend>
-      <div className="band-options">
-        <label className="band-option band-option--none">
-          <input type="radio" name={name} checked={value === null} onChange={() => onChange(null)} aria-label="Not provided" />
-          <span aria-hidden="true">—</span>
-        </label>
-        {[1, 2, 3, 4, 5, 6, 7].map((band) => (
-          <label className="band-option" key={band}>
-            <input type="radio" name={name} value={band} checked={value === band} onChange={() => onChange(band)} aria-label={`Band ${band} of 7`} />
-            <span aria-hidden="true">{band}</span>
+      <legend>{domain.label} <span className="band-selected">{bandText(value)} · {bandRangeText(value)}</span></legend>
+      <div className="band-line-control">
+        <div className="band-segments" role="radiogroup" aria-label={`${domain.label} performance band`}>
+          <label className={`band-segment band-segment--none${value === null ? " band-segment--active" : ""}`} title="Not provided">
+            <input type="radio" name={name} checked={value === null} onChange={() => onChange(null)} aria-label="Not provided" />
           </label>
-        ))}
+          {[1, 2, 3, 4, 5, 6, 7].map((band) => (
+            <label
+              key={band}
+              className={`band-segment${value !== null && band <= value ? " band-segment--filled" : ""}${value === band ? " band-segment--active" : ""}`}
+              title={`Band ${band}: ${BAND_RANGES[band]}`}
+            >
+              <input
+                type="radio"
+                name={name}
+                value={band}
+                checked={value === band}
+                onChange={() => onChange(band)}
+                aria-label={`Band ${band} of 7, ${BAND_RANGES[band]}`}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowRight") onChange(Math.min(7, (value ?? 0) + 1) || 1);
+                  if (event.key === "ArrowLeft") onChange(value === null ? null : value - 1 < 1 ? null : value - 1);
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        {value !== null && (
+          <button
+            type="button"
+            className="band-line-clear"
+            onClick={() => onChange(null)}
+            aria-label={`Clear ${domain.label} band`}
+          >
+            Clear
+          </button>
+        )}
       </div>
+      <small className="band-range">{value === null ? "Choose performance band — 1 to 7" : `Score range ${BAND_RANGES[value]}`}</small>
     </fieldset>
   );
+}
+
+export function BandBar({ value }: { value: number | null }) {
+  return <span className="band-bar" aria-hidden="true">
+    {[1, 2, 3, 4, 5, 6, 7].map((band) => <i key={band} className={value !== null && band <= value ? "band-bar__seg band-bar__seg--filled" : "band-bar__seg"} />)}
+  </span>;
 }
 
 export function ScoresSection() {
@@ -194,23 +235,52 @@ export function ScoresSection() {
     } finally { setBusy(false); }
   }
 
+  function handleRwChange(rwVal: string) {
+    setForm((current) => {
+      if (!current) return current;
+      const mathVal = current.math ?? "";
+      const rwNum = Number(rwVal);
+      const mathNum = Number(mathVal);
+      const total = rwVal && mathVal && !isNaN(rwNum) && !isNaN(mathNum) ? String(rwNum + mathNum) : current.total;
+      return { ...current, readingWriting: rwVal, total };
+    });
+  }
+
+  function handleMathChange(mathVal: string) {
+    setForm((current) => {
+      if (!current) return current;
+      const rwVal = current.readingWriting ?? "";
+      const rwNum = Number(rwVal);
+      const mathNum = Number(mathVal);
+      const total = rwVal && mathVal && !isNaN(rwNum) && !isNaN(mathNum) ? String(rwNum + mathNum) : current.total;
+      return { ...current, math: mathVal, total };
+    });
+  }
+
   return <section className="dashboard-scores" id="scores" aria-labelledby="scores-heading">
     <h2 id="scores-heading">Official SAT Results</h2>
     <p className="scores-source-note">Entered by you from your College Board score report — Whitebook never fills these in for you.</p>
     {results === null ? null : results.length === 0 ?
       <p className="scores-empty">No official results saved yet. Enter one to inform your plan.</p> :
       <ul className="scores-list">
-        {results.map((result) => <li className="scores-item" key={result.id}>
-          <div className="scores-item-summary">
-            <strong>SAT — {formatDay(result.administrationDate)}</strong>
-            <span>Total {result.total} · Reading and Writing {result.readingWriting} · Math {result.math}</span>
-            <span className="scores-entered-by">Entered by you</span>
+        {results.map((result) => <li className="scores-item scores-card" key={result.id}>
+          <div className="scores-card__grid">
+            <div className="scores-card__total">
+              <span className="scores-card__eyebrow">Total score</span>
+              <strong>{result.total}</strong>
+              <span>Reading and Writing {result.readingWriting} · Math {result.math}</span>
+              <span><strong>SAT — {formatDay(result.administrationDate)}</strong></span>
+              <span className="scores-entered-by">Entered by you</span>
+            </div>
+            <div className="scores-card__domains">
+              <span className="scores-card__eyebrow">Knowledge and Skills</span>
+              <dl className="scores-bands">
+                {ALL_DOMAINS.map((domain) => <div className="scores-band" key={domain.key}>
+                  <dt>{domain.label}</dt><dd><BandBar value={result.bands[domain.key]} /> {bandText(result.bands[domain.key])} · {bandRangeText(result.bands[domain.key])}</dd>
+                </div>)}
+              </dl>
+            </div>
           </div>
-          <dl className="scores-bands">
-            {ALL_DOMAINS.map((domain) => <div className="scores-band" key={domain.key}>
-              <dt>{domain.label}</dt><dd>{bandText(result.bands[domain.key])}</dd>
-            </div>)}
-          </dl>
           {confirmingDelete === result.id ?
             <div className="scores-confirm">
               <span>Delete this result? This cannot be undone.</span>
@@ -236,25 +306,31 @@ export function ScoresSection() {
       <div className="scores-fields">
         <label htmlFor="scores-date">Test date</label>
         <input id="scores-date" type="date" value={form.administrationDate}
-          onChange={(event) => setForm({ ...form, administrationDate: event.target.value })} />
+          onChange={(event) => {
+            const val = event.target.value;
+            setForm((current) => current ? { ...current, administrationDate: val } : current);
+          }} />
         <label htmlFor="scores-rw">Reading and Writing</label>
         <input id="scores-rw" inputMode="numeric" placeholder="200–800" value={form.readingWriting}
-          onChange={(event) => setForm({ ...form, readingWriting: event.target.value })} />
+          onChange={(event) => handleRwChange(event.target.value)} />
         <label htmlFor="scores-math">Math</label>
         <input id="scores-math" inputMode="numeric" placeholder="200–800" value={form.math}
-          onChange={(event) => setForm({ ...form, math: event.target.value })} />
+          onChange={(event) => handleMathChange(event.target.value)} />
         <label htmlFor="scores-total">Total</label>
         <input id="scores-total" inputMode="numeric" placeholder="400–1600" value={form.total}
-          onChange={(event) => setForm({ ...form, total: event.target.value })} />
+          onChange={(event) => {
+            const val = event.target.value;
+            setForm((current) => current ? { ...current, total: val } : current);
+          }} />
       </div>
       <fieldset className="bands-fieldset">
         <legend>Content Domain bands <span className="bands-note">(optional — leave Not provided when the report has none)</span></legend>
         <p className="bands-heading">Reading and Writing</p>
         {READING_WRITING_DOMAINS.map((domain) => <BandGroup key={domain.key} domain={domain} formId={formId(editingId)}
-          value={form.bands[domain.key]} onChange={(band) => setForm({ ...form, bands: { ...form.bands, [domain.key]: band } })} />)}
+          value={form.bands[domain.key]} onChange={(band) => setForm((current) => current ? { ...current, bands: { ...current.bands, [domain.key]: band } } : current)} />)}
         <p className="bands-heading">Math</p>
         {MATH_DOMAINS.map((domain) => <BandGroup key={domain.key} domain={domain} formId={formId(editingId)}
-          value={form.bands[domain.key]} onChange={(band) => setForm({ ...form, bands: { ...form.bands, [domain.key]: band } })} />)}
+          value={form.bands[domain.key]} onChange={(band) => setForm((current) => current ? { ...current, bands: { ...current.bands, [domain.key]: band } } : current)} />)}
       </fieldset>
       {error && <p className="scores-error" role="alert">{error}</p>}
       <div className="scores-form-actions">

@@ -110,7 +110,11 @@ it("keeps a Saturday-only Weekend catalog with source, last-check and status; no
     expect(JSON.stringify(entry).toLowerCase()).not.toContain("school");
   }
   const statuses = new Set(SAT_CATALOG.dates.map((entry) => entry.status));
-  expect(statuses).toEqual(new Set(["confirmed", "anticipated"]));
+  expect(statuses).toEqual(new Set(["confirmed"]));
+  expect(SAT_CATALOG.dates.map((entry) => entry.date)).toEqual([
+    "2026-08-22", "2026-09-12", "2026-10-03", "2026-11-07", "2026-12-05",
+    "2027-03-06", "2027-05-01", "2027-06-05",
+  ]);
 });
 
 it("requires a signed-in learner and shows the catalog with the account's saved selections", async () => {

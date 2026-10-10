@@ -16,6 +16,7 @@ export function SatWeekend({ onSessionEnded, timeZone, onSaved }: { onSessionEnd
   const [primary, setPrimary] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [now, setNow] = useState(() => new Date());
+  const [yearFilter, setYearFilter] = useState<"all" | "2026" | "2027">("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +93,14 @@ export function SatWeekend({ onSessionEnded, timeZone, onSaved }: { onSessionEnd
     {data && <form onSubmit={save}>
       <fieldset className="sat-list">
         <legend>Official SAT Weekend dates</legend>
-        {data.catalog.dates.map((entry) => <div className="sat-row" key={entry.date}>
+        <div className="sat-year-filter" role="group" aria-label="Filter dates by year">
+          {(["all", "2026", "2027"] as const).map((year) => {
+            const count = year === "all" ? data.catalog.dates.length : data.catalog.dates.filter((entry) => entry.date.startsWith(year)).length;
+            const label = year === "all" ? `All (${count})` : `${year} (${count})`;
+            return <button key={year} type="button" aria-pressed={yearFilter === year} className={yearFilter === year ? "sat-year-pill sat-year-pill--active" : "sat-year-pill"} onClick={() => setYearFilter(year)}>{label}</button>;
+          })}
+        </div>
+        {data.catalog.dates.filter((entry) => yearFilter === "all" || entry.date.startsWith(yearFilter)).map((entry) => <div className="sat-row" key={entry.date}>
           <label className="sat-row-date">
             <input type="checkbox" checked={selected.includes(entry.date)} onChange={(event) => toggle(entry.date, event.target.checked)} />
             {satDateLabel(entry.date)}

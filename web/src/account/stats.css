@@ -1,0 +1,31 @@
+.stats-area { display: grid; gap: 16px; color: #343a30; font-family: Merriweather, Georgia, serif; }
+.stats-area h2, .stats-area h3 { font-family: Lora, Georgia, serif; font-weight: 400; margin: 0 0 6px; }
+.stats-area p { color: #646b59; font-size: 13px; margin: 0 0 12px; }
+.stats-header p { margin: 0; }
+.stats-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stats-metric { background: #fffefa; border: 1px solid #c4cbb8; border-radius: 16px; padding: 16px; }
+.stats-metric span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #646b59; }
+.stats-metric strong { display: block; font: 400 28px/1.2 Lora, Georgia, serif; color: #343a30; }
+.stats-metric small { color: #646b59; font-size: 12px; }
+.stats-card { background: #fffefa; border: 1px solid #dce4ef; border-radius: 16px; padding: clamp(18px, 2.5vw, 26px); }
+.stats-card__head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.stats-workload { display: flex; gap: 10px; align-items: end; overflow-x: auto; padding-top: 8px; }
+.stats-workload__col { display: grid; gap: 4px; justify-items: center; min-width: 44px; font-size: 11px; color: #646b59; }
+.stats-workload__track { width: 26px; display: flex; align-items: end; background: #f3f0e6; border-radius: 6px; overflow: hidden; }
+.stats-workload__fill { width: 100%; background: #4c6243; }
+.stats-legend { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #646b59; }
+.stats-cell { width: 12px; height: 12px; border-radius: 3px; background: #f3f0e6; display: inline-block; }
+.stats-cell--1 { background: #d8e2cb; } .stats-cell--2 { background: #b3caa0; }
+.stats-cell--3 { background: #88a86f; } .stats-cell--4 { background: #4c6243; }
+.stats-heatmap { display: flex; gap: 8px; overflow-x: auto; }
+.stats-heatmap__labels { display: grid; gap: 3px; font-size: 10px; color: #646b59; }
+.stats-heatmap__labels span { height: 12px; }
+.stats-heatmap__grid { display: flex; gap: 3px; }
+.stats-heatmap__col { display: grid; gap: 3px; }
+.stats-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stats-bars { display: flex; gap: 10px; align-items: end; }
+.stats-bar { display: grid; gap: 4px; justify-items: center; flex: 1; font-size: 11px; color: #646b59; }
+.stats-bar__track { height: 110px; width: 100%; max-width: 34px; display: flex; align-items: end; background: #f3f0e6; border-radius: 6px; overflow: hidden; }
+.stats-bar__fill { width: 100%; background: #9eb084; }
+.stats-bar__fill--busiest { background: #d69199; }
+@media (max-width: 900px) { .stats-metrics { grid-template-columns: repeat(2, 1fr); } .stats-two { grid-template-columns: 1fr; } }

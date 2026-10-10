@@ -6,13 +6,13 @@ import { FlashcardsArea, StudySession, studyDateLabel, type SessionPlan, type St
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const plan: SessionPlan = {
-  deck: "starter:anki_starter", deckLabel: "Anki starter: SAT words", total: 3,
+  deck: "starter:anki_starter", deckLabel: "aanhlle's sat words", total: 3,
   studyDate: "2026-10-02", zone: "Asia/Ho_Chi_Minh", zoneSource: "account",
 };
 
 const cardA: StudyCard = {
   key: "starter:anki_starter:aaaaaaaaaaaaaaaa", kind: "starter", front: "confound",
-  deck: "anki_starter", deckTitle: "Anki starter: SAT words",
+  deck: "anki_starter", deckTitle: "aanhlle's sat words",
   ref: { kind: "starter", deckId: "anki_starter", stableId: "aaaaaaaaaaaaaaaa" },
   vietnamese: "làm bối rối", partOfSpeech: "verb", example: "The results confounded the scientists.",
 };
@@ -24,7 +24,7 @@ const overview: StudyOverview = {
   studyDate: "2026-10-02", zone: "Asia/Ho_Chi_Minh", zoneSource: "device", totalDue: 3,
   personal: [{ deck: "My words", total: 4, due: 1 }],
   starter: [
-    { deckId: "anki_starter", title: "Anki starter: SAT words", version: 2, total: 839, due: 2 },
+    { deckId: "anki_starter", title: "aanhlle's sat words", version: 2, total: 839, due: 2 },
     { deckId: "b2c1_1000", title: "B2-C1 SAT vocabulary (1,000 words)", version: 3, total: 1000, due: 0 },
   ],
 };
@@ -172,8 +172,20 @@ it("keeps both Starter Decks discoverable when Personal Cards are empty and sear
   expect(screen.getByText("1000 cards")).toBeTruthy();
   expect(screen.getByText(/You have no personal cards yet/)).toBeTruthy();
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "B2-C1" } });
-  expect(screen.queryByText("Anki starter: SAT words")).toBeNull();
+  expect(screen.queryByText("aanhlle's sat words")).toBeNull();
   expect(screen.getByText("B2-C1 SAT vocabulary (1,000 words)")).toBeTruthy();
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "missing-deck" } });
   expect(screen.getByText("No decks match your search.")).toBeTruthy();
+});
+
+it("renders starter decks as folders with 30-word sub-sets", async () => {
+  stubFetch(path => path.startsWith("/api/cards/study?") ? Response.json({ ...overview, personal: [] }) : new Response(null, { status: 404 }));
+  render(<FlashcardsArea />);
+  expect(await screen.findByText("aanhlle's sat words")).toBeTruthy();
+  expect(screen.getByText(/28 sets of up to 30 words/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Expand folder aanhlle's sat words" }));
+  expect(await screen.findByText("aanhlle's set 1")).toBeTruthy();
+  expect(screen.getByText("aanhlle's set 28")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Expand folder B2-C1 SAT vocabulary (1,000 words)" }));
+  expect(screen.getAllByRole("button", { name: /^Study set / }).length).toBe(28 + 34);
 });
