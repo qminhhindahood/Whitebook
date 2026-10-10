@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { accountFetch } from "./accountClient";
-import { deviceZone, localDateInZone, satCountdown, satDateShortLabel } from "./satCountdown";
+import { deviceZone, localDateInZone, satCountdown, satDateShortLabel, satTimeRemaining } from "./satCountdown";
 import { SatWeekend } from "./SatWeekend";
 import type { AttemptSummary } from "./PracticeArea";
 import type { StudyOverview } from "./FlashcardStudy";
-import studyArt from "./design-assets/study-illustration.webp";
 
 export type Area = "dashboard" | "library" | "practice" | "cards" | "history" | "progress" | "plan" | "tutor" | "settings";
 export const areas: { id: Area; label: string; icon: string }[] = [
@@ -99,6 +98,38 @@ export function DatesDialog({ onClose, onSessionEnded, timeZone }: { onClose: ()
   </dialog>;
 }
 
+export function DashboardClock({ target, onDates }: { target: string | null; onDates: () => void }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(tick);
+  }, []);
+  const remaining = satTimeRemaining(target, now);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  if (!remaining.isSet)
+    return <div className="dashboard-clock dashboard-clock--empty" role="status">
+      <p>Give your practice a direction.</p>
+      <button className="date-button" onClick={onDates}>Choose your SAT date</button>
+    </div>;
+  if (remaining.isPassed)
+    return <div className="dashboard-clock" role="status"><p>Ready for your next target?</p>
+      <button className="date-button" onClick={onDates}>Choose your SAT date</button></div>;
+  const units: { value: string; label: string }[] = [
+    { value: String(remaining.days).padStart(2, "0"), label: "DAYS" },
+    { value: pad(remaining.hours), label: "HOURS" },
+    { value: pad(remaining.minutes), label: "MINS" },
+    { value: pad(remaining.seconds), label: "SECS" },
+  ];
+  return <div className="dashboard-clock" role="timer" aria-live="off" aria-label="Countdown to 7:45 AM GMT+7 on test day">
+    <div className="dashboard-clock__units">
+      {units.map((unit, index) => <span key={unit.label} className="dashboard-clock__group">
+        {index > 0 && <span className="dashboard-clock__colon" aria-hidden="true">:</span>}
+        <span className="dashboard-clock__unit"><strong>{unit.value}</strong><small>{unit.label}</small></span>
+      </span>)}
+    </div>
+  </div>;
+}
+
 export function StudyDashboard({ data, name, timeZone, onNavigate, onDates, onPractice, onResume }: {
   data: WorkspaceData; name: string; timeZone: string; onNavigate: (area: Area) => void; onDates: () => void;
   onPractice: (id: string, exam?: boolean) => void; onResume: (id: string) => void;
@@ -110,10 +141,21 @@ export function StudyDashboard({ data, name, timeZone, onNavigate, onDates, onPr
   const correct = progress?.sections.reduce((sum, section) => sum + section.correct, 0) ?? 0;
   return <>
     <div className="greeting"><div><h1 id="page-heading" tabIndex={-1}>Dashboard</h1><p>Welcome back, {name}. A little closer, every day.</p></div></div>
-    <section className="countdown paper" aria-label="SAT countdown"><div className="countdown-copy"><h2>Your next chapter<br />starts here.</h2><p>One question. One new idea.<br />One study session at a time.</p>
-      <div className="countdown-bottom"><div>{countdown.kind === "countdown" ? <><strong>{countdown.days}</strong><span>days until your SAT</span></> : <span className="countdown-prompt">{!data.dates ? "Loading your target…" : countdown.kind === "test-day" ? "Today is test day" : countdown.kind === "passed" ? "Ready for your next target?" : "Give your practice a direction."}</span>}</div>
-        <button className="date-button" onClick={onDates}><Icon name="calendar" /><span>{countdown.kind === "none" ? "Choose your SAT date" : satDateShortLabel(countdown.target)}</span><Icon name="chevron" /></button>
-      </div></div><img className="hero-art" src={studyArt} alt="An open notebook, study books, and a cup of matcha" /><span className="hero-caption">A fresh page. A fresh possibility.</span></section>
+    <section className="countdown paper" aria-label="SAT countdown">
+      <div className="countdown-copy">
+        <div className="countdown-headline">
+          <h2>Your next chapter<br />starts here.</h2>
+          <p>One question. One new idea.<br />One study session at a time.</p>
+        </div>
+        <div className="countdown-bottom">
+          <div>{countdown.kind === "countdown" ? <><strong>{countdown.days}</strong><span>days until your SAT</span></> : <span className="countdown-prompt">{!data.dates ? "Loading your target…" : countdown.kind === "test-day" ? "Today is test day" : countdown.kind === "passed" ? "Ready for your next target?" : "Give your practice a direction."}</span>}</div>
+          <button className="date-button" onClick={onDates}><Icon name="calendar" /><span>{countdown.kind === "none" ? "Choose your SAT date" : satDateShortLabel(countdown.target)}</span><Icon name="chevron" /></button>
+        </div>
+      </div>
+      <div className="countdown-right">
+        <DashboardClock target={data.dates?.selection.primary ?? null} onDates={onDates} />
+      </div>
+    </section>
     <section className="resume"><div className="resume-icon"><Icon name="pen" /></div><div className="resume-info"><h2>{active ? "Pick up where you left off" : "Your next session starts here"}</h2><p>{active ? `${data.packages?.find(item => item.revisionId === active.revisionId)?.title ?? active.section} · ${active.questionCount} questions · ${active.kind === "section_exam" ? "Section Exam" : "Practice"}` : "Choose a package, set your pace, and begin."}</p></div><button className="primary" onClick={() => active ? onResume(active.attemptId) : onNavigate("library")}>{active ? active.status === "preparing" ? "Continue setup" : "Resume Attempt" : "Explore packages"}<Icon name="arrow" /></button></section>
     <div className="section-heading"><h2>A little practice for today</h2><span>At your own pace</span></div>
     <section className="daily-grid"><article className="daily-card rose-tint"><div className="card-top"><span className="icon-tile rose"><Icon name="cards" /></span><span className="tag">DUE TODAY</span></div><h3>{data.study ? data.study.totalDue ? `${data.study.totalDue} cards to revisit` : "A fresh set of words" : "Your daily review"}</h3><p>{data.study?.totalDue === 0 ? "Nothing due. Add a word to your collection." : "A quick refresh. A stronger memory."}</p><button className="text-button" onClick={() => onNavigate("cards")}>Open flashcards <Icon name="arrow" /></button></article>

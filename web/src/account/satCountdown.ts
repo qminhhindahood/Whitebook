@@ -55,3 +55,32 @@ export function satDateShortLabel(ymd: string): string {
     timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric",
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
+
+export type LiveCountdown = {
+  days: number; hours: number; minutes: number; seconds: number;
+  isPassed: boolean; isSet: boolean; targetInstant: number | null;
+};
+
+/**
+ * Milliseconds remaining until 7:45 AM GMT+7 on the target exam date.
+ * The target instant is `${targetYmd}T07:45:00+07:00` (00:45:00 UTC).
+ * Ticks live every second in the browser via DashboardClock.
+ */
+export function satTimeRemaining(targetYmd: string | null, now: Date = new Date()): LiveCountdown {
+  if (!targetYmd || !/^\d{4}-\d{2}-\d{2}$/.test(targetYmd))
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, isPassed: false, isSet: false, targetInstant: null };
+  const targetInstant = Date.parse(`${targetYmd}T07:45:00+07:00`);
+  if (Number.isNaN(targetInstant))
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, isPassed: false, isSet: false, targetInstant: null };
+  const diff = targetInstant - now.getTime();
+  if (diff <= 0)
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, isPassed: true, isSet: true, targetInstant };
+  const totalSeconds = Math.floor(diff / 1000);
+  return {
+    days: Math.floor(totalSeconds / 86_400),
+    hours: Math.floor(totalSeconds % 86_400 / 3600),
+    minutes: Math.floor(totalSeconds % 3600 / 60),
+    seconds: totalSeconds % 60,
+    isPassed: false, isSet: true, targetInstant,
+  };
+}

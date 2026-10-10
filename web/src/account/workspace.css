@@ -29,9 +29,27 @@
 .columns--study { display: block; }
 .columns--study .study-main { max-width: 1600px; margin-inline: auto; padding: 34px 4%; }
 .greeting h1:focus { outline: none; }
-.whitebook-workspace .countdown h2 { font-size: 34px; }
+.whitebook-workspace .countdown { position: relative; background: var(--matcha); border-radius: 13px; min-height: 230px; overflow: hidden; padding: 28px 32px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; }
+.whitebook-workspace .countdown-copy { position: relative; z-index: 2; width: auto; flex: 1 1 52%; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; align-self: stretch; min-height: 170px; }
+.whitebook-workspace .countdown-headline h2 { font: 34px/1.12 Lora,Georgia,serif; letter-spacing: -.6px; color: var(--cream); text-shadow: 2px 3px 4px #0003; }
+.whitebook-workspace .countdown-headline p { font-size: 12px; line-height: 1.55; color: #303c29; margin-top: 10px; }
 .countdown-prompt { color: #303c29; }
-.whitebook-workspace .countdown-bottom .date-button { color: #303c29; min-height: 36px; }
+.whitebook-workspace .countdown-bottom { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: auto; padding-top: 24px; }
+.whitebook-workspace .countdown-bottom > div { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.whitebook-workspace .countdown-bottom strong { font: 38px/1 Lora,Georgia,serif; color: #fff9e9; text-shadow: 1px 2px 3px #0003; }
+.whitebook-workspace .countdown-bottom span { font-size: 12px; color: #303c29; }
+.whitebook-workspace .countdown-bottom .date-button { display: flex; align-items: center; gap: 6px; padding: 7px 12px; background: rgba(244, 242, 220, 0.55); border: 1px solid rgba(238, 240, 216, 0.7); border-radius: 6px; color: #303c29; font-size: 13px; font-weight: 500; min-height: 36px; white-space: nowrap; transition: background .15s, border-color .15s; }
+.whitebook-workspace .countdown-bottom .date-button:hover { background: rgba(244, 242, 220, 0.85); border-color: rgba(238, 240, 216, 0.95); }
+.countdown-right { position: relative; z-index: 2; display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto; margin-left: auto; }
+.dashboard-clock { background: #fffefa; border: 1px solid #c4cbb8; border-radius: 14px; padding: 12px 16px; width: fit-content; min-width: 0; box-shadow: 0 4px 18px rgba(45, 56, 36, 0.08); }
+.dashboard-clock__units { display: flex; align-items: center; gap: 3px; }
+.dashboard-clock__group { display: flex; align-items: center; }
+.dashboard-clock__colon { align-self: center; padding: 0 4px; font: 400 20px/1 Lora, Georgia, serif; color: #556c4d; line-height: 1; }
+.dashboard-clock__unit { display: grid; gap: 2px; text-align: center; background: #faf9f5; border: 1px solid #dce4ef; border-radius: 9px; padding: 8px 10px; min-width: 54px; }
+.dashboard-clock__unit strong { font: 400 24px/1 Lora, Georgia, serif; font-variant-numeric: tabular-nums; color: #343a30; line-height: 1.1; }
+.dashboard-clock__unit small { font: 600 10px/1.2 Merriweather, Georgia, serif; letter-spacing: .08em; color: #646b59; }
+.dashboard-clock--empty { padding: 16px 20px; text-align: center; }
+.dashboard-clock--empty p { margin: 0 0 10px; font-size: 13px; color: #646b59; }
 .whitebook-workspace .resume h2 { font: 600 14px/1.5 Merriweather,Georgia,serif; }
 .whitebook-workspace .section-heading h2 { font: 400 22px/1.3 Lora,Georgia,serif; }
 .whitebook-workspace .daily-card h3 { font-size: 21px; }
@@ -170,13 +188,14 @@
 @media(min-width:1600px) { .whitebook-workspace .countdown h2 { font-size: 39px; } .library-shelf { grid-template-columns: repeat(3,minmax(0,1fr)); } }
 @media(max-width:1250px) { .library-shelf { grid-template-columns: repeat(2,minmax(0,1fr)); } .whitebook-workspace .practice-builder { gap: 24px; padding: 24px; } }
 @media(max-width:1050px) { .brand-name,.nav-item>span { display: none; } .rail-bottom .nav-item { font-size: 0; } .whitebook-workspace .practice-builder { grid-template-columns: 1fr; } .whitebook-workspace .practice-summary { position: static; } }
+@media(max-width:900px) { .whitebook-workspace .countdown { flex-direction: column; align-items: stretch; gap: 22px; padding: 24px 22px; min-height: auto; } .whitebook-workspace .countdown-copy { width: 100%; min-height: auto; } .whitebook-workspace .countdown-bottom { margin-top: 18px; padding-top: 0; } .countdown-right { margin-left: 0; justify-content: flex-start; } }
 @media(max-width:800px) { .columns--study .study-main { padding: 26px 24px; } .exam-panes { grid-template-columns: 1fr; } .exam-passage { border-right: 0; border-bottom: 1px solid var(--line); } .whitebook-workspace .hosted-attempt__header { padding: 16px; } .whitebook-workspace .hosted-attempt__workspace { padding: 0 16px; } .whitebook-workspace .hosted-attempt__footer { padding: 10px 16px; } }
 @media(max-width:540px) {
   .left-rail { overflow: visible; } .brand-name { display: block; } .left-rail nav { display: grid; grid-template-columns: repeat(4,1fr); overflow: visible; gap: 4px; }
   .left-rail nav .nav-item { flex-direction: column; gap: 6px; padding: 9px 4px; margin: 0; font-size: 10px; }
   .left-rail nav .nav-item>span { display: block; } .rail-bottom .nav-item { min-height: 36px; }
   .columns--study .study-main { padding: 24px 17px; } .greeting h1 { font-size: 30px; }
-  .whitebook-workspace .countdown h2 { font-size: 29px; } .countdown-copy { width: 68%; } .countdown-bottom>div { white-space: normal; }
+  .whitebook-workspace .countdown h2 { font-size: 29px; } .countdown-copy { width: 100%; } .countdown-bottom>div { white-space: normal; }
   .package-grid,.library-shelf { grid-template-columns: 1fr; gap: 18px; } .package-art { height: 150px; } .cover-title { font-size: 29px; max-width: 74%; }
   .package-info { padding: 18px; } .daily-grid { grid-template-columns: 1fr; } .daily-card { padding: 20px; } .daily-card h3 { max-width: none; } .daily-card p { min-height: 0; } .tag { display: block; }
   .whitebook-workspace .practice-builder { padding: 18px; } .practice-mode-switch button { font-size: 18px; padding: 18px 10px; }
