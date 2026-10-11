@@ -74,7 +74,7 @@ it("shows due counts per deck with the shared-decks note, without inventing audi
 it("a deck with nothing due offers no Study deck button and shows the caught-up state when started empty", async () => {
   stubFetch(overviewHandler());
   render(<FlashcardsArea />);
-  const decks = await screen.findAllByRole("button", { name: /^Study deck / });
+  const decks = await screen.findAllByRole("button", { name: /^(Review all the words in|Study deck )/ });
   expect(decks).toHaveLength(2); // personal deck with 1 due + starter deck with 2 due
 });
 
@@ -178,7 +178,7 @@ it("keeps both Starter Decks discoverable when Personal Cards are empty and sear
   expect(screen.getByText("No decks match your search.")).toBeTruthy();
 });
 
-it("renders starter decks as folders with 30-word sub-sets", async () => {
+it("renders starter decks as folders with sub-sets and displays exact card count in badge", async () => {
   stubFetch(path => path.startsWith("/api/cards/study?") ? Response.json({ ...overview, personal: [] }) : new Response(null, { status: 404 }));
   render(<FlashcardsArea />);
   expect(await screen.findByText("aanhlle's sat words")).toBeTruthy();
@@ -186,6 +186,24 @@ it("renders starter decks as folders with 30-word sub-sets", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Expand folder aanhlle's sat words" }));
   expect(await screen.findByText("aanhlle's set 1")).toBeTruthy();
   expect(screen.getByText("aanhlle's set 28")).toBeTruthy();
+  // Badge must show exact card count (e.g. 30 cards, 29 cards), not static "30-word set"
+  expect(screen.getAllByText("30 cards").length).toBeGreaterThan(0);
+  expect(screen.queryByText("30-word set")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Expand folder B2-C1 SAT vocabulary (1,000 words)" }));
   expect(screen.getAllByRole("button", { name: /^Study set / }).length).toBe(28 + 34);
+});
+
+it("splits ready for today words into sets of maximum 50 words when totalDue > 50", async () => {
+  const bigOverview: StudyOverview = {
+    ...overview,
+    totalDue: 125,
+  };
+  stubFetch(path => path.startsWith("/api/cards/study?") ? Response.json(bigOverview) : new Response(null, { status: 404 }));
+  render(<FlashcardsArea />);
+  expect(await screen.findByText(/125 words are due — split into 3 sets of up to 50 words each/)).toBeTruthy();
+  expect(screen.getByText("Start Set 1 (50 words)")).toBeTruthy();
+  expect(screen.getByText("Today's sets (3)")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Study Set 1 (50 cards)" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Study Set 2 (50 cards)" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Study Set 3 (25 cards)" })).toBeTruthy();
 });

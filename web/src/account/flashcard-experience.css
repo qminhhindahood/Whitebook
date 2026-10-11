@@ -4,11 +4,24 @@
 .whitebook-workspace .wb-flash-home h2 { font: 31px Lora, Georgia, serif; margin: 0 0 6px; color: #343a30; }
 .wb-flash-home__intro p { color: #646b59; font-size: 13px; }
 .wb-flash-home__new { border: 1px solid #cbd0bf; border-radius: 8px; background: #fffefa; padding: 11px 16px; white-space: nowrap; }
-.wb-flash-due { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 23px 27px; border: 1px solid #d8dfd1; border-radius: 15px; background: #eef0e7; }
+.wb-flash-due { display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 22px 26px; border: 1px solid #d8dfd1; border-radius: 15px; background: #eef0e7; }
+.wb-flash-due__top { display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap; }
 .wb-flash-due strong { display: block; font: 21px Lora, Georgia, serif; }
 .wb-flash-due p { margin: 6px 0; color: #415239; font-size: 13px; }
 .wb-flash-due small { color: #6c755f; font-size: 11px; }
-.whitebook-workspace .wb-flash-due .study-start { background: #4c6243; border-radius: 8px; flex-shrink: 0; }
+.whitebook-workspace .wb-flash-due .study-start { background: #4c6243; color: #fffaf0; border-radius: 8px; flex-shrink: 0; padding: 11px 18px; font-weight: 650; }
+.whitebook-workspace .wb-flash-due .study-start:hover { background: #374e30; }
+.wb-flash-due__sets-wrap { border-top: 1px solid #d4dccb; padding-top: 14px; margin-top: 2px; }
+.wb-flash-due__sets-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.wb-flash-due__sets-header span { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #415239; }
+.wb-flash-due__sets-header small { color: #646b59; font-size: 11px; }
+.wb-flash-due__sets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; max-height: 185px; overflow-y: auto; padding-right: 4px; }
+.wb-flash-due__set-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5c3; background: #fffefa; color: #343a30; cursor: pointer; font: inherit; text-align: left; transition: all 0.15s ease; }
+.wb-flash-due__set-chip:hover { border-color: #9eb084; background: #e2ebd8; transform: translateY(-1px); }
+.wb-flash-due__set-chip:focus-visible { outline: 2px solid #4c6243; outline-offset: 2px; }
+.wb-flash-due__set-chip strong { font: 700 13px Lora, Georgia, serif; color: #415239; }
+.wb-flash-due__set-chip span { font-size: 11px; color: #646b59; }
+
 .wb-flash-search { margin: 26px 0 22px; max-width: 410px; }
 .wb-flash-search label { display: block; margin-bottom: 7px; font-size: 11px; color: #646b59; }
 .wb-flash-search input { width: 100%; border: 1px solid #d9ddcf; border-radius: 9px; background: #fffefa; padding: 12px 15px; color: #343a30; }
@@ -72,7 +85,7 @@
 .whitebook-workspace .wb-flash-session .study-nav button { border-color: #cbd0bf; color: #343a30; }
 .whitebook-workspace .wb-flash-session .study-nav button:last-child { background: #4c6243; color: #fff; border-color: #4c6243; }
 .wb-flash-session .study-position { color: #646b59; font-size: 12px; }
-@media(max-width:650px) { .wb-flash-home__intro,.wb-flash-due { align-items: stretch; flex-direction: column; } .wb-flash-decks { grid-template-columns: 1fr; } .wb-flash-session__title { gap: 7px; } .wb-flash-session__title>span:nth-child(2) { display: none; } .wb-flash-session__header { min-height: 60px; } .whitebook-workspace .wb-flash-study-card { min-height: 47vh; padding: 24px; } .wb-flash-answer__meaning { font-size: 18px; } .wb-flash-session__footer { flex-direction: column; align-items: stretch; gap: 4px; } .wb-flash-session .study-nav { justify-content: space-between; } .wb-flash-session .study-position { display: none; } }
+@media(max-width:650px) { .wb-flash-home__intro,.wb-flash-due__top { align-items: stretch; flex-direction: column; } .wb-flash-decks { grid-template-columns: 1fr; } .wb-flash-session__title { gap: 7px; } .wb-flash-session__title>span:nth-child(2) { display: none; } .wb-flash-session__header { min-height: 60px; } .whitebook-workspace .wb-flash-study-card { min-height: 47vh; padding: 24px; } .wb-flash-answer__meaning { font-size: 18px; } .wb-flash-session__footer { flex-direction: column; align-items: stretch; gap: 4px; } .wb-flash-session .study-nav { justify-content: space-between; } .wb-flash-session .study-position { display: none; } }
 
 .wb-flash-deck-group + .wb-flash-deck-group { margin-top: 28px; }
 .wb-flash-session .study-controls { flex-wrap: wrap; }
